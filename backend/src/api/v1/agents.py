@@ -105,18 +105,18 @@ async def register_agent(
         api_key_hash=hash_api_key(api_key),
         api_key_last4=api_key_last4(api_key),
     )
-    db.add(agent)
-    db.flush()
-    db.add(
-        ReputationLedger(
-            agent_id=agent.id,
-            delta=100,
-            reason="bootstrap",
-            ref_type="agent",
-            ref_id=agent.agent_id,
+    with db.begin():
+        db.add(agent)
+        db.flush()
+        db.add(
+            ReputationLedger(
+                agent_id=agent.id,
+                delta=100,
+                reason="bootstrap",
+                ref_type="agent",
+                ref_id=agent.agent_id,
+            )
         )
-    )
-    db.commit()
     db.refresh(agent)
 
     signature_status = getattr(request.state, "signature_status", "none")
