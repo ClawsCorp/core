@@ -5,12 +5,15 @@ import secrets
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from core.audit import record_audit
 from core.database import get_db
+from core.reputation import get_agent_reputation
 from core.security import api_key_last4, generate_api_key, hash_api_key, hash_body
 from models.agent import Agent
+from models.reputation_ledger import ReputationLedger
 from schemas.agent import (
     AgentRegisterRequest,
     AgentRegisterResponse,
@@ -37,7 +40,25 @@ def list_agents(
         .limit(limit)
         .all()
     )
-    items = [_public_agent(agent) for agent in agents]
+    agent_ids = [agent.id for agent in agents]
+    reputation_by_agent_id: dict[int, int] = {}
+    if agent_ids:
+        rows = (
+            db.query(
+                ReputationLedger.agent_id,
+                func.coalesce(func.sum(ReputationLedger.delta), 0).label("total"),
+            )
+            .filter(ReputationLedger.agent_id.in_(agent_ids))
+            .group_by(ReputationLedger.agent_id)
+            .all()
+        )
+        reputation_by_agent_id = {
+            row.agent_id: max(int(row.total or 0), 0) for row in rows
+        }
+    items = [
+        _public_agent(agent, reputation_by_agent_id.get(agent.id, 0))
+        for agent in agents
+    ]
     return PublicAgentListResponse(
         success=True,
         data=PublicAgentListData(
@@ -57,7 +78,10 @@ def get_agent(
     agent = db.query(Agent).filter(Agent.agent_id == agent_id).first()
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
-    return PublicAgentResponse(success=True, data=_public_agent(agent))
+    reputation_points = get_agent_reputation(db, agent.id)
+    return PublicAgentResponse(
+        success=True, data=_public_agent(agent, reputation_points)
+    )
 
 
 @router.post("/register", response_model=AgentRegisterResponse)
@@ -115,7 +139,7 @@ def _generate_agent_id(db: Session) -> str:
     raise RuntimeError("Failed to generate unique agent id.")
 
 
-def _public_agent(agent: Agent) -> PublicAgent:
+def _public_agent(agent: Agent, reputation_points: int) -> PublicAgent:
     try:
         capabilities = json.loads(agent.capabilities_json or "[]")
     except json.JSONDecodeError:
@@ -128,4 +152,5 @@ def _public_agent(agent: Agent) -> PublicAgent:
         capabilities=capabilities,
         wallet_address=agent.wallet_address,
         created_at=agent.created_at,
+        reputation_points=reputation_points,
     )

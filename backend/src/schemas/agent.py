@@ -23,6 +23,7 @@ class PublicAgent(BaseModel):
     capabilities: list[str]
     wallet_address: str | None = None
     created_at: datetime
+    reputation_points: int
 
 
 class PublicAgentListData(BaseModel):
