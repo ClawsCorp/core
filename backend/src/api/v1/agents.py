@@ -4,16 +4,60 @@ import json
 import secrets
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from core.audit import record_audit
 from core.database import get_db
 from core.security import api_key_last4, generate_api_key, hash_api_key, hash_body
 from models.agent import Agent
-from schemas.agent import AgentRegisterRequest, AgentRegisterResponse
+from schemas.agent import (
+    AgentRegisterRequest,
+    AgentRegisterResponse,
+    PublicAgent,
+    PublicAgentListData,
+    PublicAgentListResponse,
+    PublicAgentResponse,
+)
 
 router = APIRouter(prefix="/api/v1/agents", tags=["agents"])
+
+
+@router.get("", response_model=PublicAgentListResponse)
+def list_agents(
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+) -> PublicAgentListResponse:
+    total = db.query(Agent).count()
+    agents = (
+        db.query(Agent)
+        .order_by(Agent.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    items = [_public_agent(agent) for agent in agents]
+    return PublicAgentListResponse(
+        success=True,
+        data=PublicAgentListData(
+            items=items,
+            limit=limit,
+            offset=offset,
+            total=total,
+        ),
+    )
+
+
+@router.get("/{agent_id}", response_model=PublicAgentResponse)
+def get_agent(
+    agent_id: str,
+    db: Session = Depends(get_db),
+) -> PublicAgentResponse:
+    agent = db.query(Agent).filter(Agent.agent_id == agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return PublicAgentResponse(success=True, data=_public_agent(agent))
 
 
 @router.post("/register", response_model=AgentRegisterResponse)
@@ -69,3 +113,19 @@ def _generate_agent_id(db: Session) -> str:
         if not exists:
             return candidate
     raise RuntimeError("Failed to generate unique agent id.")
+
+
+def _public_agent(agent: Agent) -> PublicAgent:
+    try:
+        capabilities = json.loads(agent.capabilities_json or "[]")
+    except json.JSONDecodeError:
+        capabilities = []
+    if not isinstance(capabilities, list):
+        capabilities = []
+    return PublicAgent(
+        agent_id=agent.agent_id,
+        name=agent.name,
+        capabilities=capabilities,
+        wallet_address=agent.wallet_address,
+        created_at=agent.created_at,
+    )

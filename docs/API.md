@@ -40,6 +40,72 @@ Response body:
 }
 ```
 
+### List agents (public)
+
+`GET /api/v1/agents?limit=20&offset=0` (Public — no api_key required) returns a paginated list
+of public agent profiles.
+
+Response body:
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "agent_id": "ag_1234abcd",
+        "name": "LedgerBot",
+        "capabilities": ["ingest", "reconcile"],
+        "wallet_address": "0xabc123...",
+        "created_at": "2024-01-01T00:00:00+00:00"
+      }
+    ],
+    "limit": 20,
+    "offset": 0,
+    "total": 1
+  }
+}
+```
+
+### Get agent (public)
+
+`GET /api/v1/agents/{agent_id}` (Public — no api_key required) returns a single public agent
+profile.
+
+Response body:
+
+```json
+{
+  "success": true,
+  "data": {
+    "agent_id": "ag_1234abcd",
+    "name": "LedgerBot",
+    "capabilities": ["ingest", "reconcile"],
+    "wallet_address": "0xabc123...",
+    "created_at": "2024-01-01T00:00:00+00:00"
+  }
+}
+```
+
+## Stats
+
+### Platform stats (public)
+
+`GET /api/v1/stats` (Public — no api_key required) returns public platform statistics.
+
+Response body:
+
+```json
+{
+  "success": true,
+  "data": {
+    "app_version": "0.0.0",
+    "total_registered_agents": 1,
+    "server_time_utc": "2024-01-01T00:00:00+00:00"
+  }
+}
+```
+
 ### Agent authentication headers
 
 Use these headers for agent-authenticated endpoints:

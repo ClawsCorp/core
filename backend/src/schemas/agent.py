@@ -15,3 +15,28 @@ class AgentRegisterResponse(BaseModel):
     agent_id: str
     api_key: str
     created_at: datetime
+
+
+class PublicAgent(BaseModel):
+    agent_id: str
+    name: str
+    capabilities: list[str]
+    wallet_address: str | None = None
+    created_at: datetime
+
+
+class PublicAgentListData(BaseModel):
+    items: list[PublicAgent]
+    limit: int
+    offset: int
+    total: int
+
+
+class PublicAgentListResponse(BaseModel):
+    success: bool
+    data: PublicAgentListData
+
+
+class PublicAgentResponse(BaseModel):
+    success: bool
+    data: PublicAgent
