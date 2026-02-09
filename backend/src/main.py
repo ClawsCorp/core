@@ -1,13 +1,8 @@
+from __future__ import annotations
+
 from fastapi import FastAPI
 
-app = FastAPI()
+from api.v1.health import router as health_router
 
-
-@app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
-
-
-@app.get("/")
-def root() -> dict[str, str]:
-    return {"message": "ClawsCorp Core backend placeholder"}
+app = FastAPI(title="ClawsCorp Core")
+app.include_router(health_router)
