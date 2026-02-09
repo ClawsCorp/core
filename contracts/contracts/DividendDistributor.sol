@@ -3,8 +3,9 @@ pragma solidity ^0.8.24;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-contract DividendDistributor {
+contract DividendDistributor is Ownable {
     using SafeERC20 for IERC20;
 
     uint256 public constant MAX_STAKERS = 200;
@@ -31,7 +32,11 @@ contract DividendDistributor {
     event DistributionCreated(uint256 indexed profitMonthId, uint256 totalProfit);
     event DistributionExecuted(uint256 indexed profitMonthId, uint256 totalProfit);
 
-    constructor(address usdcAddress, address treasuryWalletAddress, address founderWalletAddress) {
+    constructor(
+        address usdcAddress,
+        address treasuryWalletAddress,
+        address founderWalletAddress
+    ) Ownable(msg.sender) {
         require(usdcAddress != address(0), "USDC address required");
         require(treasuryWalletAddress != address(0), "Treasury address required");
         require(founderWalletAddress != address(0), "Founder address required");
@@ -40,7 +45,7 @@ contract DividendDistributor {
         founderWallet = founderWalletAddress;
     }
 
-    function createDistribution(uint256 profitMonthId, uint256 totalProfit) external {
+    function createDistribution(uint256 profitMonthId, uint256 totalProfit) external onlyOwner {
         Distribution storage distribution = distributions[profitMonthId];
         require(!distribution.exists, "Distribution exists");
         require(totalProfit > 0, "Total profit required");
@@ -60,7 +65,7 @@ contract DividendDistributor {
         uint256[] calldata stakerShares,
         address[] calldata authors,
         uint256[] calldata authorShares
-    ) external {
+    ) external onlyOwner {
         Distribution storage distribution = distributions[profitMonthId];
         require(distribution.exists, "Distribution missing");
         require(!distribution.distributed, "Distribution already executed");

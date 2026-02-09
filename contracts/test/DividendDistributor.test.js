@@ -62,6 +62,36 @@ describe("DividendDistributor", function () {
     expect(await usdc.balanceOf(treasury.address)).to.equal(treasuryAmount);
   });
 
+  it("restricts createDistribution and executeDistribution to owner", async function () {
+    const totalProfit = 2_000_000n;
+    const profitMonthId = 202504;
+
+    await expect(
+      distributor
+        .connect(staker1)
+        .createDistribution(profitMonthId, totalProfit)
+    )
+      .to.be.revertedWithCustomError(
+        distributor,
+        "OwnableUnauthorizedAccount"
+      )
+      .withArgs(staker1.address);
+
+    await usdc.mint(await distributor.getAddress(), totalProfit);
+    await distributor.createDistribution(profitMonthId, totalProfit);
+
+    await expect(
+      distributor
+        .connect(staker1)
+        .executeDistribution(profitMonthId, [], [], [], [])
+    )
+      .to.be.revertedWithCustomError(
+        distributor,
+        "OwnableUnauthorizedAccount"
+      )
+      .withArgs(staker1.address);
+  });
+
   it("routes dust from the split to treasury", async function () {
     const totalProfit = 1_000_003n;
     const profitMonthId = 202502;
