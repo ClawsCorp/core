@@ -11,7 +11,6 @@ Thank you for contributing.
 ## Governance
 
 - Follow CODEOWNERS guidance for review requirements.
-- Do not introduce new SaaS or technologies without approval.
 - Do not log secrets or sensitive data.
 
 ## Reporting issues
