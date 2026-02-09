@@ -15,6 +15,16 @@ The repository enforces required checks that map to the CI workflow jobs created
 Any additional checks mandated in Prompt #2.1 should also be marked as required in branch
 protection settings.
 
+## Early-stage CI behavior
+
+- AI review runs on a locally generated diff only. It does not make network calls, does not
+  use secrets, and produces a pass/fail status without comments or approvals.
+- Backend pytest checks treat exit code 5 (no tests collected) as a successful skip with a
+  clear message.
+- Contracts checks are intentionally non-enforcing while Hardhat config is being finalized.
+  Until Prompt #9/#10 establish the canonical setup, the workflow may skip if the Hardhat
+  project markers are missing or if the config imports `hardhat` directly.
+
 ## Branch protection expectations
 
 Protected branches must require:

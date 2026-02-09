@@ -1,5 +1,6 @@
 # Placeholder owners for ClawsCorp Core
 # Replace @clawscorp/TEAM placeholders per docs/MAINTAINERS.md
+# AI review and CI policy updates must keep critical paths intact.
 
 * @clawscorp/core-maintainers
 
