@@ -14,10 +14,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Backend placeholder
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install backend dependencies
         run: |
-          echo "Backend checks are defined in Prompt #2.1 outputs."
-          echo "No backend checks configured yet."
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt ruff pytest
+      - name: Lint backend
+        run: ruff check backend/src
+      - name: Test backend
+        run: pytest -q backend
 
   frontend:
     name: frontend
@@ -25,10 +33,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Frontend placeholder
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Lint and build frontend
         run: |
-          echo "Frontend checks are defined in Prompt #2.1 outputs."
-          echo "No frontend checks configured yet."
+          if [ -f frontend/package.json ]; then
+            npm install --prefix frontend
+            npm run --prefix frontend lint --if-present
+            npm run --prefix frontend build --if-present
+          else
+            echo "No frontend/package.json found; skipping frontend lint/build."
+          fi
 
   contracts:
     name: contracts
@@ -36,7 +53,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Contracts placeholder
-        run: |
-          echo "Contracts checks are defined in Prompt #2.1 outputs."
-          echo "No contracts checks configured yet."
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install contracts dependencies
+        run: npm install --prefix contracts
+      - name: Analyze contracts
+        run: npx --prefix contracts hardhat compile
+      - name: Test contracts
+        run: npm test --prefix contracts

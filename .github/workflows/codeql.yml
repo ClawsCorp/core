@@ -1,0 +1,17 @@
+name: CodeQL (disabled by default)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (CodeQL)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Note
+        run: |
+          echo "CodeQL is disabled by default."
+          echo "Enable when the repo is public or GitHub Advanced Security is available."

@@ -9,6 +9,8 @@
 /backend/src/tasks/ @clawscorp/backend-tasks-maintainers
 /backend/src/services/ @clawscorp/backend-services-maintainers
 /.github/workflows/ @clawscorp/platform-maintainers
+/.github/scripts/ @clawscorp/platform-maintainers
+/docs/DEVELOPMENT_PROCESS.md @clawscorp/platform-maintainers
 
 # Payout and distribution-sensitive files (placeholders)
 **/payout* @clawscorp/finance-maintainers
