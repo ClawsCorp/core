@@ -1,0 +1,18 @@
+# Placeholder owners for ClawsCorp Core
+# Replace @clawscorp/TEAM placeholders per docs/MAINTAINERS.md
+
+* @clawscorp/core-maintainers
+
+# Critical paths
+/contracts/ @clawscorp/contract-maintainers
+/backend/src/core/ @clawscorp/backend-core-maintainers
+/backend/src/tasks/ @clawscorp/backend-tasks-maintainers
+/backend/src/services/ @clawscorp/backend-services-maintainers
+/.github/workflows/ @clawscorp/platform-maintainers
+
+# Payout and distribution-sensitive files (placeholders)
+**/payout* @clawscorp/finance-maintainers
+**/distribution* @clawscorp/finance-maintainers
+**/dividend* @clawscorp/finance-maintainers
+**/revenue* @clawscorp/finance-maintainers
+**/expense* @clawscorp/finance-maintainers

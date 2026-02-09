@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Backend placeholder
+        run: |
+          echo "Backend checks are defined in Prompt #2.1 outputs."
+          echo "No backend checks configured yet."
+
+  frontend:
+    name: frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Frontend placeholder
+        run: |
+          echo "Frontend checks are defined in Prompt #2.1 outputs."
+          echo "No frontend checks configured yet."
+
+  contracts:
+    name: contracts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Contracts placeholder
+        run: |
+          echo "Contracts checks are defined in Prompt #2.1 outputs."
+          echo "No contracts checks configured yet."
