@@ -1,0 +1,68 @@
+name: Dependency Review
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  dependency-review:
+    name: dependency-review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check dependency graph status
+        id: depgraph
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          repo = os.environ.get("GITHUB_REPOSITORY")
+          token = os.environ.get("GITHUB_TOKEN")
+          url = f"https://api.github.com/repos/{repo}"
+          req = urllib.request.Request(
+              url,
+              headers={
+                  "Authorization": f"Bearer {token}",
+                  "Accept": "application/vnd.github+json",
+                  "User-Agent": "dependency-review-check",
+              },
+          )
+
+          enabled = False
+          status = "unknown"
+          try:
+              with urllib.request.urlopen(req) as resp:
+                  data = json.load(resp)
+              status = (
+                  data.get("security_and_analysis", {})
+                  .get("dependency_graph", {})
+                  .get("status")
+                  or "unknown"
+              )
+              enabled = status == "enabled"
+          except Exception as exc:
+              print(
+                  "Warning: unable to determine dependency graph status "
+                  f"({exc}). Treating as disabled."
+              )
+
+          print(f"Dependency graph status: {status}")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"enabled={'true' if enabled else 'false'}\n")
+          PY
+      - name: Dependency graph disabled warning
+        if: steps.depgraph.outputs.enabled != 'true'
+        run: |
+          echo "Dependency graph is disabled for this repository."
+          echo "Enable it in Settings → Security & analysis → Dependency graph to enforce dependency review."
+      - name: Dependency Review
+        if: steps.depgraph.outputs.enabled == 'true'
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high

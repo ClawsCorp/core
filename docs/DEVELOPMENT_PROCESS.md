@@ -25,6 +25,12 @@ Notes:
   actual check name (preferred). Only rename workflow/job `name:` fields if needed to stabilize
   check naming.
 
+### Enable Dependency Graph to enforce dependency-review
+
+Dependency Review only blocks high/critical advisories when GitHub Dependency graph is enabled.
+Enable it in **Settings → Security & analysis → Dependency graph**. When Dependency graph is
+disabled, the workflow will pass with a warning instead of blocking merges.
+
 ## Early-stage CI behavior
 
 - AI review runs on a locally generated diff only. It does not make network calls, does not
