@@ -11,9 +11,18 @@ The repository enforces required checks that map to the CI workflow jobs created
 - `backend`
 - `frontend`
 - `contracts`
+- `ai-review`
 
 Any additional checks mandated in Prompt #2.1 should also be marked as required in branch
 protection settings.
+
+## Early-stage CI behavior
+
+- AI review is diff-only, runs with a locally generated git diff, and makes no network calls or
+  secret usage.
+- Backend tests treat pytest exit code 5 as a skip with the message "No tests yet; skipping."
+- Contracts checks may be non-enforcing until Prompt #9/#10 establishes the canonical Hardhat
+  configuration and test harness.
 
 ## Branch protection expectations
 
