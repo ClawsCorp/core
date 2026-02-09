@@ -1,0 +1,38 @@
+name: Dependency Review
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    name: dependency-review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Dependency review
+        id: dependency-review
+        uses: actions/dependency-review-action@v4
+        continue-on-error: true
+        with:
+          fail-on-severity: high
+      - name: Evaluate dependency review result
+        if: steps.dependency-review.conclusion != 'success'
+        run: |
+          echo "Dependency review did not succeed; checking Dependency Graph status."
+          status=$(jq -r '.repository.security_and_analysis.dependency_graph.status // empty' "$GITHUB_EVENT_PATH")
+          if [ -z "$status" ]; then
+            status=$(curl -sS -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}" | \
+              jq -r '.security_and_analysis.dependency_graph.status // empty')
+          fi
+          if [ "$status" = "disabled" ]; then
+            echo "::warning::Dependency review is not supported because Dependency Graph is disabled. Enable it in Settings > Security & analysis to enforce this check."
+            exit 0
+          fi
+          echo "Dependency review failed and Dependency Graph appears to be enabled."
+          exit 1

@@ -1,0 +1,24 @@
+name: AI Review
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  ai-review:
+    name: ai-review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Generate diff
+        run: |
+          git fetch origin "${{ github.base_ref }}" --depth=1
+          git diff --no-color "origin/${{ github.base_ref }}"...HEAD > /tmp/pr.diff
+      - name: Run AI review (diff-only)
+        run: |
+          python .github/scripts/ai_review.py --diff-file /tmp/pr.diff
