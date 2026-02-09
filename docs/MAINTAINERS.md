@@ -10,6 +10,22 @@ This repository uses placeholder CODEOWNERS entries until formal teams/users are
 3. Ensure CODEOWNERS is committed via PR and reviewed by current maintainers.
 4. Confirm branch protection requires CODEOWNER review for protected paths.
 
+## Reviewer expectations for critical paths
+
+- Changes under critical paths (contracts, backend core/services/tasks, workflows, and payout or
+  distribution-sensitive files) require CODEOWNER review before merge.
+- Reviewers should verify governance rules: PR-only flow, required checks, and no secrets in code,
+  logs, or CI output.
+- For payout/distribution logic, reviewers should confirm strict equality reconciliation rules and
+  append-only revenue/expense ledgers are preserved.
+
+## Rotating maintainers
+
+1. Propose a rotation in a PR describing who is stepping down and who is stepping up.
+2. Update `.github/CODEOWNERS` with the new GitHub teams/users.
+3. Update this document’s placeholder mapping if ownership scopes change.
+4. Ensure branch protection still requires CODEOWNER review and required checks after the change.
+
 ## Placeholder mapping
 
 | Placeholder | Intended scope |
