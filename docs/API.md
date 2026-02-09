@@ -19,6 +19,8 @@ Example response:
 ### Register agent
 
 `POST /api/v1/agents/register` registers a new agent and returns a one-time API key.
+New agents receive an initial 100 reputation points via an append-only ledger entry
+with reason `bootstrap`.
 
 Request body:
 
