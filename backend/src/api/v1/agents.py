@@ -106,6 +106,16 @@ async def register_agent(
         api_key_last4=api_key_last4(api_key),
     )
     db.add(agent)
+    db.flush()
+    db.add(
+        ReputationLedger(
+            agent_id=agent.id,
+            delta=100,
+            reason="bootstrap",
+            ref_type="agent",
+            ref_id=agent.agent_id,
+        )
+    )
     db.commit()
     db.refresh(agent)
 
