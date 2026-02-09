@@ -14,6 +14,7 @@ class Settings:
     app_version: str
     env: str
     cors_origins: list[str]
+    database_url: str | None
 
 
 @lru_cache
@@ -22,9 +23,12 @@ def get_settings() -> Settings:
     env = os.getenv("ENV", "development")
     cors_origins_value = os.getenv("CORS_ORIGINS", "")
     cors_origins = _split_origins(cors_origins_value)
+    database_url_value = os.getenv("DATABASE_URL", "").strip()
+    database_url = database_url_value if database_url_value else None
 
     return Settings(
         app_version=app_version,
         env=env,
         cors_origins=cors_origins,
+        database_url=database_url,
     )
