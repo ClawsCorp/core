@@ -16,3 +16,4 @@ We will acknowledge receipt and coordinate a fix.
 
 - Keep reports confidential until a fix is released.
 - Follow PR-only workflow for any remediation changes.
+- Do not post secrets, tokens, or exploit details in public channels or issue trackers.
