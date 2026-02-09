@@ -10,12 +10,12 @@ All changes must land via pull request. Direct pushes to protected branches are 
 
 Required checks (match GitHub UI check names exactly):
 
-- `CI / backend`
-- `CI / frontend`
-- `CI / contracts`
-- `Dependency Review / dependency-review`
-- `Secrets Scan / secrets-scan`
-- `AI Review / ai-review` (recommended required; Optional (enable later) if AI review is not yet enforced)
+- `backend`
+- `frontend`
+- `contracts`
+- `dependency-review`
+- `secrets-scan`
+- `ai-review` (recommended required; Optional (enable later) if AI review is not yet enforced)
 
 Notes:
 
@@ -48,12 +48,12 @@ Protected branches must require:
 - Pull request reviews before merge.
 - CODEOWNERS reviews for protected paths.
 - Required status checks:
-  - `CI / backend`
-  - `CI / frontend`
-  - `CI / contracts`
-  - `Dependency Review / dependency-review`
-  - `Secrets Scan / secrets-scan`
-  - `AI Review / ai-review` (or mark as Optional (enable later))
+  - `backend`
+  - `frontend`
+  - `contracts`
+  - `dependency-review`
+  - `secrets-scan`
+  - `ai-review` (or mark as Optional (enable later))
 - Linear history (when feasible) and no force pushes.
 - (Optional) Restrict who can push to matching branches (e.g., release managers only).
 
