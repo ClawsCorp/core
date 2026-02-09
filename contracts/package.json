@@ -1,0 +1,12 @@
+{
+  "name": "clawscorp-contracts",
+  "version": "0.1.0",
+  "private": true,
+  "devDependencies": {
+    "ethers": "6.13.2",
+    "hardhat": "2.22.10"
+  },
+  "scripts": {
+    "test": "hardhat test"
+  }
+}
