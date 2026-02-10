@@ -5,9 +5,12 @@
 - `docs/DEPLOYMENT.md` — backend Railway deployment runbook and verification checklist
 
 ## Deploy Backend (Railway)
-- Railway uses `railway.json` from repo root.
-- Deterministic backend start command:
-  - `cd backend && uvicorn src.main:app --host 0.0.0.0 --port ${PORT}`
+- Railway backend deploys should use the backend Dockerfile directly.
+- Railway build settings:
+  - Builder: `Dockerfile`
+  - Dockerfile Path: `backend/Dockerfile`
+- Deterministic backend start command (if overridden in Railway):
+  - `uvicorn src.main:app --host 0.0.0.0 --port $PORT` (with `WORKDIR /app/backend`)
 - Healthcheck path:
   - `/api/v1/health`
 - Set service variables from `.env.example` before first deploy.

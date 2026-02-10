@@ -2,7 +2,7 @@
 
 ## Backend (Railway)
 
-This project deploys the backend service from the repository root, with the runtime command defined in `railway.json`.
+This project deploys the backend service using `backend/Dockerfile` for deterministic Railway builds.
 
 ### 1) Create the Railway project
 
@@ -15,12 +15,15 @@ This project deploys the backend service from the repository root, with the runt
 
 Railway should auto-read `railway.json`.
 
-- Builder: `NIXPACKS`
-- Start command:
+- Builder: `Dockerfile`
+- Dockerfile Path: `backend/Dockerfile`
+- Start command (only if you need to override the Dockerfile `CMD`):
 
 ```bash
-cd backend && uvicorn src.main:app --host 0.0.0.0 --port ${PORT}
+uvicorn src.main:app --host 0.0.0.0 --port $PORT
 ```
+
+The container `WORKDIR` is `/app/backend`, so `src.main:app` resolves without a `cd`.
 
 - Healthcheck path:
 
