@@ -453,3 +453,92 @@ Some admin/oracle endpoints will require HMAC v1 signatures:
 
 - `X-Request-Timestamp`: request timestamp string.
 - `X-Signature`: HMAC-SHA256 signature of `{timestamp}.{body_hash}`.
+
+## Accounting
+
+### Invariants
+
+- Revenue and expense records are append-only events. No edit/delete API exists.
+- Idempotency is enforced per stream via `idempotency_key` uniqueness.
+- Monetary unit is micro-USDC (integer, 6 decimals implied).
+- Profit is computed as `SUM(revenue_events.amount_micro_usdc) - SUM(expense_events.amount_micro_usdc)`.
+- Event ingestion in this step is accounting state only: it does not move funds and does not reconcile with on-chain balances.
+
+### Ingest revenue event (oracle/admin, HMAC required)
+
+`POST /api/v1/oracle/revenue-events`
+
+Request body:
+
+```json
+{
+  "profit_month_id": "202501",
+  "project_id": "proj_abcd1234",
+  "amount_micro_usdc": 1250000,
+  "tx_hash": "0xabc123",
+  "source": "watcher",
+  "idempotency_key": "rev-import-202501-001",
+  "evidence_url": "https://example.com/revenue/receipt"
+}
+```
+
+Behavior:
+
+- `profit_month_id` must be `YYYYMM` and month must be `01..12`.
+- `amount_micro_usdc` must be `> 0`.
+- `idempotency_key` must be non-empty.
+- `tx_hash` is optional, but when supplied must be `0x`-prefixed hex.
+- If `idempotency_key` already exists, returns HTTP 200 with the existing event (no new row).
+- Requests are audited with `actor_type=oracle`, `signature_status`, and `body_hash`.
+- `evidence_url` stores a pointer to external supporting evidence.
+
+### Ingest expense event (oracle/admin, HMAC required)
+
+`POST /api/v1/oracle/expense-events`
+
+Request body:
+
+```json
+{
+  "profit_month_id": "202501",
+  "project_id": "proj_abcd1234",
+  "amount_micro_usdc": 500000,
+  "tx_hash": "0xdef456",
+  "category": "infra",
+  "idempotency_key": "exp-import-202501-001",
+  "evidence_url": "https://example.com/expenses/invoice"
+}
+```
+
+Behavior mirrors revenue ingestion and is also append-only + idempotent.
+
+### Aggregate monthly accounting (public)
+
+`GET /api/v1/accounting/months?profit_month_id=YYYYMM&project_id=proj_...`
+
+Returns one month summary when `profit_month_id` is specified.
+
+`GET /api/v1/accounting/months?limit=24&offset=0`
+
+Returns paginated summaries ordered by `profit_month_id` descending.
+
+Response body:
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "profit_month_id": "202501",
+        "revenue_sum_micro_usdc": 1250000,
+        "expense_sum_micro_usdc": 500000,
+        "profit_sum_micro_usdc": 750000
+      }
+    ],
+    "limit": 24,
+    "offset": 0,
+    "total": 1
+  }
+}
+```
