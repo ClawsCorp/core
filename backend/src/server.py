@@ -21,9 +21,9 @@ def _try_set(sock: socket.socket, level: int, opt: int, value: int) -> None:
 def _listen_ipv6(port: int) -> socket.socket:
     s = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
     _try_set(s, socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    # Prefer dual-stack if possible (so one listener can accept both v4+v6).
-    # If the platform forces v6-only, we'll add an IPv4 listener below.
-    _try_set(s, socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+    # Bind IPv6-only so we can also bind IPv4 on the same port without EADDRINUSE.
+    # This avoids platform-specific dual-stack quirks that can break edge connectivity.
+    _try_set(s, socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
     s.bind(("::", port))
     s.listen(2048)
     s.setblocking(False)
@@ -42,22 +42,19 @@ def _listen_ipv4(port: int) -> socket.socket:
 def _build_sockets(port: int) -> list[socket.socket]:
     sockets: list[socket.socket] = []
 
-    # Create IPv6 first; if it ends up dual-stack, IPv4 bind may fail and we can ignore it.
+    # Bind IPv4 first (most PaaS proxies still default to IPv4 internally).
+    try:
+        sockets.append(_listen_ipv4(port))
+        print(f"[server] listening on 0.0.0.0:{port}", flush=True)
+    except OSError as exc:
+        print(f"[server] failed to bind IPv4 0.0.0.0:{port}: {exc!r}", flush=True)
+
+    # Then bind IPv6 (v6-only so it won't conflict with the IPv4 socket).
     try:
         sockets.append(_listen_ipv6(port))
         print(f"[server] listening on [::]:{port}", flush=True)
     except OSError as exc:
         print(f"[server] failed to bind IPv6 [::]:{port}: {exc!r}", flush=True)
-
-    try:
-        sockets.append(_listen_ipv4(port))
-        print(f"[server] listening on 0.0.0.0:{port}", flush=True)
-    except OSError as exc:
-        # If IPv6 listener is dual-stack, this can be a harmless EADDRINUSE.
-        if sockets:
-            print(f"[server] IPv4 bind skipped (likely dual-stack): {exc!r}", flush=True)
-        else:
-            raise
 
     if not sockets:
         raise RuntimeError(f"Failed to bind any listener sockets on port {port}")
@@ -85,4 +82,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
