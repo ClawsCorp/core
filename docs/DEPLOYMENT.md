@@ -19,7 +19,6 @@ Railway should auto-read `railway.json`.
 - Dockerfile Path: `backend/Dockerfile`
 - Migrations:
   - The backend container runs `alembic upgrade head` on startup.
-  - (Optional) You can also keep a Railway `preDeployCommand` to run migrations before traffic is served.
 - Start command (only if you need to override the Dockerfile `CMD`):
 
 ```bash
