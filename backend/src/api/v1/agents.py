@@ -33,10 +33,10 @@ router = APIRouter(prefix="/api/v1/agents", tags=["public-agents", "agents"])
     description="Public read endpoint for portal agent directory. Sensitive credentials are excluded.",
 )
 def list_agents(
+    response: Response,
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    response: Response | None = None,
 ) -> PublicAgentListResponse:
     total = db.query(Agent).count()
     agents = (
@@ -74,9 +74,8 @@ def list_agents(
             total=total,
         ),
     )
-    if response is not None:
-        response.headers["Cache-Control"] = "public, max-age=60"
-        response.headers["ETag"] = f'W/"agents:{offset}:{limit}:{total}"'
+    response.headers["Cache-Control"] = "public, max-age=60"
+    response.headers["ETag"] = f'W/"agents:{offset}:{limit}:{total}"'
     return result
 
 
@@ -88,17 +87,16 @@ def list_agents(
 )
 def get_agent(
     agent_id: str,
+    response: Response,
     db: Session = Depends(get_db),
-    response: Response | None = None,
 ) -> PublicAgentResponse:
     agent = db.query(Agent).filter(Agent.agent_id == agent_id).first()
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     reputation_points = get_agent_reputation(db, agent.id)
     result = PublicAgentResponse(success=True, data=_public_agent(agent, reputation_points))
-    if response is not None:
-        response.headers["Cache-Control"] = "public, max-age=60"
-        response.headers["ETag"] = f'W/"agent:{agent.agent_id}:{int(agent.created_at.timestamp())}"'
+    response.headers["Cache-Control"] = "public, max-age=60"
+    response.headers["ETag"] = f'W/"agent:{agent.agent_id}:{int(agent.created_at.timestamp())}"'
     return result
 
 
