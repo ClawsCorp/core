@@ -36,11 +36,11 @@ router = APIRouter(prefix="/api/v1/projects", tags=["public-projects", "projects
     description="Public read endpoint for portal project list.",
 )
 def list_projects(
+    response: Response,
     status: ProjectStatusSchema | None = Query(None),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    response: Response | None = None,
 ) -> ProjectListResponse:
     query = db.query(Project)
     if status is not None:
@@ -52,9 +52,8 @@ def list_projects(
         success=True,
         data=ProjectListData(items=items, limit=limit, offset=offset, total=total),
     )
-    if response is not None:
-        response.headers["Cache-Control"] = "public, max-age=60"
-        response.headers["ETag"] = f'W/"projects:{status or "all"}:{offset}:{limit}:{total}"'
+    response.headers["Cache-Control"] = "public, max-age=60"
+    response.headers["ETag"] = f'W/"projects:{status or "all"}:{offset}:{limit}:{total}"'
     return result
 
 
@@ -66,16 +65,15 @@ def list_projects(
 )
 def get_project(
     project_id: str,
+    response: Response,
     db: Session = Depends(get_db),
-    response: Response | None = None,
 ) -> ProjectDetailResponse:
     project = db.query(Project).filter(Project.project_id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     result = ProjectDetailResponse(success=True, data=_project_detail(db, project))
-    if response is not None:
-        response.headers["Cache-Control"] = "public, max-age=60"
-        response.headers["ETag"] = f'W/"project:{project.project_id}:{int(project.updated_at.timestamp())}"'
+    response.headers["Cache-Control"] = "public, max-age=60"
+    response.headers["ETag"] = f'W/"project:{project.project_id}:{int(project.updated_at.timestamp())}"'
     return result
 
 

@@ -39,11 +39,11 @@ router = APIRouter(prefix="/api/v1/proposals", tags=["public-proposals", "propos
     description="Public read endpoint for portal proposal list.",
 )
 def list_proposals(
+    response: Response,
     status: ProposalStatusSchema | None = Query(None),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    response: Response | None = None,
 ) -> ProposalListResponse:
     query = db.query(Proposal)
     if status is not None:
@@ -67,9 +67,8 @@ def list_proposals(
             total=total,
         ),
     )
-    if response is not None:
-        response.headers["Cache-Control"] = "public, max-age=30"
-        response.headers["ETag"] = f'W/"proposals:{status or "all"}:{offset}:{limit}:{total}"'
+    response.headers["Cache-Control"] = "public, max-age=30"
+    response.headers["ETag"] = f'W/"proposals:{status or "all"}:{offset}:{limit}:{total}"'
     return result
 
 
@@ -81,16 +80,15 @@ def list_proposals(
 )
 def get_proposal(
     proposal_id: str,
+    response: Response,
     db: Session = Depends(get_db),
-    response: Response | None = None,
 ) -> ProposalDetailResponse:
     proposal = db.query(Proposal).filter(Proposal.proposal_id == proposal_id).first()
     if not proposal:
         raise HTTPException(status_code=404, detail="Proposal not found")
     result = ProposalDetailResponse(success=True, data=_proposal_detail(db, proposal))
-    if response is not None:
-        response.headers["Cache-Control"] = "public, max-age=30"
-        response.headers["ETag"] = f'W/"proposal:{proposal.proposal_id}:{int(proposal.updated_at.timestamp())}"'
+    response.headers["Cache-Control"] = "public, max-age=30"
+    response.headers["ETag"] = f'W/"proposal:{proposal.proposal_id}:{int(proposal.updated_at.timestamp())}"'
     return result
 
 
