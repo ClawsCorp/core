@@ -2,6 +2,16 @@
 - `docs/CORE_ECONOMIC_LOOP.md` — meaning core: money flow, settlement, payout gating
 - `docs/ORACLE_AUTOMATION_POLICY.md` — oracle/automation policy and fail-closed rules
 - `docs/AI_REVIEWER_POLICY.md` — PR security gate policy (automation + AI review)
+- `docs/DEPLOYMENT.md` — backend Railway deployment runbook and verification checklist
+
+## Deploy Backend (Railway)
+- Railway uses `railway.json` from repo root.
+- Deterministic backend start command:
+  - `cd backend && uvicorn src.main:app --host 0.0.0.0 --port ${PORT}`
+- Healthcheck path:
+  - `/api/v1/health`
+- Set service variables from `.env.example` before first deploy.
+- Full step-by-step instructions: `docs/DEPLOYMENT.md`.
 
 ---
 
