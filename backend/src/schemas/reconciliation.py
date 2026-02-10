@@ -14,6 +14,4 @@ class ReconciliationReportPublic(BaseModel):
     delta_micro_usdc: int
     ready: bool
     blocked_reason: str
-    rpc_chain_id: int | None
-    rpc_url_name: str | None
     computed_at: datetime

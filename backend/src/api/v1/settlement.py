@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 
 from core.database import get_db
@@ -18,21 +18,27 @@ from schemas.settlement import (
     SettlementPublic,
 )
 
-router = APIRouter(prefix="/api/v1/settlement", tags=["settlement"])
+router = APIRouter(prefix="/api/v1/settlement", tags=["public-settlement", "settlement"])
 
 _MONTH_RE = re.compile(r"^\d{6}$")
 
 
-@router.get("/{profit_month_id}", response_model=SettlementDetailResponse)
+@router.get(
+    "/{profit_month_id}",
+    response_model=SettlementDetailResponse,
+    summary="Get settlement status for month",
+    description="Public read endpoint for settlement + reconciliation readiness.",
+)
 def get_settlement_status(
     profit_month_id: str,
     db: Session = Depends(get_db),
+    response: Response | None = None,
 ) -> SettlementDetailResponse:
     _validate_month(profit_month_id)
     settlement = _latest_settlement(db, profit_month_id)
     reconciliation = _latest_reconciliation(db, profit_month_id)
 
-    return SettlementDetailResponse(
+    result = SettlementDetailResponse(
         success=True,
         data=SettlementDetailData(
             settlement=_settlement_public(settlement) if settlement else None,
@@ -40,13 +46,24 @@ def get_settlement_status(
             ready=bool(reconciliation.ready) if reconciliation else False,
         ),
     )
+    if response is not None:
+        etag_part = int(settlement.computed_at.timestamp()) if settlement else 0
+        response.headers["Cache-Control"] = "public, max-age=30"
+        response.headers["ETag"] = f'W/"settlement:{profit_month_id}:{etag_part}"'
+    return result
 
 
-@router.get("/months", response_model=SettlementMonthsResponse)
+@router.get(
+    "/months",
+    response_model=SettlementMonthsResponse,
+    summary="List settlement months",
+    description="Public read endpoint for settlement month index and readiness flags.",
+)
 def list_settlement_months(
     limit: int = Query(24, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
+    response: Response | None = None,
 ) -> SettlementMonthsResponse:
     settlements = db.query(Settlement).order_by(Settlement.profit_month_id.desc(), Settlement.computed_at.desc(), Settlement.id.desc()).all()
     reconciliations = db.query(ReconciliationReport).order_by(ReconciliationReport.profit_month_id.desc(), ReconciliationReport.computed_at.desc(), ReconciliationReport.id.desc()).all()
@@ -84,10 +101,14 @@ def list_settlement_months(
             )
         )
 
-    return SettlementMonthsResponse(
+    result = SettlementMonthsResponse(
         success=True,
         data=SettlementMonthsData(items=items, limit=limit, offset=offset, total=len(months)),
     )
+    if response is not None:
+        response.headers["Cache-Control"] = "public, max-age=30"
+        response.headers["ETag"] = f'W/"settlement-months:{offset}:{limit}:{len(months)}"'
+    return result
 
 
 def _latest_settlement(db: Session, profit_month_id: str) -> Settlement | None:
@@ -130,8 +151,6 @@ def _reconciliation_public(report: ReconciliationReport) -> ReconciliationReport
         delta_micro_usdc=report.delta_micro_usdc,
         ready=report.ready,
         blocked_reason=report.blocked_reason,
-        rpc_chain_id=report.rpc_chain_id,
-        rpc_url_name=report.rpc_url_name,
         computed_at=report.computed_at,
     )
 

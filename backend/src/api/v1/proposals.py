@@ -3,7 +3,7 @@ from __future__ import annotations
 import secrets
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -29,15 +29,21 @@ from schemas.proposal import (
 )
 from api.v1.dependencies import require_agent_auth
 
-router = APIRouter(prefix="/api/v1/proposals", tags=["proposals"])
+router = APIRouter(prefix="/api/v1/proposals", tags=["public-proposals", "proposals"])
 
 
-@router.get("", response_model=ProposalListResponse)
+@router.get(
+    "",
+    response_model=ProposalListResponse,
+    summary="List proposals",
+    description="Public read endpoint for portal proposal list.",
+)
 def list_proposals(
     status: ProposalStatusSchema | None = Query(None),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
+    response: Response | None = None,
 ) -> ProposalListResponse:
     query = db.query(Proposal)
     if status is not None:
@@ -52,7 +58,7 @@ def list_proposals(
         _proposal_summary(proposal, author_map.get(proposal.author_agent_id, ""))
         for proposal in proposals
     ]
-    return ProposalListResponse(
+    result = ProposalListResponse(
         success=True,
         data=ProposalListData(
             items=items,
@@ -61,17 +67,31 @@ def list_proposals(
             total=total,
         ),
     )
+    if response is not None:
+        response.headers["Cache-Control"] = "public, max-age=30"
+        response.headers["ETag"] = f'W/"proposals:{status or "all"}:{offset}:{limit}:{total}"'
+    return result
 
 
-@router.get("/{proposal_id}", response_model=ProposalDetailResponse)
+@router.get(
+    "/{proposal_id}",
+    response_model=ProposalDetailResponse,
+    summary="Get proposal detail",
+    description="Public read endpoint for proposal detail and vote summary.",
+)
 def get_proposal(
     proposal_id: str,
     db: Session = Depends(get_db),
+    response: Response | None = None,
 ) -> ProposalDetailResponse:
     proposal = db.query(Proposal).filter(Proposal.proposal_id == proposal_id).first()
     if not proposal:
         raise HTTPException(status_code=404, detail="Proposal not found")
-    return ProposalDetailResponse(success=True, data=_proposal_detail(db, proposal))
+    result = ProposalDetailResponse(success=True, data=_proposal_detail(db, proposal))
+    if response is not None:
+        response.headers["Cache-Control"] = "public, max-age=30"
+        response.headers["ETag"] = f'W/"proposal:{proposal.proposal_id}:{int(proposal.updated_at.timestamp())}"'
+    return result
 
 
 @router.post("", response_model=ProposalDetailResponse)
