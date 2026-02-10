@@ -5,7 +5,7 @@ from datetime import datetime
 from sqlalchemy import BigInteger, DateTime, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-from core.database import Base
+from src.core.database import Base
 
 
 class DividendPayout(Base):

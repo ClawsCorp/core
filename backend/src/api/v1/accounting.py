@@ -6,11 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from core.database import get_db
-from models.expense_event import ExpenseEvent
-from models.project import Project
-from models.revenue_event import RevenueEvent
-from schemas.accounting import AccountingMonthSummary, AccountingMonthsData, AccountingMonthsResponse
+from src.core.database import get_db
+from src.models.expense_event import ExpenseEvent
+from src.models.project import Project
+from src.models.revenue_event import RevenueEvent
+from src.schemas.accounting import AccountingMonthSummary, AccountingMonthsData, AccountingMonthsResponse
 
 router = APIRouter(prefix="/api/v1/accounting", tags=["accounting"])
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from models.audit_log import AuditLog
+from src.models.audit_log import AuditLog
 
 
 def record_audit(

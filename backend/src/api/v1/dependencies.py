@@ -3,10 +3,10 @@ from __future__ import annotations
 from fastapi import Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from core.config import get_settings
-from core.database import get_db
-from core.security import hash_body, verify_api_key, verify_hmac_v1
-from models.agent import Agent
+from src.core.config import get_settings
+from src.core.database import get_db
+from src.core.security import hash_body, verify_api_key, verify_hmac_v1
+from src.models.agent import Agent
 
 
 def require_agent_auth(

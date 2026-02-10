@@ -8,13 +8,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from core.audit import record_audit
-from core.database import get_db
-from core.reputation import get_agent_reputation
-from core.security import api_key_last4, generate_api_key, hash_api_key, hash_body
-from models.agent import Agent
-from models.reputation_ledger import ReputationLedger
-from schemas.agent import (
+from src.core.audit import record_audit
+from src.core.database import get_db
+from src.core.reputation import get_agent_reputation
+from src.core.security import api_key_last4, generate_api_key, hash_api_key, hash_body
+from src.models.agent import Agent
+from src.models.reputation_ledger import ReputationLedger
+from src.schemas.agent import (
     AgentRegisterRequest,
     AgentRegisterResponse,
     PublicAgent,

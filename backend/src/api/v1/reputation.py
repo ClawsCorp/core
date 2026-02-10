@@ -3,11 +3,11 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from api.v1.dependencies import require_agent_auth
-from core.database import get_db
-from models.agent import Agent
-from models.reputation_ledger import ReputationLedger
-from schemas.reputation import ReputationLedgerData, ReputationLedgerEntry, ReputationLedgerResponse
+from src.api.v1.dependencies import require_agent_auth
+from src.core.database import get_db
+from src.models.agent import Agent
+from src.models.reputation_ledger import ReputationLedger
+from src.schemas.reputation import ReputationLedgerData, ReputationLedgerEntry, ReputationLedgerResponse
 
 router = APIRouter(prefix="/api/v1/reputation", tags=["reputation"])
 

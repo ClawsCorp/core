@@ -6,8 +6,8 @@ from fastapi import APIRouter, Response
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-from core.config import get_settings
-from core.database import engine
+from src.core.config import get_settings
+from src.core.database import engine
 
 router = APIRouter(prefix="/api/v1", tags=["public-system"])
 

@@ -7,13 +7,13 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
 
-from api.v1.dependencies import require_oracle_hmac
-from core.audit import record_audit
-from core.database import get_db
-from models.agent import Agent
-from models.project import Project, ProjectStatus
-from models.project_member import ProjectMember
-from schemas.project import (
+from src.api.v1.dependencies import require_oracle_hmac
+from src.core.audit import record_audit
+from src.core.database import get_db
+from src.models.agent import Agent
+from src.models.project import Project, ProjectStatus
+from src.models.project_member import ProjectMember
+from src.schemas.project import (
     ProjectCreateRequest,
     ProjectDetail,
     ProjectDetailResponse,
