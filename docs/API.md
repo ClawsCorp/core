@@ -542,3 +542,74 @@ Response body:
   }
 }
 ```
+
+## Settlement and Reconciliation
+
+### Strict equality payout gate (fail-closed)
+
+For each `profit_month_id` (`YYYYMM`):
+
+- `profit_sum_micro_usdc = revenue_sum_micro_usdc - expense_sum_micro_usdc`
+- `distributor_balance_micro_usdc = IERC20(USDC).balanceOf(DividendDistributor)`
+- `delta_micro_usdc = distributor_balance_micro_usdc - profit_sum_micro_usdc` (signed)
+
+`ready=true` **only** when both conditions are true:
+
+- `distributor_balance_micro_usdc == profit_sum_micro_usdc`
+- `profit_sum_micro_usdc >= 0`
+
+Any delta (`delta_micro_usdc != 0`, positive or negative) blocks payout (`ready=false`).
+RPC read failures are fail-closed (`ready=false`, `blocked_reason=rpc_error`).
+
+### Compute settlement (oracle/admin, HMAC required)
+
+`POST /api/v1/oracle/settlement/{profit_month_id}`
+
+Creates an append-only settlement row for the month with:
+
+- `revenue_sum_micro_usdc`
+- `expense_sum_micro_usdc`
+- `profit_sum_micro_usdc`
+- `profit_nonnegative`
+- `computed_at`
+
+### Compute reconciliation report (oracle/admin, HMAC required)
+
+`POST /api/v1/oracle/reconciliation/{profit_month_id}`
+
+Requires an existing settlement for the month.
+Creates an append-only reconciliation report with:
+
+- settlement sums snapshot
+- `distributor_balance_micro_usdc`
+- `delta_micro_usdc`
+- `ready`
+- `blocked_reason` (`none`, `balance_mismatch`, `negative_profit`, `rpc_error`)
+- optional `rpc_chain_id`, `rpc_url_name`
+- `computed_at`
+
+### Trigger payout (oracle/admin, HMAC required)
+
+`POST /api/v1/oracle/payouts/{profit_month_id}/trigger`
+
+Request body:
+
+```json
+{
+  "stakers_count": 120,
+  "authors_count": 25,
+  "total_stakers_micro_usdc": 700000,
+  "total_authors_micro_usdc": 300000
+}
+```
+
+Behavior:
+
+- Fails closed unless latest reconciliation for the month exists and `ready=true`.
+- Enforces recipient caps: `MAX_STAKERS=200`, `MAX_AUTHORS=50`.
+- On-chain owner signer execution is not automated in this step; blocked response is returned when signer call is not available.
+
+### Public settlement visibility
+
+- `GET /api/v1/settlement/{profit_month_id}` → latest settlement + latest reconciliation + `ready`.
+- `GET /api/v1/settlement/months?limit=24&offset=0` → paginated month summaries including `ready` and `delta_micro_usdc`.
