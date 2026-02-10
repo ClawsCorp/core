@@ -12,6 +12,6 @@ COPY backend/alembic.ini ./alembic.ini
 EXPOSE 8000
 
 # Railway can route to services over IPv4 and/or IPv6.
-# Binding both 0.0.0.0 and [::] can fail with EADDRINUSE on hosts where the IPv6
-# socket is dual-stack (accepts IPv4). Binding [::] alone is sufficient there.
-CMD ["sh", "-c", "hypercorn src.main:app --bind [::]:${PORT:-8000}"]
+# Binding both 0.0.0.0 and [::] can fail with EADDRINUSE on some Linux hosts where
+# the IPv6 socket is dual-stack. Bind IPv4 explicitly for Railway's TCP proxy.
+CMD ["sh", "-c", "hypercorn src.main:app --bind 0.0.0.0:${PORT:-8000}"]
