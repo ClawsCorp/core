@@ -24,35 +24,6 @@ _MONTH_RE = re.compile(r"^\d{6}$")
 
 
 @router.get(
-    "/{profit_month_id}",
-    response_model=SettlementDetailResponse,
-    summary="Get settlement status for month",
-    description="Public read endpoint for settlement + reconciliation readiness.",
-)
-def get_settlement_status(
-    profit_month_id: str,
-    response: Response,
-    db: Session = Depends(get_db),
-) -> SettlementDetailResponse:
-    _validate_month(profit_month_id)
-    settlement = _latest_settlement(db, profit_month_id)
-    reconciliation = _latest_reconciliation(db, profit_month_id)
-
-    result = SettlementDetailResponse(
-        success=True,
-        data=SettlementDetailData(
-            settlement=_settlement_public(settlement) if settlement else None,
-            reconciliation=_reconciliation_public(reconciliation) if reconciliation else None,
-            ready=bool(reconciliation.ready) if reconciliation else False,
-        ),
-    )
-    etag_part = int(settlement.computed_at.timestamp()) if settlement else 0
-    response.headers["Cache-Control"] = "public, max-age=30"
-    response.headers["ETag"] = f'W/"settlement:{profit_month_id}:{etag_part}"'
-    return result
-
-
-@router.get(
     "/months",
     response_model=SettlementMonthsResponse,
     summary="List settlement months",
@@ -106,6 +77,35 @@ def list_settlement_months(
     )
     response.headers["Cache-Control"] = "public, max-age=30"
     response.headers["ETag"] = f'W/"settlement-months:{offset}:{limit}:{len(months)}"'
+    return result
+
+
+@router.get(
+    "/{profit_month_id}",
+    response_model=SettlementDetailResponse,
+    summary="Get settlement status for month",
+    description="Public read endpoint for settlement + reconciliation readiness.",
+)
+def get_settlement_status(
+    profit_month_id: str,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> SettlementDetailResponse:
+    _validate_month(profit_month_id)
+    settlement = _latest_settlement(db, profit_month_id)
+    reconciliation = _latest_reconciliation(db, profit_month_id)
+
+    result = SettlementDetailResponse(
+        success=True,
+        data=SettlementDetailData(
+            settlement=_settlement_public(settlement) if settlement else None,
+            reconciliation=_reconciliation_public(reconciliation) if reconciliation else None,
+            ready=bool(reconciliation.ready) if reconciliation else False,
+        ),
+    )
+    etag_part = int(settlement.computed_at.timestamp()) if settlement else 0
+    response.headers["Cache-Control"] = "public, max-age=30"
+    response.headers["ETag"] = f'W/"settlement:{profit_month_id}:{etag_part}"'
     return result
 
 
