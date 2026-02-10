@@ -10,7 +10,7 @@
   - Builder: `Dockerfile`
   - Dockerfile Path: `backend/Dockerfile`
 - Deterministic backend start command (only if you override the Dockerfile `CMD`):
-  - `hypercorn src.main:app --bind 0.0.0.0:$PORT --bind [::]:$PORT` (with `WORKDIR /app/backend`)
+  - `hypercorn src.main:app --bind '[::]:'$PORT` (with `WORKDIR /app/backend`)
 - Healthcheck path:
   - `/api/v1/health`
 - Set service variables from `.env.example` before first deploy.
