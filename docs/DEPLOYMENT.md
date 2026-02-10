@@ -17,6 +17,8 @@ Railway should auto-read `railway.json`.
 
 - Builder: `Dockerfile`
 - Dockerfile Path: `backend/Dockerfile`
+- Pre-deploy migrations:
+  - `alembic -c /app/backend/alembic.ini upgrade head`
 - Start command (only if you need to override the Dockerfile `CMD`):
 
 ```bash
