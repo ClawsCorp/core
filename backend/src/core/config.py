@@ -9,6 +9,30 @@ def _split_origins(value: str) -> list[str]:
     return [origin.strip() for origin in value.split(",") if origin.strip()]
 
 
+def _normalize_database_url(url: str) -> str:
+    """
+    Railway Postgres often provides DATABASE_URL as `postgresql://...` (no driver).
+    SQLAlchemy may then try to use `psycopg2`, which we do not install (we use psycopg v3).
+    Normalize to an explicit psycopg driver when the URL is a plain Postgres URL.
+    """
+    url = url.strip()
+    if not url:
+        return url
+
+    # Heroku/Railway style alias.
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://") :]
+
+    # If a driver is already specified (postgresql+...), leave it alone.
+    if url.startswith("postgresql+"):
+        return url
+
+    if url.startswith("postgresql://"):
+        return "postgresql+psycopg://" + url[len("postgresql://") :]
+
+    return url
+
+
 @dataclass(frozen=True)
 class Settings:
     app_version: str
@@ -28,7 +52,7 @@ def get_settings() -> Settings:
     cors_origins_value = os.getenv("CORS_ORIGINS", "")
     cors_origins = _split_origins(cors_origins_value)
     database_url_value = os.getenv("DATABASE_URL", "").strip()
-    database_url = database_url_value if database_url_value else None
+    database_url = _normalize_database_url(database_url_value) if database_url_value else None
     oracle_hmac_secret_value = os.getenv("ORACLE_HMAC_SECRET", "").strip()
     oracle_hmac_secret = oracle_hmac_secret_value if oracle_hmac_secret_value else None
 
