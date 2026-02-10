@@ -112,3 +112,47 @@ export USDC_ADDRESS=0x...
 
 npx --prefix contracts hardhat run scripts/deploy-funding-pool.js --network <network>
 ```
+
+## Frontend (Vercel)
+
+The public portal frontend is deployed from `frontend/` as a Next.js app.
+
+### 1) Create/import the Vercel project
+
+1. In Vercel, click **Add New** → **Project**.
+2. Import this repository.
+3. Set **Root Directory** to:
+
+```text
+frontend/
+```
+
+### 2) Configure environment variables
+
+Set this variable for both **Production** and **Preview** environments:
+
+- `NEXT_PUBLIC_API_URL` = your Railway backend URL (for example `https://<railway-domain>`)
+
+> The frontend uses `NEXT_PUBLIC_API_URL` as the only API origin and does not include localhost fallbacks.
+
+### 3) Build settings
+
+Use Next.js defaults in Vercel:
+
+- Build Command: `next build` (default)
+- Output Directory: `.next` (default)
+
+### 4) Runtime behavior
+
+- The portal only calls public unauthenticated `GET` endpoints.
+- No API keys or auth headers are sent by frontend read requests.
+
+### 5) Verify deployment
+
+After deployment, confirm these pages load from your Railway backend:
+
+- `/` (health + stats)
+- `/projects`
+- `/proposals`
+- `/bounties`
+- `/settlement`

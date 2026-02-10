@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { DataCard, PageContainer } from "@/components/Cards";
@@ -45,6 +46,23 @@ export default function HomePage() {
       {!loading && error ? <ErrorState message={error} onRetry={load} /> : null}
       {!loading && !error ? (
         <>
+          <DataCard title="Explore">
+            <ul>
+              <li>
+                <Link href="/projects">Projects</Link>
+              </li>
+              <li>
+                <Link href="/proposals">Proposals</Link>
+              </li>
+              <li>
+                <Link href="/bounties">Bounties</Link>
+              </li>
+              <li>
+                <Link href="/settlement">Settlement</Link>
+              </li>
+            </ul>
+          </DataCard>
+
           <DataCard title="Health">
             {health ? (
               <ul>

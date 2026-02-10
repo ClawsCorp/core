@@ -1,4 +1,4 @@
-import { MISSING_API_BASE_URL_MESSAGE, getApiBaseUrl } from "@/lib/constants";
+import { getApiBaseUrl, MISSING_NEXT_PUBLIC_API_URL_MESSAGE } from "@/lib/env";
 import type {
   ApiErrorShape,
   BountyPublic,
@@ -21,35 +21,40 @@ export class ApiError extends Error {
   }
 }
 
-const API_BASE = getApiBaseUrl();
-
 function ensureApiBaseUrl(): string {
-  if (!API_BASE) {
-    throw new ApiError(MISSING_API_BASE_URL_MESSAGE);
+  const apiBaseUrl = getApiBaseUrl();
+  if (!apiBaseUrl) {
+    throw new ApiError(MISSING_NEXT_PUBLIC_API_URL_MESSAGE);
   }
-  return API_BASE;
+  return apiBaseUrl;
 }
 
-async function getJson<T>(path: string): Promise<T> {
-  const apiBaseUrl = ensureApiBaseUrl();
-  const response = await fetch(`${apiBaseUrl}${path}`, {
+export async function fetchJSON<T>(path: string): Promise<T> {
+  const response = await fetch(`${ensureApiBaseUrl()}${path}`, {
     method: "GET",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      Accept: "application/json",
+    },
     cache: "no-store",
   });
 
   if (!response.ok) {
     let message = `Request failed (${response.status})`;
+
     try {
       const payload = (await response.json()) as ApiErrorShape;
       if (payload?.detail) {
         message = payload.detail;
       }
     } catch {
-      if (response.statusText) {
+      const bodyText = await response.text().catch(() => "");
+      if (bodyText) {
+        message = bodyText;
+      } else if (response.statusText) {
         message = response.statusText;
       }
     }
+
     throw new ApiError(message, response.status);
   }
 
@@ -67,10 +72,10 @@ export function readErrorMessage(error: unknown): string {
 }
 
 export const api = {
-  getHealth: () => getJson<HealthResponse>("/api/v1/health"),
+  getHealth: () => fetchJSON<HealthResponse>("/api/v1/health"),
   getStats: async () => {
     try {
-      const payload = await getJson<Envelope<StatsData>>("/api/v1/stats");
+      const payload = await fetchJSON<Envelope<StatsData>>("/api/v1/stats");
       return payload.data;
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) {
@@ -80,39 +85,39 @@ export const api = {
     }
   },
   getSettlementMonths: async (limit: number, offset: number) => {
-    const payload = await getJson<Envelope<ListData<SettlementMonthSummary>>>(
+    const payload = await fetchJSON<Envelope<ListData<SettlementMonthSummary>>>(
       `/api/v1/settlement/months?limit=${limit}&offset=${offset}`,
     );
     return payload.data;
   },
   getSettlementDetail: async (profitMonthId: string) => {
-    const payload = await getJson<Envelope<SettlementDetailData>>(
+    const payload = await fetchJSON<Envelope<SettlementDetailData>>(
       `/api/v1/settlement/${profitMonthId}`,
     );
     return payload.data;
   },
   getProposals: async () => {
-    const payload = await getJson<Envelope<ListData<ProposalSummary>>>("/api/v1/proposals");
+    const payload = await fetchJSON<Envelope<ListData<ProposalSummary>>>("/api/v1/proposals");
     return payload.data;
   },
   getProposal: async (id: string) => {
-    const payload = await getJson<Envelope<ProposalDetail>>(`/api/v1/proposals/${id}`);
+    const payload = await fetchJSON<Envelope<ProposalDetail>>(`/api/v1/proposals/${id}`);
     return payload.data;
   },
   getProjects: async () => {
-    const payload = await getJson<Envelope<ListData<ProjectSummary>>>("/api/v1/projects");
+    const payload = await fetchJSON<Envelope<ListData<ProjectSummary>>>("/api/v1/projects");
     return payload.data;
   },
   getProject: async (id: string) => {
-    const payload = await getJson<Envelope<ProjectDetail>>(`/api/v1/projects/${id}`);
+    const payload = await fetchJSON<Envelope<ProjectDetail>>(`/api/v1/projects/${id}`);
     return payload.data;
   },
   getBounties: async () => {
-    const payload = await getJson<Envelope<ListData<BountyPublic>>>("/api/v1/bounties");
+    const payload = await fetchJSON<Envelope<ListData<BountyPublic>>>("/api/v1/bounties");
     return payload.data;
   },
   getBounty: async (id: string) => {
-    const payload = await getJson<Envelope<BountyPublic>>(`/api/v1/bounties/${id}`);
+    const payload = await fetchJSON<Envelope<BountyPublic>>(`/api/v1/bounties/${id}`);
     return payload.data;
   },
 };
