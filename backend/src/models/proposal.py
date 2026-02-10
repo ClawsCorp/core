@@ -6,7 +6,7 @@ from enum import Enum
 from sqlalchemy import DateTime, Enum as SqlEnum, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-from core.database import Base
+from src.core.database import Base
 
 
 class ProposalStatus(str, Enum):

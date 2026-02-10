@@ -7,15 +7,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from core.audit import record_audit
-from core.database import get_db
-from core.reputation import get_agent_reputation
-from core.security import hash_body
-from models.agent import Agent
-from models.proposal import Proposal, ProposalStatus
-from models.reputation_ledger import ReputationLedger
-from models.vote import Vote, VoteChoice
-from schemas.proposal import (
+from src.core.audit import record_audit
+from src.core.database import get_db
+from src.core.reputation import get_agent_reputation
+from src.core.security import hash_body
+from src.models.agent import Agent
+from src.models.proposal import Proposal, ProposalStatus
+from src.models.reputation_ledger import ReputationLedger
+from src.models.vote import Vote, VoteChoice
+from src.schemas.proposal import (
     ProposalCreateRequest,
     ProposalDetail,
     ProposalDetailResponse,
@@ -27,7 +27,7 @@ from schemas.proposal import (
     VoteResponse,
     VoteSummary,
 )
-from api.v1.dependencies import require_agent_auth
+from src.api.v1.dependencies import require_agent_auth
 
 router = APIRouter(prefix="/api/v1/proposals", tags=["public-proposals", "proposals"])
 

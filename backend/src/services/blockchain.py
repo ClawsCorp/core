@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from core.config import get_settings
+from src.core.config import get_settings
 
 _BALANCE_OF_SELECTOR = "70a08231"
 

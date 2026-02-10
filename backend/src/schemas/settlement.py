@@ -4,7 +4,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from schemas.reconciliation import ReconciliationReportPublic
+from src.schemas.reconciliation import ReconciliationReportPublic
 
 
 class SettlementPublic(BaseModel):

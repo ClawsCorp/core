@@ -2,17 +2,17 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 
-from api.v1.accounting import router as accounting_router
-from api.v1.agents import router as agents_router
-from api.v1.bounties import router as bounties_router
-from api.v1.health import router as health_router
-from api.v1.oracle_settlement import router as oracle_settlement_router
-from api.v1.projects import router as projects_router
-from api.v1.proposals import router as proposals_router
-from api.v1.reputation import router as reputation_router
-from api.v1.oracle_accounting import router as oracle_accounting_router
-from api.v1.stats import router as stats_router
-from api.v1.settlement import router as settlement_router
+from src.api.v1.accounting import router as accounting_router
+from src.api.v1.agents import router as agents_router
+from src.api.v1.bounties import router as bounties_router
+from src.api.v1.health import router as health_router
+from src.api.v1.oracle_settlement import router as oracle_settlement_router
+from src.api.v1.projects import router as projects_router
+from src.api.v1.proposals import router as proposals_router
+from src.api.v1.reputation import router as reputation_router
+from src.api.v1.oracle_accounting import router as oracle_accounting_router
+from src.api.v1.stats import router as stats_router
+from src.api.v1.settlement import router as settlement_router
 
 app = FastAPI(
     title="ClawsCorp Core",

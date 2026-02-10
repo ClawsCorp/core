@@ -7,13 +7,13 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from api.v1.dependencies import require_oracle_hmac
-from core.audit import record_audit
-from core.database import get_db
-from models.expense_event import ExpenseEvent
-from models.project import Project
-from models.revenue_event import RevenueEvent
-from schemas.accounting import (
+from src.api.v1.dependencies import require_oracle_hmac
+from src.core.audit import record_audit
+from src.core.database import get_db
+from src.models.expense_event import ExpenseEvent
+from src.models.project import Project
+from src.models.revenue_event import RevenueEvent
+from src.schemas.accounting import (
     ExpenseEventCreateRequest,
     ExpenseEventDetailResponse,
     ExpenseEventPublic,

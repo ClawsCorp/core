@@ -5,7 +5,7 @@ from enum import Enum
 from sqlalchemy import Enum as SqlEnum, ForeignKey, Integer, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
-from core.database import Base
+from src.core.database import Base
 
 
 class ProjectMemberRole(str, Enum):
