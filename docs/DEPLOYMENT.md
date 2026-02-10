@@ -20,7 +20,7 @@ Railway should auto-read `railway.json`.
 - Start command (only if you need to override the Dockerfile `CMD`):
 
 ```bash
-python -m src.server
+uvicorn src.main:app --host 0.0.0.0 --port $PORT
 ```
 
 The container `WORKDIR` is `/app/backend`, so `src.main:app` resolves without a `cd`.
