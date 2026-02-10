@@ -31,8 +31,8 @@ _MONTH_RE = re.compile(r"^\d{6}$")
 )
 def get_settlement_status(
     profit_month_id: str,
+    response: Response,
     db: Session = Depends(get_db),
-    response: Response | None = None,
 ) -> SettlementDetailResponse:
     _validate_month(profit_month_id)
     settlement = _latest_settlement(db, profit_month_id)
@@ -46,10 +46,9 @@ def get_settlement_status(
             ready=bool(reconciliation.ready) if reconciliation else False,
         ),
     )
-    if response is not None:
-        etag_part = int(settlement.computed_at.timestamp()) if settlement else 0
-        response.headers["Cache-Control"] = "public, max-age=30"
-        response.headers["ETag"] = f'W/"settlement:{profit_month_id}:{etag_part}"'
+    etag_part = int(settlement.computed_at.timestamp()) if settlement else 0
+    response.headers["Cache-Control"] = "public, max-age=30"
+    response.headers["ETag"] = f'W/"settlement:{profit_month_id}:{etag_part}"'
     return result
 
 
@@ -60,10 +59,10 @@ def get_settlement_status(
     description="Public read endpoint for settlement month index and readiness flags.",
 )
 def list_settlement_months(
+    response: Response,
     limit: int = Query(24, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    response: Response | None = None,
 ) -> SettlementMonthsResponse:
     settlements = db.query(Settlement).order_by(Settlement.profit_month_id.desc(), Settlement.computed_at.desc(), Settlement.id.desc()).all()
     reconciliations = db.query(ReconciliationReport).order_by(ReconciliationReport.profit_month_id.desc(), ReconciliationReport.computed_at.desc(), ReconciliationReport.id.desc()).all()
@@ -105,9 +104,8 @@ def list_settlement_months(
         success=True,
         data=SettlementMonthsData(items=items, limit=limit, offset=offset, total=len(months)),
     )
-    if response is not None:
-        response.headers["Cache-Control"] = "public, max-age=30"
-        response.headers["ETag"] = f'W/"settlement-months:{offset}:{limit}:{len(months)}"'
+    response.headers["Cache-Control"] = "public, max-age=30"
+    response.headers["ETag"] = f'W/"settlement-months:{offset}:{limit}:{len(months)}"'
     return result
 
 
