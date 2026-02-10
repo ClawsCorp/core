@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "0005_bounties"
@@ -17,12 +18,23 @@ down_revision = "0004_projects"
 branch_labels = None
 depends_on = None
 
-bounty_status_enum = sa.Enum(
-    "open", "claimed", "submitted", "eligible_for_payout", "paid", name="bounty_status"
+# Use an explicit Postgres ENUM so we can create it with checkfirst=True.
+# This makes the migration resilient if a previous failed attempt already created the type.
+bounty_status_enum = postgresql.ENUM(
+    "open",
+    "claimed",
+    "submitted",
+    "eligible_for_payout",
+    "paid",
+    name="bounty_status",
+    create_type=False,
 )
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    bounty_status_enum.create(bind, checkfirst=True)
+
     op.create_table(
         "bounties",
         sa.Column("id", sa.Integer(), primary_key=True),
