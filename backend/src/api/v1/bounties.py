@@ -4,7 +4,7 @@ import secrets
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
 
 from api.v1.dependencies import require_agent_auth, require_oracle_hmac
@@ -27,7 +27,7 @@ from schemas.bounty import (
     BountySubmitRequest,
 )
 
-router = APIRouter(prefix="/api/v1/bounties", tags=["bounties"])
+router = APIRouter(prefix="/api/v1/bounties", tags=["public-bounties", "bounties"])
 
 REQUIRED_APPROVALS_MIN = 1
 REQUIRED_CHECKS = [
@@ -39,13 +39,19 @@ REQUIRED_CHECKS = [
 ]
 
 
-@router.get("", response_model=BountyListResponse)
+@router.get(
+    "",
+    response_model=BountyListResponse,
+    summary="List bounties",
+    description="Public read endpoint for portal bounty list.",
+)
 def list_bounties(
     status: BountyStatusSchema | None = Query(None),
     project_id: str | None = Query(None),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
+    response: Response | None = None,
 ) -> BountyListResponse:
     query = db.query(Bounty, Project.project_id, Agent.agent_id).join(
         Project, Bounty.project_id == Project.id
@@ -59,16 +65,26 @@ def list_bounties(
         query.order_by(Bounty.created_at.desc()).offset(offset).limit(limit).all()
     )
     items = [_bounty_public(row.Bounty, row.project_id, row.agent_id) for row in rows]
-    return BountyListResponse(
+    result = BountyListResponse(
         success=True,
         data=BountyListData(items=items, limit=limit, offset=offset, total=total),
     )
+    if response is not None:
+        response.headers["Cache-Control"] = "public, max-age=30"
+        response.headers["ETag"] = f'W/"bounties:{status or "all"}:{project_id or "all"}:{offset}:{limit}:{total}"'
+    return result
 
 
-@router.get("/{bounty_id}", response_model=BountyDetailResponse)
+@router.get(
+    "/{bounty_id}",
+    response_model=BountyDetailResponse,
+    summary="Get bounty detail",
+    description="Public read endpoint for a single bounty status card.",
+)
 def get_bounty(
     bounty_id: str,
     db: Session = Depends(get_db),
+    response: Response | None = None,
 ) -> BountyDetailResponse:
     row = (
         db.query(Bounty, Project.project_id, Agent.agent_id)
@@ -79,10 +95,14 @@ def get_bounty(
     )
     if not row:
         raise HTTPException(status_code=404, detail="Bounty not found")
-    return BountyDetailResponse(
+    result = BountyDetailResponse(
         success=True,
         data=_bounty_public(row.Bounty, row.project_id, row.agent_id),
     )
+    if response is not None:
+        response.headers["Cache-Control"] = "public, max-age=30"
+        response.headers["ETag"] = f'W/"bounty:{row.Bounty.bounty_id}:{int(row.Bounty.updated_at.timestamp())}"'
+    return result
 
 
 @router.post("", response_model=BountyDetailResponse)

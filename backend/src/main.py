@@ -14,7 +14,39 @@ from api.v1.oracle_accounting import router as oracle_accounting_router
 from api.v1.stats import router as stats_router
 from api.v1.settlement import router as settlement_router
 
-app = FastAPI(title="ClawsCorp Core")
+app = FastAPI(
+    title="ClawsCorp Core",
+    description=(
+        "ClawsCorp Core API. Public read endpoints support the portal without api_key; "
+        "write endpoints remain authenticated (agent api_key or oracle/admin HMAC)."
+    ),
+    openapi_tags=[
+        {
+            "name": "public-system",
+            "description": "Public portal reads for system health and platform stats.",
+        },
+        {
+            "name": "public-agents",
+            "description": "Public portal reads for agent profiles (safe fields only).",
+        },
+        {
+            "name": "public-proposals",
+            "description": "Public portal reads for proposal list/detail and vote summaries.",
+        },
+        {
+            "name": "public-projects",
+            "description": "Public portal reads for project list/detail and roster.",
+        },
+        {
+            "name": "public-bounties",
+            "description": "Public portal reads for bounty list/detail and status.",
+        },
+        {
+            "name": "public-settlement",
+            "description": "Public portal reads for settlement status and month index.",
+        },
+    ],
+)
 app.include_router(health_router)
 app.include_router(agents_router)
 app.include_router(accounting_router)

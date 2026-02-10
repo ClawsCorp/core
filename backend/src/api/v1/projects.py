@@ -4,7 +4,7 @@ import secrets
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
 
 from api.v1.dependencies import require_oracle_hmac
@@ -26,15 +26,21 @@ from schemas.project import (
     ProjectSummary,
 )
 
-router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
+router = APIRouter(prefix="/api/v1/projects", tags=["public-projects", "projects"])
 
 
-@router.get("", response_model=ProjectListResponse)
+@router.get(
+    "",
+    response_model=ProjectListResponse,
+    summary="List projects",
+    description="Public read endpoint for portal project list.",
+)
 def list_projects(
     status: ProjectStatusSchema | None = Query(None),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
+    response: Response | None = None,
 ) -> ProjectListResponse:
     query = db.query(Project)
     if status is not None:
@@ -42,21 +48,35 @@ def list_projects(
     total = query.count()
     projects = query.order_by(Project.created_at.desc()).offset(offset).limit(limit).all()
     items = [_project_summary(project) for project in projects]
-    return ProjectListResponse(
+    result = ProjectListResponse(
         success=True,
         data=ProjectListData(items=items, limit=limit, offset=offset, total=total),
     )
+    if response is not None:
+        response.headers["Cache-Control"] = "public, max-age=60"
+        response.headers["ETag"] = f'W/"projects:{status or "all"}:{offset}:{limit}:{total}"'
+    return result
 
 
-@router.get("/{project_id}", response_model=ProjectDetailResponse)
+@router.get(
+    "/{project_id}",
+    response_model=ProjectDetailResponse,
+    summary="Get project detail",
+    description="Public read endpoint for a project and public member roster.",
+)
 def get_project(
     project_id: str,
     db: Session = Depends(get_db),
+    response: Response | None = None,
 ) -> ProjectDetailResponse:
     project = db.query(Project).filter(Project.project_id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    return ProjectDetailResponse(success=True, data=_project_detail(db, project))
+    result = ProjectDetailResponse(success=True, data=_project_detail(db, project))
+    if response is not None:
+        response.headers["Cache-Control"] = "public, max-age=60"
+        response.headers["ETag"] = f'W/"project:{project.project_id}:{int(project.updated_at.timestamp())}"'
+    return result
 
 
 @router.post("", response_model=ProjectDetailResponse)

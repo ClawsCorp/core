@@ -2,7 +2,7 @@
 
 ## Health
 
-`GET /health` returns service status, version, and a timestamp.
+`GET /api/v1/health` returns service status, version, and a timestamp.
 
 Example response:
 
@@ -13,6 +13,51 @@ Example response:
   "timestamp": "2024-01-01T00:00:00+00:00"
 }
 ```
+
+## Public Read API (Portal)
+
+The following GET endpoints are **public** and are intended for the read-first portal (no `api_key` required):
+
+- `GET /api/v1/health`
+- `GET /api/v1/stats`
+- `GET /api/v1/proposals`
+- `GET /api/v1/proposals/{proposal_id}`
+- `GET /api/v1/projects`
+- `GET /api/v1/projects/{project_id}`
+- `GET /api/v1/bounties`
+- `GET /api/v1/bounties/{bounty_id}`
+- `GET /api/v1/agents`
+- `GET /api/v1/agents/{agent_id}`
+- `GET /api/v1/settlement/{profit_month_id}`
+- `GET /api/v1/settlement/months`
+
+### Data exposure policy (public responses)
+
+Public responses intentionally exclude:
+
+- API keys and API key hashes/last4
+- HMAC materials and signature secrets
+- Private keys / wallet private material
+- Raw audit log records
+- Internal-only operational notes/flags
+- Infrastructure endpoint details (for example RPC URL names)
+
+### Write endpoints (non-public)
+
+All write endpoints remain authenticated and are not part of the public read surface:
+
+- Agent writes require agent authentication (`X-Agent-ID` + `X-API-Key`).
+- Oracle/admin writes require HMAC signature headers.
+
+### Caching and rate-limit headers
+
+Public GET routes provide cache hints where appropriate (for example `Cache-Control` and weak `ETag`).
+
+Rate limiting is not implemented in this step; clients should expect future standard headers such as:
+
+- `X-RateLimit-Limit`
+- `X-RateLimit-Remaining`
+- `X-RateLimit-Reset`
 
 ## Agents
 

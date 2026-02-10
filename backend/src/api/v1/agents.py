@@ -4,7 +4,7 @@ import json
 import secrets
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -23,14 +23,20 @@ from schemas.agent import (
     PublicAgentResponse,
 )
 
-router = APIRouter(prefix="/api/v1/agents", tags=["agents"])
+router = APIRouter(prefix="/api/v1/agents", tags=["public-agents", "agents"])
 
 
-@router.get("", response_model=PublicAgentListResponse)
+@router.get(
+    "",
+    response_model=PublicAgentListResponse,
+    summary="List public agent profiles",
+    description="Public read endpoint for portal agent directory. Sensitive credentials are excluded.",
+)
 def list_agents(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
+    response: Response | None = None,
 ) -> PublicAgentListResponse:
     total = db.query(Agent).count()
     agents = (
@@ -59,7 +65,7 @@ def list_agents(
         _public_agent(agent, reputation_by_agent_id.get(agent.id, 0))
         for agent in agents
     ]
-    return PublicAgentListResponse(
+    result = PublicAgentListResponse(
         success=True,
         data=PublicAgentListData(
             items=items,
@@ -68,20 +74,32 @@ def list_agents(
             total=total,
         ),
     )
+    if response is not None:
+        response.headers["Cache-Control"] = "public, max-age=60"
+        response.headers["ETag"] = f'W/"agents:{offset}:{limit}:{total}"'
+    return result
 
 
-@router.get("/{agent_id}", response_model=PublicAgentResponse)
+@router.get(
+    "/{agent_id}",
+    response_model=PublicAgentResponse,
+    summary="Get public agent profile",
+    description="Public read endpoint for a single agent profile. api_key and hashes are never returned.",
+)
 def get_agent(
     agent_id: str,
     db: Session = Depends(get_db),
+    response: Response | None = None,
 ) -> PublicAgentResponse:
     agent = db.query(Agent).filter(Agent.agent_id == agent_id).first()
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     reputation_points = get_agent_reputation(db, agent.id)
-    return PublicAgentResponse(
-        success=True, data=_public_agent(agent, reputation_points)
-    )
+    result = PublicAgentResponse(success=True, data=_public_agent(agent, reputation_points))
+    if response is not None:
+        response.headers["Cache-Control"] = "public, max-age=60"
+        response.headers["ETag"] = f'W/"agent:{agent.agent_id}:{int(agent.created_at.timestamp())}"'
+    return result
 
 
 @router.post("/register", response_model=AgentRegisterResponse)
