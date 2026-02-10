@@ -20,7 +20,7 @@ Railway should auto-read `railway.json`.
 - Start command (only if you need to override the Dockerfile `CMD`):
 
 ```bash
-hypercorn src.main:app --bind 0.0.0.0:$PORT --bind [::]:$PORT
+hypercorn src.main:app --bind '[::]:'$PORT
 ```
 
 The container `WORKDIR` is `/app/backend`, so `src.main:app` resolves without a `cd`.
