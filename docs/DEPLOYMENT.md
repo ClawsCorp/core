@@ -97,6 +97,8 @@ Minimal `/api/v1/health` checklist:
 - **Healthcheck fails:** Confirm Railway healthcheck path is `/api/v1/health` (not `/health`).
 - **500 errors on API startup:** Verify all required environment variables are set and non-empty.
 - **CORS blocked in portal:** Set `CORS_ORIGINS` to comma-separated frontend origins.
+  - Use full origins like `https://core-bice-mu.vercel.app` (no trailing slash).
+  - You may set `CORS_ORIGINS=*` for an open read-only API; credentials/cookies are not supported.
 - **DB connectivity errors:** Re-check `DATABASE_URL`, network policy, and run Alembic upgrade when schema is behind.
 
 ## Contracts

@@ -55,13 +55,20 @@ app = FastAPI(
 # Handle browser CORS preflight (OPTIONS). If CORS_ORIGINS is empty, default to "*" to
 # avoid surprising 405s in fresh deployments; set CORS_ORIGINS to a comma-separated
 # allowlist in production to lock this down.
-allow_origins = settings.cors_origins or ["*"]
+cors_origins = settings.cors_origins
+if not cors_origins or "*" in cors_origins:
+    allow_origins = ["*"]
+else:
+    allow_origins = cors_origins
+
+# We do not use cookie-based auth; avoid `allow_credentials=True` because it breaks
+# wildcard origins ("*") and is not needed for this API.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allow_origins,
     allow_methods=["*"],
     allow_headers=["*"],
-    allow_credentials=bool(settings.cors_origins),  # "*" cannot be used with credentials
+    allow_credentials=False,
 )
 
 app.include_router(health_router)
