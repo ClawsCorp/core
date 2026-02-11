@@ -8,10 +8,13 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 BASE_DIR = Path(__file__).resolve().parents[1]
-sys.path.append(str(BASE_DIR / "src"))
+# Ensure `import src.*` works (the codebase uses `src` as the top-level package).
+# We want `/app/backend` (not `/app/backend/src`) on sys.path.
+sys.path.insert(0, str(BASE_DIR))
 
-from core.config import get_settings
-from core.database import Base
+from src.core.config import get_settings
+from src.core.database import Base
+import src.models  # noqa: F401  (import side-effects register models on Base.metadata)
 
 config = context.config
 
