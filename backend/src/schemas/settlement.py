@@ -36,7 +36,7 @@ class SettlementMonthSummary(BaseModel):
     distributor_balance_micro_usdc: int | None
     delta_micro_usdc: int | None
     ready: bool
-    blocked_reason: str
+    blocked_reason: str | None
     settlement_computed_at: datetime | None
     reconciliation_computed_at: datetime | None
 
