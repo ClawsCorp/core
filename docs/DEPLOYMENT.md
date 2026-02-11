@@ -19,6 +19,10 @@ Railway should auto-read `railway.json`.
 - Dockerfile Path: `backend/Dockerfile`
 - Migrations:
   - The backend container runs `alembic upgrade head` on startup.
+
+> Note: Alembic stores the current revision in `alembic_version.version_num` (VARCHAR(32) by default).
+> Keep revision identifiers <= 32 characters. On 2026-02-11, migration `0007_settlement_reconciliation_payouts`
+> was renamed to `0007_settlement_reports_payouts` to fit this limit (same migration, shorter id).
 - Start command (only if you need to override the Dockerfile `CMD`):
 
 ```bash
