@@ -16,10 +16,12 @@ class ReconciliationReport(Base):
     revenue_sum_micro_usdc: Mapped[int] = mapped_column(Integer)
     expense_sum_micro_usdc: Mapped[int] = mapped_column(Integer)
     profit_sum_micro_usdc: Mapped[int] = mapped_column(Integer)
-    distributor_balance_micro_usdc: Mapped[int] = mapped_column(BigInteger)
-    delta_micro_usdc: Mapped[int] = mapped_column(BigInteger)
+    distributor_balance_micro_usdc: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True
+    )
+    delta_micro_usdc: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     ready: Mapped[bool] = mapped_column(Boolean, nullable=False)
-    blocked_reason: Mapped[str] = mapped_column(String(64), nullable=False)
+    blocked_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
     rpc_chain_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     rpc_url_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     computed_at: Mapped[datetime] = mapped_column(

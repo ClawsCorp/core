@@ -10,8 +10,8 @@ class ReconciliationReportPublic(BaseModel):
     revenue_sum_micro_usdc: int
     expense_sum_micro_usdc: int
     profit_sum_micro_usdc: int
-    distributor_balance_micro_usdc: int
-    delta_micro_usdc: int
+    distributor_balance_micro_usdc: int | None
+    delta_micro_usdc: int | None
     ready: bool
-    blocked_reason: str
+    blocked_reason: str | None
     computed_at: datetime

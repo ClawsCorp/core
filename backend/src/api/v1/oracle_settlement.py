@@ -20,7 +20,11 @@ from src.schemas.settlement import (
     PayoutTriggerResponse,
     SettlementPublic,
 )
-from src.services.blockchain import BlockchainReadError, read_usdc_balance_of_distributor
+from src.services.blockchain import (
+    BlockchainConfigError,
+    BlockchainReadError,
+    read_usdc_balance_of_distributor,
+)
 
 router = APIRouter(prefix="/api/v1/oracle", tags=["oracle-settlement"])
 
@@ -71,14 +75,32 @@ def compute_reconciliation(
 
     try:
         balance = read_usdc_balance_of_distributor()
+    except BlockchainConfigError:
+        report = ReconciliationReport(
+            profit_month_id=profit_month_id,
+            revenue_sum_micro_usdc=settlement.revenue_sum_micro_usdc,
+            expense_sum_micro_usdc=settlement.expense_sum_micro_usdc,
+            profit_sum_micro_usdc=settlement.profit_sum_micro_usdc,
+            distributor_balance_micro_usdc=None,
+            delta_micro_usdc=None,
+            ready=False,
+            blocked_reason="rpc_not_configured",
+            rpc_chain_id=None,
+            rpc_url_name="base_sepolia",
+        )
+        db.add(report)
+        db.commit()
+        db.refresh(report)
+        _record_oracle_audit(request, db)
+        return _report_public(report)
     except BlockchainReadError:
         report = ReconciliationReport(
             profit_month_id=profit_month_id,
             revenue_sum_micro_usdc=settlement.revenue_sum_micro_usdc,
             expense_sum_micro_usdc=settlement.expense_sum_micro_usdc,
             profit_sum_micro_usdc=settlement.profit_sum_micro_usdc,
-            distributor_balance_micro_usdc=0,
-            delta_micro_usdc=0 - settlement.profit_sum_micro_usdc,
+            distributor_balance_micro_usdc=None,
+            delta_micro_usdc=None,
             ready=False,
             blocked_reason="rpc_error",
             rpc_chain_id=None,
@@ -93,12 +115,13 @@ def compute_reconciliation(
     delta = balance.balance_micro_usdc - settlement.profit_sum_micro_usdc
     if settlement.profit_sum_micro_usdc < 0:
         blocked_reason = "negative_profit"
+        ready = False
     elif delta != 0:
         blocked_reason = "balance_mismatch"
+        ready = False
     else:
-        blocked_reason = "none"
-
-    ready = settlement.profit_sum_micro_usdc >= 0 and balance.balance_micro_usdc == settlement.profit_sum_micro_usdc
+        blocked_reason = None
+        ready = True
 
     report = ReconciliationReport(
         profit_month_id=profit_month_id,

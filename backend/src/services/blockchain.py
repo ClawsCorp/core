@@ -14,6 +14,10 @@ class BlockchainReadError(Exception):
     pass
 
 
+class BlockchainConfigError(BlockchainReadError):
+    pass
+
+
 @dataclass(frozen=True)
 class BalanceReadResult:
     balance_micro_usdc: int
@@ -26,8 +30,8 @@ def read_usdc_balance_of_distributor() -> BalanceReadResult:
     rpc_url = settings.base_sepolia_rpc_url
     usdc_address = settings.usdc_address
     distributor_address = settings.dividend_distributor_contract_address
-    if not rpc_url or not usdc_address or not distributor_address:
-        raise BlockchainReadError(
+    if _is_invalid_rpc_config(rpc_url, usdc_address, distributor_address):
+        raise BlockchainConfigError(
             "Missing BASE_SEPOLIA_RPC_URL, USDC_ADDRESS, or DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS"
         )
 
@@ -101,3 +105,21 @@ def _encode_address_arg(address: str) -> str:
     except ValueError as exc:
         raise BlockchainReadError("Address must be hex") from exc
     return raw.rjust(64, "0")
+
+
+def _is_invalid_rpc_config(
+    rpc_url: str | None, usdc_address: str | None, distributor_address: str | None
+) -> bool:
+    return any(
+        value is None or _is_placeholder(value)
+        for value in (rpc_url, usdc_address, distributor_address)
+    )
+
+
+def _is_placeholder(value: str) -> bool:
+    normalized = value.strip().lower()
+    if not normalized:
+        return True
+    if "<" in normalized or ">" in normalized:
+        return True
+    return "your" in normalized or "placeholder" in normalized

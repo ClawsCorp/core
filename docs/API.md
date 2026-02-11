@@ -604,7 +604,10 @@ For each `profit_month_id` (`YYYYMM`):
 - `profit_sum_micro_usdc >= 0`
 
 Any delta (`delta_micro_usdc != 0`, positive or negative) blocks payout (`ready=false`).
-RPC read failures are fail-closed (`ready=false`, `blocked_reason=rpc_error`).
+RPC failures are fail-closed and explicitly differentiated:
+
+- Invalid/missing/placeholder RPC config returns `ready=false`, `blocked_reason=rpc_not_configured`, and sets `distributor_balance_micro_usdc=null`, `delta_micro_usdc=null`.
+- Runtime network/RPC read failures return `ready=false`, `blocked_reason=rpc_error`, and set `distributor_balance_micro_usdc=null`, `delta_micro_usdc=null`.
 
 ### Compute settlement (oracle/admin, HMAC required)
 
@@ -626,10 +629,10 @@ Requires an existing settlement for the month.
 Creates an append-only reconciliation report with:
 
 - settlement sums snapshot
-- `distributor_balance_micro_usdc`
-- `delta_micro_usdc`
+- `distributor_balance_micro_usdc` (nullable on RPC/config failures)
+- `delta_micro_usdc` (nullable on RPC/config failures)
 - `ready`
-- `blocked_reason` (`none`, `balance_mismatch`, `negative_profit`, `rpc_error`)
+- `blocked_reason` (`null` when ready, otherwise `balance_mismatch`, `negative_profit`, `rpc_not_configured`, or `rpc_error`)
 - optional `rpc_chain_id`, `rpc_url_name`
 - `computed_at`
 
