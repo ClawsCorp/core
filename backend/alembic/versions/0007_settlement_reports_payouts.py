@@ -1,6 +1,6 @@
 """add settlements reconciliation reports and dividend payouts
 
-Revision ID: 0007_settlement_reconciliation_payouts
+Revision ID: 0007_settlement_reports_payouts
 Revises: 0006_accounting_events
 Create Date: 2024-01-07 00:00:00.000000
 
@@ -12,7 +12,9 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision = "0007_settlement_reconciliation_payouts"
+# IMPORTANT: Alembic's default `alembic_version.version_num` column is VARCHAR(32).
+# Keep revision identifiers <= 32 chars to avoid truncation errors on upgrade.
+revision = "0007_settlement_reports_payouts"
 down_revision = "0006_accounting_events"
 branch_labels = None
 depends_on = None
