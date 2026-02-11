@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import FastAPI
+from starlette.middleware.cors import CORSMiddleware
 
 from src.api.v1.accounting import router as accounting_router
 from src.api.v1.agents import router as agents_router
@@ -13,6 +14,9 @@ from src.api.v1.reputation import router as reputation_router
 from src.api.v1.oracle_accounting import router as oracle_accounting_router
 from src.api.v1.stats import router as stats_router
 from src.api.v1.settlement import router as settlement_router
+from src.core.config import get_settings
+
+settings = get_settings()
 
 app = FastAPI(
     title="ClawsCorp Core",
@@ -47,6 +51,19 @@ app = FastAPI(
         },
     ],
 )
+
+# Handle browser CORS preflight (OPTIONS). If CORS_ORIGINS is empty, default to "*" to
+# avoid surprising 405s in fresh deployments; set CORS_ORIGINS to a comma-separated
+# allowlist in production to lock this down.
+allow_origins = settings.cors_origins or ["*"]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allow_origins,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    allow_credentials=bool(settings.cors_origins),  # "*" cannot be used with credentials
+)
+
 app.include_router(health_router)
 app.include_router(agents_router)
 app.include_router(accounting_router)
