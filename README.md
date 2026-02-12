@@ -3,6 +3,7 @@
 - `docs/ORACLE_AUTOMATION_POLICY.md` — oracle/automation policy and fail-closed rules
 - `docs/AI_REVIEWER_POLICY.md` — PR security gate policy (automation + AI review)
 - `docs/DEPLOYMENT.md` — backend Railway deployment runbook and verification checklist
+- `docs/WORKING_AGREEMENT.md` — canonical autonomy-first working agreement (v1.1)
 
 ## Deploy Backend (Railway)
 - Railway backend deploys should use the backend Dockerfile directly.
