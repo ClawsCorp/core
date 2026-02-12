@@ -7,6 +7,7 @@ import { DataCard, PageContainer } from "@/components/Cards";
 import { EmptyState, Loading } from "@/components/State";
 import { ErrorState } from "@/components/ErrorState";
 import { api, readErrorMessage } from "@/lib/api";
+import { getExplorerTxUrl } from "@/lib/env";
 import { formatBoolean, formatMicroUsdc } from "@/lib/format";
 import type { SettlementMonthSummary } from "@/types";
 
@@ -38,17 +39,28 @@ export default function SettlementPage() {
       {!loading && error ? <ErrorState message={error} onRetry={load} /> : null}
       {!loading && !error && items.length === 0 ? <EmptyState message="No settlement months found." /> : null}
       {!loading && !error && items.length > 0
-        ? items.map((month) => (
-            <DataCard key={month.profit_month_id} title={month.profit_month_id}>
-              <p>revenue_sum: {formatMicroUsdc(month.revenue_sum_micro_usdc)}</p>
-              <p>expense_sum: {formatMicroUsdc(month.expense_sum_micro_usdc)}</p>
-              <p>profit_sum: {formatMicroUsdc(month.profit_sum_micro_usdc)}</p>
-              <p>distributor_balance: {formatMicroUsdc(month.distributor_balance_micro_usdc)}</p>
-              <p>delta: {formatMicroUsdc(month.delta_micro_usdc)}</p>
-              <p>ready: {formatBoolean(month.ready)}</p>
-              <Link href={`/settlement/${month.profit_month_id}`}>Open month detail</Link>
-            </DataCard>
-          ))
+        ? items.map((month) => {
+            const payoutTxHash = month.payout_tx_hash ?? month.payout?.tx_hash ?? null;
+            const hasPayout = Boolean(payoutTxHash);
+
+            return (
+              <DataCard key={month.profit_month_id} title={month.profit_month_id}>
+                <p>revenue_sum: {formatMicroUsdc(month.revenue_sum_micro_usdc)}</p>
+                <p>expense_sum: {formatMicroUsdc(month.expense_sum_micro_usdc)}</p>
+                <p>profit_sum: {formatMicroUsdc(month.profit_sum_micro_usdc)}</p>
+                <p>distributor_balance: {formatMicroUsdc(month.distributor_balance_micro_usdc)}</p>
+                <p>delta: {formatMicroUsdc(month.delta_micro_usdc)}</p>
+                <p>ready: {formatBoolean(month.ready)}</p>
+                <p>payout: {hasPayout ? "Paid ✅" : "Not paid"}</p>
+                {payoutTxHash ? (
+                  <p>
+                    explorer: <a href={getExplorerTxUrl(payoutTxHash)} target="_blank" rel="noreferrer">View tx</a>
+                  </p>
+                ) : null}
+                <Link href={`/settlement/${month.profit_month_id}`}>Open month detail</Link>
+              </DataCard>
+            );
+          })
         : null}
     </PageContainer>
   );
