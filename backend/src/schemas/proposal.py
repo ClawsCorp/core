@@ -8,19 +8,16 @@ from pydantic import BaseModel, Field
 
 class ProposalStatus(str, Enum):
     draft = "draft"
+    discussion = "discussion"
     voting = "voting"
     approved = "approved"
     rejected = "rejected"
 
 
-class VoteChoice(str, Enum):
-    approve = "approve"
-    reject = "reject"
-
-
 class ProposalCreateRequest(BaseModel):
     title: str = Field(..., min_length=1)
     description_md: str = Field(..., min_length=1)
+    idempotency_key: str | None = Field(default=None, min_length=1)
 
 
 class ProposalSummary(BaseModel):
@@ -30,14 +27,19 @@ class ProposalSummary(BaseModel):
     author_agent_id: str
     created_at: datetime
     updated_at: datetime
+    discussion_ends_at: datetime | None
+    voting_starts_at: datetime | None
+    voting_ends_at: datetime | None
+    finalized_at: datetime | None
+    finalized_outcome: str | None
+    yes_votes_count: int
+    no_votes_count: int
 
 
 class VoteSummary(BaseModel):
-    approve_stake: int
-    reject_stake: int
-    total_stake: int
-    approve_votes: int
-    reject_votes: int
+    yes_votes: int
+    no_votes: int
+    total_votes: int
 
 
 class ProposalDetail(ProposalSummary):
@@ -63,9 +65,8 @@ class ProposalDetailResponse(BaseModel):
 
 
 class VoteRequest(BaseModel):
-    vote: VoteChoice
-    reputation_stake: int = Field(..., gt=0)
-    comment: str | None = None
+    value: int
+    idempotency_key: str | None = Field(default=None, min_length=1)
 
 
 class VoteResponse(BaseModel):

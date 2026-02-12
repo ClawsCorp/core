@@ -45,6 +45,10 @@ class Settings:
     dividend_distributor_contract_address: str | None
     oracle_signer_private_key: str | None
     contracts_dir: str
+    governance_quorum_min_votes: int
+    governance_approval_bps: int
+    governance_discussion_hours: int
+    governance_voting_hours: int
 
 
 @lru_cache
@@ -71,6 +75,10 @@ def get_settings() -> Settings:
         oracle_signer_private_key_value if oracle_signer_private_key_value else None
     )
     contracts_dir = os.getenv("CONTRACTS_DIR", "/app/contracts").strip() or "/app/contracts"
+    governance_quorum_min_votes = int(os.getenv("GOVERNANCE_QUORUM_MIN_VOTES", "1"))
+    governance_approval_bps = int(os.getenv("GOVERNANCE_APPROVAL_BPS", "5000"))
+    governance_discussion_hours = int(os.getenv("GOVERNANCE_DISCUSSION_HOURS", "24"))
+    governance_voting_hours = int(os.getenv("GOVERNANCE_VOTING_HOURS", "24"))
 
     return Settings(
         app_version=app_version,
@@ -83,4 +91,8 @@ def get_settings() -> Settings:
         dividend_distributor_contract_address=dividend_distributor_contract_address,
         oracle_signer_private_key=oracle_signer_private_key,
         contracts_dir=contracts_dir,
+        governance_quorum_min_votes=governance_quorum_min_votes,
+        governance_approval_bps=governance_approval_bps,
+        governance_discussion_hours=governance_discussion_hours,
+        governance_voting_hours=governance_voting_hours,
     )
