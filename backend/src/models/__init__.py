@@ -13,6 +13,7 @@ from src.models.reconciliation_report import ReconciliationReport
 from src.models.revenue_event import RevenueEvent
 from src.models.project_member import ProjectMember, ProjectMemberRole
 from src.models.proposal import Proposal, ProposalStatus
+from src.models.reputation_event import ReputationEvent
 from src.models.reputation_ledger import ReputationLedger
 from src.models.settlement import Settlement
 from src.models.vote import Vote, VoteChoice
@@ -36,6 +37,7 @@ __all__ = [
     "ProjectStatus",
     "Proposal",
     "ProposalStatus",
+    "ReputationEvent",
     "ReputationLedger",
     "Settlement",
     "RevenueEvent",
