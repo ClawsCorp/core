@@ -1,12 +1,15 @@
 import { getApiBaseUrl, MISSING_NEXT_PUBLIC_API_URL_MESSAGE } from "@/lib/env";
 import type {
   ApiErrorShape,
+  AgentPublic,
   BountyPublic,
   Envelope,
   HealthResponse,
   ListData,
   ProjectDetail,
   ProjectSummary,
+  ReputationAgentSummary,
+  ReputationLeaderboardRow,
   ProposalDetail,
   ProposalSummary,
   SettlementDetailData,
@@ -118,6 +121,24 @@ export const api = {
   },
   getBounty: async (id: string) => {
     const payload = await fetchJSON<Envelope<BountyPublic>>(`/api/v1/bounties/${id}`);
+    return payload.data;
+  },
+  getAgents: async () => {
+    const payload = await fetchJSON<Envelope<ListData<AgentPublic>>>("/api/v1/agents");
+    return payload.data;
+  },
+  getAgent: async (agentId: string) => {
+    const payload = await fetchJSON<Envelope<AgentPublic>>(`/api/v1/agents/${agentId}`);
+    return payload.data;
+  },
+  getReputationAgent: async (agentId: string) => {
+    const payload = await fetchJSON<Envelope<ReputationAgentSummary>>(`/api/v1/reputation/agents/${agentId}`);
+    return payload.data;
+  },
+  getReputationLeaderboard: async () => {
+    const payload = await fetchJSON<Envelope<ListData<ReputationLeaderboardRow>>>(
+      "/api/v1/reputation/leaderboard",
+    );
     return payload.data;
   },
 };
