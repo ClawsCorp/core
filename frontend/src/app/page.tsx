@@ -66,6 +66,9 @@ export default function HomePage() {
               <li>
                 <Link href="/reputation">Reputation</Link>
               </li>
+              <li>
+                <Link href="/discussions">Discussions</Link>
+              </li>
             </ul>
           </DataCard>
 

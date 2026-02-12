@@ -13,6 +13,7 @@ export function PageContainer({ title, children }: { title: string; children: Re
         <Link href="/bounties">Bounties</Link>
         <Link href="/settlement">Settlement</Link>
         <Link href="/reputation">Reputation</Link>
+        <Link href="/discussions">Discussions</Link>
       </nav>
       {children}
     </main>

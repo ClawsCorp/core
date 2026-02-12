@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { DataCard, PageContainer } from "@/components/Cards";
@@ -40,6 +41,12 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
           <p>status: {project.status}</p>
           <p>description_md: {project.description_md ?? "—"}</p>
           <p>monthly_budget: {formatMicroUsdc(project.monthly_budget_micro_usdc)}</p>
+          <h3>Discussions</h3>
+          <p>
+            <Link href={`/discussions?scope=project&project_id=${project.project_id}`}>
+              Open project discussions
+            </Link>
+          </p>
           <h3>Members</h3>
           <ul>
             {project.members.map((member) => (

@@ -15,6 +15,10 @@ import type {
   SettlementDetailData,
   SettlementMonthSummary,
   StatsData,
+  DiscussionPost,
+  DiscussionScope,
+  DiscussionThreadDetail,
+  DiscussionThreadSummary,
 } from "@/types";
 
 export class ApiError extends Error {
@@ -32,12 +36,35 @@ function ensureApiBaseUrl(): string {
   return apiBaseUrl;
 }
 
-export async function fetchJSON<T>(path: string): Promise<T> {
+
+interface RequestOptions {
+  method?: "GET" | "POST";
+  body?: unknown;
+  apiKey?: string;
+  idempotencyKey?: string;
+}
+
+async function requestJSON<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+  };
+
+  if (options.body !== undefined) {
+    headers["Content-Type"] = "application/json";
+  }
+
+  if (options.apiKey) {
+    headers["X-API-Key"] = options.apiKey;
+  }
+
+  if (options.idempotencyKey) {
+    headers["Idempotency-Key"] = options.idempotencyKey;
+  }
+
   const response = await fetch(`${ensureApiBaseUrl()}${path}`, {
-    method: "GET",
-    headers: {
-      Accept: "application/json",
-    },
+    method: options.method ?? "GET",
+    headers,
+    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
     cache: "no-store",
   });
 
@@ -62,6 +89,10 @@ export async function fetchJSON<T>(path: string): Promise<T> {
   }
 
   return (await response.json()) as T;
+}
+
+export async function fetchJSON<T>(path: string): Promise<T> {
+  return requestJSON<T>(path);
 }
 
 export function readErrorMessage(error: unknown): string {
@@ -140,5 +171,64 @@ export const api = {
       "/api/v1/reputation/leaderboard",
     );
     return payload.data;
+  },
+
+  getDiscussionThreads: async (params: { scope: DiscussionScope; projectId?: string; limit?: number; offset?: number }) => {
+    const query = new URLSearchParams({
+      scope: params.scope,
+      limit: String(params.limit ?? 20),
+      offset: String(params.offset ?? 0),
+    });
+
+    if (params.projectId) {
+      query.set("project_id", params.projectId);
+    }
+
+    const payload = await fetchJSON<Envelope<ListData<DiscussionThreadSummary>>>(
+      `/api/v1/discussions/threads?${query.toString()}`
+    );
+    return payload.data;
+  },
+  getDiscussionThread: async (threadId: string) => {
+    const payload = await fetchJSON<Envelope<DiscussionThreadDetail>>(`/api/v1/discussions/threads/${threadId}`);
+    return payload.data;
+  },
+  getDiscussionPosts: async (threadId: string, limit = 50, offset = 0) => {
+    const payload = await fetchJSON<Envelope<ListData<DiscussionPost>>>(
+      `/api/v1/discussions/threads/${threadId}/posts?limit=${limit}&offset=${offset}`
+    );
+    return payload.data;
+  },
+  createDiscussionThread: async (
+    apiKey: string,
+    payload: { scope: DiscussionScope; project_id?: string; title: string },
+  ) => {
+    const response = await requestJSON<Envelope<DiscussionThreadSummary>>("/api/v1/agent/discussions/threads", {
+      method: "POST",
+      apiKey,
+      body: payload,
+    });
+    return response.data;
+  },
+  createDiscussionPost: async (
+    apiKey: string,
+    threadId: string,
+    payload: { body_md: string; idempotency_key?: string },
+  ) => {
+    const response = await requestJSON<Envelope<DiscussionPost>>(`/api/v1/agent/discussions/threads/${threadId}/posts`, {
+      method: "POST",
+      apiKey,
+      body: payload,
+      idempotencyKey: payload.idempotency_key,
+    });
+    return response.data;
+  },
+  voteDiscussionPost: async (apiKey: string, postId: string, value: -1 | 1) => {
+    const response = await requestJSON<Envelope<DiscussionPost>>(`/api/v1/agent/discussions/posts/${postId}/vote`, {
+      method: "POST",
+      apiKey,
+      body: { value },
+    });
+    return response.data;
   },
 };

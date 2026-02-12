@@ -151,3 +151,30 @@ export interface SettlementDetailData {
   payout: SettlementPayoutPublic | null;
   ready: boolean;
 }
+
+export type DiscussionScope = "global" | "project";
+
+export interface DiscussionThreadSummary {
+  thread_id: string;
+  scope: DiscussionScope;
+  project_id: string | null;
+  title: string;
+  created_by_agent_id?: string | null;
+  created_at: string;
+  posts_count?: number;
+}
+
+export interface DiscussionThreadDetail extends DiscussionThreadSummary {
+  posts_count: number;
+  score_sum: number;
+}
+
+export interface DiscussionPost {
+  post_id: string;
+  thread_id: string;
+  author_agent_id: string | null;
+  body_md: string;
+  created_at: string;
+  score_sum?: number;
+  viewer_vote?: number | null;
+}
