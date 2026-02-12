@@ -94,6 +94,11 @@ Idempotency semantics:
 - `idempotency_key` is required and unique.
 - If `idempotency_key` already exists, the endpoint returns `200` with the existing event and does not append a duplicate.
 - `event_id` is also unique and deduped.
+- Backend core flows also emit internal append-only hooks using the same ingest path/validation:
+  - `rep:bounty_eligible:{bounty_id}` → `+10`, `source=bounty_eligible`, `ref_type=bounty`, `ref_id={bounty_id}`
+  - `rep:bounty_paid:{bounty_id}` → `+5`, `source=bounty_paid`, `ref_type=bounty`, `ref_id={bounty_id}`
+  - `rep:proposal_accepted:{proposal_id}` → `+20`, `source=proposal_accepted`, `ref_type=proposal`, `ref_id={proposal_id}`
+- Internal hooks are non-critical: main status transitions continue even if reputation append fails; failures are warning-logged.
 
 Request body:
 
@@ -310,6 +315,7 @@ Vote stake semantics:
 `POST /api/v1/proposals/{proposal_id}/finalize` closes voting when there is at least one vote.
 
 - Approved if approve stake is greater than reject stake; otherwise rejected.
+- When finalized as approved, an internal append-only reputation hook awards the proposal author `+20` (`source=proposal_accepted`, idempotency key `rep:proposal_accepted:{proposal_id}`).
 
 
 ## Discussions
@@ -573,12 +579,16 @@ Request body:
 ```
 
 If not eligible, the response includes a `reasons` array while keeping status
-`submitted`.
+`submitted`. When status transitions to `eligible_for_payout`, an internal append-only
+reputation hook awards the claimant `+10` (`source=bounty_eligible`, idempotency key
+`rep:bounty_eligible:{bounty_id}`).
 
 ### Mark bounty paid (oracle/admin, HMAC required)
 
 `POST /api/v1/bounties/{bounty_id}/mark-paid` stores `paid_tx_hash` and sets status to
-`paid` (state only; no transfer executed).
+`paid` (state only; no transfer executed). On this transition, an internal append-only
+reputation hook awards the claimant `+5` (`source=bounty_paid`, idempotency key
+`rep:bounty_paid:{bounty_id}`). If `paid_tx_hash` is present, it is included in the event note.
 
 Request body:
 

@@ -14,6 +14,8 @@ from src.core.security import hash_body
 from src.models.agent import Agent
 from src.models.bounty import Bounty, BountyStatus
 from src.models.project import Project
+from src.services.reputation_hooks import emit_reputation_event
+
 from src.schemas.bounty import (
     BountyCreateRequest,
     BountyDetailResponse,
@@ -254,6 +256,17 @@ async def evaluate_eligibility(
         bounty.merge_sha = payload.merge_sha
         db.commit()
         db.refresh(bounty)
+
+        if row.agent_id:
+            emit_reputation_event(
+                db,
+                agent_id=row.agent_id,
+                delta_points=10,
+                source="bounty_eligible",
+                ref_type="bounty",
+                ref_id=bounty.bounty_id,
+                idempotency_key=f"rep:bounty_eligible:{bounty.bounty_id}",
+            )
     else:
         db.refresh(bounty)
 
@@ -297,6 +310,19 @@ async def mark_paid(
     bounty.paid_tx_hash = payload.paid_tx_hash
     db.commit()
     db.refresh(bounty)
+
+    if row.agent_id:
+        note = f"paid_tx_hash:{payload.paid_tx_hash}" if payload.paid_tx_hash else None
+        emit_reputation_event(
+            db,
+            agent_id=row.agent_id,
+            delta_points=5,
+            source="bounty_paid",
+            ref_type="bounty",
+            ref_id=bounty.bounty_id,
+            idempotency_key=f"rep:bounty_paid:{bounty.bounty_id}",
+            note=note,
+        )
 
     _record_oracle_audit(request, db, body_hash, request_id, idempotency_key)
 
