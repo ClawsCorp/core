@@ -195,6 +195,98 @@ const { JsonRpcProvider, Wallet, Contract } = require('ethers');
     return tx_hash
 
 
+def submit_execute_distribution_tx(
+    profit_month_value: int,
+    stakers: list[str],
+    staker_shares: list[int],
+    authors: list[str],
+    author_shares: list[int],
+) -> str:
+    settings = get_settings()
+    rpc_url = settings.base_sepolia_rpc_url
+    distributor_address = settings.dividend_distributor_contract_address
+    signer_private_key = settings.oracle_signer_private_key
+
+    if _is_invalid_rpc_config(rpc_url, settings.usdc_address, distributor_address):
+        raise BlockchainConfigError(
+            "Missing BASE_SEPOLIA_RPC_URL, USDC_ADDRESS, or DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS"
+        )
+    if signer_private_key is None or _is_placeholder(signer_private_key):
+        raise BlockchainConfigError("Missing ORACLE_SIGNER_PRIVATE_KEY")
+
+    node_script = """
+const { JsonRpcProvider, Wallet, Contract } = require('ethers');
+(async () => {
+  const rpcUrl = process.env.RPC_URL;
+  const privateKey = process.env.PRIVATE_KEY;
+  const contractAddress = process.env.CONTRACT_ADDRESS;
+  const profitMonthId = BigInt(process.env.PROFIT_MONTH_ID);
+  const stakers = JSON.parse(process.env.STAKERS_JSON || '[]');
+  const stakerSharesRaw = JSON.parse(process.env.STAKER_SHARES_JSON || '[]');
+  const authors = JSON.parse(process.env.AUTHORS_JSON || '[]');
+  const authorSharesRaw = JSON.parse(process.env.AUTHOR_SHARES_JSON || '[]');
+  const stakerShares = stakerSharesRaw.map((v) => BigInt(v));
+  const authorShares = authorSharesRaw.map((v) => BigInt(v));
+  const provider = new JsonRpcProvider(rpcUrl);
+  const wallet = new Wallet(privateKey, provider);
+  const contract = new Contract(contractAddress, [
+    'function executeDistribution(uint256,address[],uint256[],address[],uint256[]) external'
+  ], wallet);
+  const tx = await contract.executeDistribution(profitMonthId, stakers, stakerShares, authors, authorShares);
+  process.stdout.write(JSON.stringify({ tx_hash: tx.hash }));
+})().catch((err) => {
+  const message = err && err.message ? err.message : String(err);
+  process.stderr.write(message);
+  process.exit(1);
+});
+"""
+
+    env = os.environ.copy()
+    env.update(
+        {
+            "RPC_URL": rpc_url,
+            "PRIVATE_KEY": signer_private_key,
+            "CONTRACT_ADDRESS": distributor_address,
+            "PROFIT_MONTH_ID": str(profit_month_value),
+            "STAKERS_JSON": json.dumps(stakers),
+            "STAKER_SHARES_JSON": json.dumps(staker_shares),
+            "AUTHORS_JSON": json.dumps(authors),
+            "AUTHOR_SHARES_JSON": json.dumps(author_shares),
+        }
+    )
+
+    contracts_dir = settings.contracts_dir
+
+    try:
+        proc = subprocess.run(
+            ["node", "-e", node_script],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=contracts_dir,
+            timeout=45,
+        )
+    except subprocess.CalledProcessError as exc:
+        error_hint = _sanitize_subprocess_error(stdout=exc.stdout, stderr=exc.stderr)
+        logger.warning("executeDistribution submission failed hint=%s", error_hint)
+        raise BlockchainTxError("Failed to submit executeDistribution transaction", error_hint=error_hint) from exc
+    except (subprocess.SubprocessError, FileNotFoundError) as exc:
+        error_hint = _sanitize_subprocess_error(stderr=str(exc))
+        logger.warning("executeDistribution submission failed hint=%s", error_hint)
+        raise BlockchainTxError("Failed to submit executeDistribution transaction", error_hint=error_hint) from exc
+
+    try:
+        payload = json.loads(proc.stdout)
+    except json.JSONDecodeError as exc:
+        raise BlockchainTxError("Unable to parse transaction response") from exc
+
+    tx_hash = payload.get("tx_hash")
+    if not isinstance(tx_hash, str) or not tx_hash.startswith("0x"):
+        raise BlockchainTxError("Missing transaction hash")
+    return tx_hash
+
+
 
 def _sanitize_subprocess_error(*, stdout: str | None = None, stderr: str | None = None) -> str:
     combined = " ".join(part for part in [stderr, stdout] if part).strip()

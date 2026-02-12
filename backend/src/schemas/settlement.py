@@ -83,3 +83,24 @@ class DistributionCreateData(BaseModel):
 class DistributionCreateResponse(BaseModel):
     success: bool
     data: DistributionCreateData
+
+
+class DistributionExecuteRequest(BaseModel):
+    stakers: list[str]
+    staker_shares: list[int]
+    authors: list[str]
+    author_shares: list[int]
+    idempotency_key: str | None = None
+
+
+class DistributionExecuteData(BaseModel):
+    profit_month_id: str
+    status: str
+    tx_hash: str | None
+    blocked_reason: str | None
+    idempotency_key: str
+
+
+class DistributionExecuteResponse(BaseModel):
+    success: bool
+    data: DistributionExecuteData
