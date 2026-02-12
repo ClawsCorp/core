@@ -82,6 +82,11 @@ export interface BountyPublic {
   updated_at: string;
 }
 
+export interface SettlementPayoutPublic {
+  tx_hash: string;
+  executed_at: string | null;
+}
+
 export interface SettlementMonthSummary {
   profit_month_id: string;
   revenue_sum_micro_usdc: number;
@@ -93,6 +98,8 @@ export interface SettlementMonthSummary {
   blocked_reason: string;
   settlement_computed_at: string | null;
   reconciliation_computed_at: string | null;
+  payout_tx_hash: string | null;
+  payout: SettlementPayoutPublic | null;
 }
 
 export interface SettlementPublic {
@@ -120,5 +127,7 @@ export interface ReconciliationPublic {
 export interface SettlementDetailData {
   settlement: SettlementPublic | null;
   reconciliation: ReconciliationPublic | null;
+  payout_tx_hash: string | null;
+  payout: SettlementPayoutPublic | null;
   ready: boolean;
 }

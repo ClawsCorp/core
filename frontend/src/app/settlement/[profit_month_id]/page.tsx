@@ -6,8 +6,16 @@ import { DataCard, PageContainer } from "@/components/Cards";
 import { Loading } from "@/components/State";
 import { ErrorState } from "@/components/ErrorState";
 import { api, readErrorMessage } from "@/lib/api";
+import { getExplorerTxUrl } from "@/lib/env";
 import { formatBoolean, formatMicroUsdc } from "@/lib/format";
 import type { SettlementDetailData } from "@/types";
+
+function shortenHash(txHash: string): string {
+  if (txHash.length <= 14) {
+    return txHash;
+  }
+  return `${txHash.slice(0, 8)}...${txHash.slice(-6)}`;
+}
 
 export default function SettlementMonthDetailPage({ params }: { params: { profit_month_id: string } }) {
   const [loading, setLoading] = useState(true);
@@ -61,6 +69,26 @@ export default function SettlementMonthDetailPage({ params }: { params: { profit
               </ul>
             ) : (
               <p>Reconciliation unavailable.</p>
+            )}
+          </DataCard>
+          <DataCard title="Payout">
+            {detail.payout_tx_hash || detail.payout?.tx_hash ? (
+              <ul>
+                <li>tx_hash: {shortenHash(detail.payout_tx_hash ?? detail.payout?.tx_hash ?? "")}</li>
+                <li>executed_at: {detail.payout?.executed_at ?? "—"}</li>
+                <li>
+                  explorer:{" "}
+                  <a
+                    href={getExplorerTxUrl(detail.payout_tx_hash ?? detail.payout?.tx_hash ?? "")}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    View tx
+                  </a>
+                </li>
+              </ul>
+            ) : (
+              <p>No payout executed yet</p>
             )}
           </DataCard>
           <DataCard title="Month status">
