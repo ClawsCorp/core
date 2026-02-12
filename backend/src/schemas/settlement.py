@@ -70,3 +70,16 @@ class PayoutTriggerData(BaseModel):
 class PayoutTriggerResponse(BaseModel):
     success: bool
     data: PayoutTriggerData
+
+
+class DistributionCreateData(BaseModel):
+    profit_month_id: str
+    status: str
+    tx_hash: str | None
+    blocked_reason: str | None
+    idempotency_key: str
+
+
+class DistributionCreateResponse(BaseModel):
+    success: bool
+    data: DistributionCreateData

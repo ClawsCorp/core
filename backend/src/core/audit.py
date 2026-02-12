@@ -16,6 +16,7 @@ def record_audit(
     body_hash: str,
     signature_status: str,
     request_id: str,
+    tx_hash: str | None = None,
 ) -> AuditLog:
     audit_log = AuditLog(
         actor_type=actor_type,
@@ -26,6 +27,7 @@ def record_audit(
         body_hash=body_hash,
         signature_status=signature_status,
         request_id=request_id,
+        tx_hash=tx_hash,
     )
     db.add(audit_log)
     db.commit()

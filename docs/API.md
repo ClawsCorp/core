@@ -636,6 +636,58 @@ Creates an append-only reconciliation report with:
 - optional `rpc_chain_id`, `rpc_url_name`
 - `computed_at`
 
+
+### Create on-chain distribution (oracle/admin, HMAC required)
+
+`POST /api/v1/oracle/distributions/{profit_month_id}/create`
+
+Creates a monthly distribution entry on `DividendDistributor` by calling:
+
+- `createDistribution(uint256 profitMonthId, uint256 totalProfit)`
+
+Gates and fail-closed behavior:
+
+- Requires latest reconciliation for the month to exist; otherwise `blocked_reason="reconciliation_missing"`.
+- Requires latest reconciliation `ready=true`; otherwise `blocked_reason="not_ready"`.
+- Requires reconciliation snapshot `profit_sum_micro_usdc > 0`; otherwise `blocked_reason="profit_required"`.
+- Requires blockchain config (`BASE_SEPOLIA_RPC_URL`, `USDC_ADDRESS`, `DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS`); otherwise `blocked_reason="rpc_not_configured"`.
+- Requires `ORACLE_SIGNER_PRIVATE_KEY` when a tx must be sent; otherwise `blocked_reason="signer_key_required"`.
+- Any on-chain read/submit failure returns `blocked_reason="tx_error"`.
+
+Idempotency semantics:
+
+- Deterministic idempotency key is derived as:
+  - `create_distribution:{profit_month_id}:{profit_sum_micro_usdc}`
+- The action checks on-chain `getDistribution(profitMonthId)` first.
+- If distribution already exists on-chain:
+  - `success=true`, `status="already_exists"`, `tx_hash=null`
+  - no transaction is submitted
+- If this exact action was already submitted by this API (same idempotency key), response returns previous submitted `tx_hash` and does not submit a duplicate tx.
+
+Response shape:
+
+```json
+{
+  "success": true,
+  "data": {
+    "profit_month_id": "202602",
+    "status": "submitted",
+    "tx_hash": "0x...",
+    "blocked_reason": null,
+    "idempotency_key": "create_distribution:202602:1250000"
+  }
+}
+```
+
+Audit:
+
+- Each request writes an append-only `audit_logs` row with:
+  - `actor_type="oracle"`
+  - `signature_status` (`valid`/`invalid`/`none`)
+  - `body_hash`
+  - `idempotency_key`
+  - `tx_hash` (when submitted)
+
 ### Trigger payout (oracle/admin, HMAC required)
 
 `POST /api/v1/oracle/payouts/{profit_month_id}/trigger`
