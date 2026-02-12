@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 from dataclasses import dataclass
 from urllib.error import HTTPError, URLError
@@ -22,7 +23,9 @@ class BlockchainConfigError(BlockchainReadError):
 
 
 class BlockchainTxError(Exception):
-    pass
+    def __init__(self, message: str, *, error_hint: str | None = None):
+        super().__init__(message)
+        self.error_hint = error_hint
 
 
 @dataclass(frozen=True)
@@ -127,7 +130,7 @@ def submit_create_distribution_tx(profit_month_value: int, total_profit_micro_us
         raise BlockchainConfigError("Missing ORACLE_SIGNER_PRIVATE_KEY")
 
     node_script = """
-const { JsonRpcProvider, Wallet, Contract } = require('/workspace/core/contracts/node_modules/ethers');
+const { JsonRpcProvider, Wallet, Contract } = require('ethers');
 (async () => {
   const rpcUrl = process.env.RPC_URL;
   const privateKey = process.env.PRIVATE_KEY;
@@ -157,6 +160,8 @@ const { JsonRpcProvider, Wallet, Contract } = require('/workspace/core/contracts
         "TOTAL_PROFIT": str(total_profit_micro_usdc),
     })
 
+    contracts_dir = os.getenv("CONTRACTS_DIR", "/app/contracts")
+
     try:
         proc = subprocess.run(
             ["node", "-e", node_script],
@@ -164,10 +169,15 @@ const { JsonRpcProvider, Wallet, Contract } = require('/workspace/core/contracts
             capture_output=True,
             text=True,
             env=env,
+            cwd=contracts_dir,
             timeout=45,
         )
+    except subprocess.CalledProcessError as exc:
+        error_hint = _sanitize_subprocess_error(stdout=exc.stdout, stderr=exc.stderr)
+        raise BlockchainTxError("Failed to submit createDistribution transaction", error_hint=error_hint) from exc
     except (subprocess.SubprocessError, FileNotFoundError) as exc:
-        raise BlockchainTxError("Failed to submit createDistribution transaction") from exc
+        error_hint = _sanitize_subprocess_error(stderr=str(exc))
+        raise BlockchainTxError("Failed to submit createDistribution transaction", error_hint=error_hint) from exc
 
     try:
         payload = json.loads(proc.stdout)
@@ -179,6 +189,37 @@ const { JsonRpcProvider, Wallet, Contract } = require('/workspace/core/contracts
         raise BlockchainTxError("Missing transaction hash")
     return tx_hash
 
+
+
+def _sanitize_subprocess_error(*, stdout: str | None = None, stderr: str | None = None) -> str:
+    combined = " ".join(part for part in [stderr, stdout] if part).strip()
+    if not combined:
+        return "unknown_subprocess_error"
+
+    redacted = combined
+    secret_patterns = [
+        r"0x[a-fA-F0-9]{64}",
+        r"(?i)(private[_-]?key|hmac|secret|authorization)\s*[:=]\s*[^\s,;]+",
+    ]
+    for pattern in secret_patterns:
+        redacted = re.sub(pattern, "[redacted]", redacted)
+
+    lowered = redacted.lower()
+    if "cannot find module" in lowered and "ethers" in lowered:
+        return "MODULE_NOT_FOUND ethers"
+    if "node" in lowered and "not found" in lowered:
+        return "node_runtime_not_found"
+    if "invalid private key" in lowered:
+        return "invalid_private_key"
+    if "insufficient funds" in lowered:
+        return "insufficient_funds"
+    if "nonce" in lowered and "low" in lowered:
+        return "nonce_too_low"
+    if "rpc" in lowered or "network" in lowered:
+        return "rpc_error"
+
+    compact = " ".join(redacted.split())
+    return compact[:160]
 
 def _rpc_call(rpc_url: str, method: str, params: list[object]) -> object:
     payload = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).encode(

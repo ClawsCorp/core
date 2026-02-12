@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from uuid import uuid4
 
@@ -36,6 +37,8 @@ router = APIRouter(prefix="/api/v1/oracle", tags=["oracle-settlement"])
 _MONTH_RE = re.compile(r"^\d{6}$")
 _MAX_STAKERS = 200
 _MAX_AUTHORS = 50
+
+logger = logging.getLogger(__name__)
 
 
 @router.post("/settlement/{profit_month_id}", response_model=SettlementPublic)
@@ -279,8 +282,17 @@ def create_distribution(
                 "idempotency_key": idempotency_key,
             },
         )
-    except BlockchainTxError:
-        _record_oracle_audit(request, db, idempotency_key=idempotency_key)
+    except BlockchainTxError as exc:
+        if exc.error_hint:
+            logger.warning("createDistribution submission failed: %s", exc.error_hint)
+        else:
+            logger.warning("createDistribution submission failed")
+        _record_oracle_audit(
+            request,
+            db,
+            idempotency_key=idempotency_key,
+            error_hint=exc.error_hint,
+        )
         return DistributionCreateResponse(
             success=False,
             data={
@@ -432,6 +444,7 @@ def _record_oracle_audit(
     *,
     idempotency_key: str | None = None,
     tx_hash: str | None = None,
+    error_hint: str | None = None,
 ) -> None:
     body_hash = getattr(request.state, "body_hash", "")
     signature_status = getattr(request.state, "signature_status", "invalid")
@@ -447,6 +460,7 @@ def _record_oracle_audit(
         signature_status=signature_status,
         request_id=request_id,
         tx_hash=tx_hash,
+        error_hint=error_hint,
     )
 
 

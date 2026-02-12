@@ -2,6 +2,13 @@ FROM python:3.11-slim
 
 WORKDIR /app/backend
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends nodejs npm \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /app/contracts \
+    && npm install --prefix /app/contracts --no-save ethers@6
+
 COPY backend/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
