@@ -17,9 +17,21 @@ class SettlementPublic(BaseModel):
     computed_at: datetime
 
 
+class SettlementPayoutPublic(BaseModel):
+    payout_tx_hash: str | None
+    payout_executed_at: datetime | None
+    payout_stakers_count: int | None = None
+    payout_authors_count: int | None = None
+    payout_total_stakers_micro_usdc: int | None = None
+    payout_total_treasury_micro_usdc: int | None = None
+    payout_total_authors_micro_usdc: int | None = None
+    payout_total_founder_micro_usdc: int | None = None
+    payout_total_micro_usdc: int | None = None
+
 class SettlementDetailData(BaseModel):
     settlement: SettlementPublic | None
     reconciliation: ReconciliationReportPublic | None
+    payout: SettlementPayoutPublic | None
     ready: bool
 
 
@@ -39,6 +51,8 @@ class SettlementMonthSummary(BaseModel):
     blocked_reason: str | None
     settlement_computed_at: datetime | None
     reconciliation_computed_at: datetime | None
+    payout_tx_hash: str | None
+    payout_executed_at: datetime | None
 
 
 class SettlementMonthsData(BaseModel):

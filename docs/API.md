@@ -709,9 +709,10 @@ Request body:
 
 Idempotency:
 
-- Requires idempotency key from `Idempotency-Key` header or `idempotency_key` body field.
-- Stores append-only `distribution_executions` result row with unique `idempotency_key`.
-- Duplicate key returns previously stored result and does not send another tx.
+- Prefers `Idempotency-Key` header when present (backward compatible).
+- If header is missing, server derives deterministic key: `execute_distribution:{profit_month_id}:{sha256(canonical_json)}` where canonical JSON contains `profit_month_id`, `stakers`, `stakerShares`, `authors`, `authorShares`.
+- `idempotency_key` body field is kept for backward compatibility and is used only when header is absent.
+- Stores append-only `distribution_executions` rows with unique `idempotency_key`; duplicate key returns previous result and does not send another tx.
 
 Strict fail-closed gates:
 
@@ -733,6 +734,11 @@ Tx/config failure reasons:
 - Missing chain config -> `blocked_reason="rpc_not_configured"`
 - Missing signer key -> `blocked_reason="signer_key_required"`
 - Tx submit failure -> `blocked_reason="tx_error"` and sanitized `error_hint` in audit log
+
+Execution bookkeeping:
+
+- On successful execute submission (`status="submitted"` with `tx_hash`), server appends a `dividend_payouts` row with `profit_month_id`, `idempotency_key`, `tx_hash`, executed timestamp, recipient counts, and computed bucket totals (stakers/treasury/authors/founder in micro-USDC).
+- Duplicate execute retries do not create duplicate payout rows (dedup by `idempotency_key` and `profit_month_id+tx_hash`).
 
 Audit:
 
@@ -767,5 +773,5 @@ Behavior:
 
 ### Public settlement visibility
 
-- `GET /api/v1/settlement/{profit_month_id}` → latest settlement + latest reconciliation + `ready`.
-- `GET /api/v1/settlement/months?limit=24&offset=0` → paginated month summaries including `ready` and `delta_micro_usdc`.
+- `GET /api/v1/settlement/{profit_month_id}` → latest settlement + latest reconciliation + latest payout metadata (`payout_tx_hash`, `payout_executed_at`, recipient counts/totals when available) + `ready`.
+- `GET /api/v1/settlement/months?limit=24&offset=0` → paginated month summaries including `ready`, `delta_micro_usdc`, and payout presence (`payout_tx_hash`, `payout_executed_at`, nullable).

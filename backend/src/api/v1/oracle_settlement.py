@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import func
+from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
 from src.api.v1.dependencies import require_oracle_hmac
@@ -12,6 +14,7 @@ from src.core.audit import record_audit
 from src.core.database import get_db
 from src.models.distribution_creation import DistributionCreation
 from src.models.distribution_execution import DistributionExecution
+from src.models.dividend_payout import DividendPayout
 from src.models.expense_event import ExpenseEvent
 from src.models.reconciliation_report import ReconciliationReport
 from src.models.revenue_event import RevenueEvent
@@ -334,10 +337,11 @@ def execute_distribution(
 ) -> DistributionExecuteResponse:
     _validate_month(profit_month_id)
 
-    idempotency_key = request.headers.get("Idempotency-Key") or payload.idempotency_key
-    if not idempotency_key:
-        _record_oracle_audit(request, db, error_hint="idempotency_key_required")
-        raise HTTPException(status_code=400, detail="idempotency_key is required")
+    idempotency_key = _resolve_execute_idempotency_key(
+        request=request,
+        profit_month_id=profit_month_id,
+        payload=payload,
+    )
 
     existing_execution = (
         db.query(DistributionExecution)
@@ -496,6 +500,15 @@ def execute_distribution(
         blocked_reason=None,
     )
     db.add(execution)
+    _upsert_dividend_payout(
+        db,
+        profit_month_id=profit_month_id,
+        idempotency_key=idempotency_key,
+        tx_hash=tx_hash,
+        total_profit_micro_usdc=settlement.profit_sum_micro_usdc,
+        stakers_count=len(payload.stakers),
+        authors_count=len(payload.authors),
+    )
     db.commit()
 
     _record_oracle_audit(request, db, idempotency_key=idempotency_key, tx_hash=tx_hash)
@@ -553,6 +566,91 @@ def trigger_payout(
             "blocked_reason": "signer_key_required",
         },
     )
+
+
+
+def _resolve_execute_idempotency_key(
+    *,
+    request: Request,
+    profit_month_id: str,
+    payload: DistributionExecuteRequest,
+) -> str:
+    header_key = request.headers.get("Idempotency-Key")
+    if header_key:
+        return header_key
+
+    if payload.idempotency_key:
+        return payload.idempotency_key
+
+    canonical_payload = {
+        "profit_month_id": profit_month_id,
+        "stakers": payload.stakers,
+        "stakerShares": payload.staker_shares,
+        "authors": payload.authors,
+        "authorShares": payload.author_shares,
+    }
+    serialized = json.dumps(canonical_payload, separators=(",", ":"), ensure_ascii=True, sort_keys=True)
+    body_hash = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+    return f"execute_distribution:{profit_month_id}:{body_hash}"
+
+
+def _split_distribution_totals(total_profit_micro_usdc: int) -> tuple[int, int, int, int]:
+    stakers_total = (total_profit_micro_usdc * 6600) // 10000
+    treasury_total = (total_profit_micro_usdc * 1900) // 10000
+    authors_total = (total_profit_micro_usdc * 1000) // 10000
+    founder_total = (total_profit_micro_usdc * 500) // 10000
+    allocated = stakers_total + treasury_total + authors_total + founder_total
+    treasury_total += total_profit_micro_usdc - allocated
+    return stakers_total, treasury_total, authors_total, founder_total
+
+
+def _upsert_dividend_payout(
+    db: Session,
+    *,
+    profit_month_id: str,
+    idempotency_key: str,
+    tx_hash: str,
+    total_profit_micro_usdc: int,
+    stakers_count: int,
+    authors_count: int,
+) -> None:
+    existing = (
+        db.query(DividendPayout)
+        .filter(
+            (DividendPayout.idempotency_key == idempotency_key)
+            | and_(DividendPayout.profit_month_id == profit_month_id, DividendPayout.tx_hash == tx_hash)
+        )
+        .order_by(DividendPayout.id.desc())
+        .first()
+    )
+    if existing is not None:
+        return
+
+    stakers_total, treasury_total, authors_total, founder_total = _split_distribution_totals(total_profit_micro_usdc)
+    if stakers_count == 0:
+        treasury_total += stakers_total
+        stakers_total = 0
+    if authors_count == 0:
+        treasury_total += authors_total
+        authors_total = 0
+
+    db.add(
+        DividendPayout(
+            profit_month_id=profit_month_id,
+            idempotency_key=idempotency_key,
+            status="submitted",
+            tx_hash=tx_hash,
+            stakers_count=stakers_count,
+            authors_count=authors_count,
+            total_stakers_micro_usdc=stakers_total,
+            total_treasury_micro_usdc=treasury_total,
+            total_authors_micro_usdc=authors_total,
+            total_founder_micro_usdc=founder_total,
+            total_payout_micro_usdc=total_profit_micro_usdc,
+            payout_executed_at=func.now(),
+        )
+    )
+
 
 
 
