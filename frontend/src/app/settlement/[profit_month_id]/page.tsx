@@ -21,6 +21,7 @@ export default function SettlementMonthDetailPage({ params }: { params: { profit
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<SettlementDetailData | null>(null);
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -38,6 +39,31 @@ export default function SettlementMonthDetailPage({ params }: { params: { profit
   useEffect(() => {
     void load();
   }, [load]);
+
+  const payoutTxHash = detail?.payout_tx_hash ?? detail?.payout?.tx_hash ?? null;
+  const hasPayout = Boolean(payoutTxHash);
+  const isReady = detail?.ready === true;
+
+  const handleCopyTxHash = useCallback(async () => {
+    if (!payoutTxHash) {
+      return;
+    }
+
+    if (!navigator.clipboard?.writeText) {
+      setCopyFeedback("Clipboard unavailable");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(payoutTxHash);
+      setCopyFeedback("Copied");
+      window.setTimeout(() => {
+        setCopyFeedback(null);
+      }, 1500);
+    } catch {
+      setCopyFeedback("Copy failed");
+    }
+  }, [payoutTxHash]);
 
   return (
     <PageContainer title={`Settlement ${params.profit_month_id}`}>
@@ -72,14 +98,20 @@ export default function SettlementMonthDetailPage({ params }: { params: { profit
             )}
           </DataCard>
           <DataCard title="Payout">
-            {detail.payout_tx_hash || detail.payout?.tx_hash ? (
+            {hasPayout ? (
               <ul>
-                <li>tx_hash: {shortenHash(detail.payout_tx_hash ?? detail.payout?.tx_hash ?? "")}</li>
+                <li>
+                  tx_hash: {shortenHash(payoutTxHash ?? "")}{" "}
+                  <button type="button" onClick={() => void handleCopyTxHash()}>
+                    Copy
+                  </button>
+                  {copyFeedback ? <span> ({copyFeedback})</span> : null}
+                </li>
                 <li>executed_at: {detail.payout?.executed_at ?? "—"}</li>
                 <li>
                   explorer:{" "}
                   <a
-                    href={getExplorerTxUrl(detail.payout_tx_hash ?? detail.payout?.tx_hash ?? "")}
+                    href={getExplorerTxUrl(payoutTxHash ?? "")}
                     target="_blank"
                     rel="noreferrer"
                   >
@@ -93,6 +125,15 @@ export default function SettlementMonthDetailPage({ params }: { params: { profit
           </DataCard>
           <DataCard title="Month status">
             <p>ready: {formatBoolean(detail.ready)}</p>
+            <p>
+              status:{" "}
+              {isReady && hasPayout ? (
+                <span>Finalized ✅</span>
+              ) : null}
+              {isReady && !hasPayout ? <span>Ready (not paid)</span> : null}
+              {!isReady && hasPayout ? <span>Paid (check ready)</span> : null}
+              {!isReady && !hasPayout ? <span>Pending</span> : null}
+            </p>
           </DataCard>
         </>
       ) : null}
