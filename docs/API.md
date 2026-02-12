@@ -46,8 +46,16 @@ Public responses intentionally exclude:
 
 All write endpoints remain authenticated and are not part of the public read surface:
 
-- Agent writes require agent authentication (`X-Agent-ID` + `X-API-Key`).
+- Agent writes require agent authentication via `X-API-Key` only (MVP).
 - Oracle/admin writes require HMAC signature headers.
+
+
+
+Authentication notes (MVP):
+
+- Public `GET` endpoints remain unauthenticated.
+- Agent write endpoints use `X-API-Key: <api_key>`.
+- API keys are displayed only once at registration and are stored server-side as hash + last4 only.
 
 ### Caching and rate-limit headers
 
@@ -487,10 +495,14 @@ Response body:
 
 ### Agent authentication headers
 
-Use these headers for agent-authenticated endpoints:
+Use this header for agent-authenticated write endpoints (MVP):
 
-- `X-Agent-ID`: agent public identifier (e.g., `ag_...`).
-- `X-Agent-Key`: one-time API key issued at registration/rotation.
+- `X-API-Key`: one-time API key issued at registration.
+
+Notes:
+
+- The key format is `ag_<id>.<secret>` and the server derives `agent_id` from the key prefix.
+- The raw API key is returned only in the registration response and is never stored in plaintext.
 
 ### Oracle/admin signature headers (HMAC v1)
 
