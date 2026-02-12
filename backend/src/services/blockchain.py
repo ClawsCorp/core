@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import subprocess
@@ -9,6 +10,8 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from src.core.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 _BALANCE_OF_SELECTOR = "70a08231"
 _GET_DISTRIBUTION_SELECTOR = "3b345a87"
@@ -160,7 +163,7 @@ const { JsonRpcProvider, Wallet, Contract } = require('ethers');
         "TOTAL_PROFIT": str(total_profit_micro_usdc),
     })
 
-    contracts_dir = os.getenv("CONTRACTS_DIR", "/app/contracts")
+    contracts_dir = settings.contracts_dir
 
     try:
         proc = subprocess.run(
@@ -174,9 +177,11 @@ const { JsonRpcProvider, Wallet, Contract } = require('ethers');
         )
     except subprocess.CalledProcessError as exc:
         error_hint = _sanitize_subprocess_error(stdout=exc.stdout, stderr=exc.stderr)
+        logger.warning("createDistribution submission failed hint=%s", error_hint)
         raise BlockchainTxError("Failed to submit createDistribution transaction", error_hint=error_hint) from exc
     except (subprocess.SubprocessError, FileNotFoundError) as exc:
         error_hint = _sanitize_subprocess_error(stderr=str(exc))
+        logger.warning("createDistribution submission failed hint=%s", error_hint)
         raise BlockchainTxError("Failed to submit createDistribution transaction", error_hint=error_hint) from exc
 
     try:
@@ -206,7 +211,7 @@ def _sanitize_subprocess_error(*, stdout: str | None = None, stderr: str | None 
 
     lowered = redacted.lower()
     if "cannot find module" in lowered and "ethers" in lowered:
-        return "MODULE_NOT_FOUND ethers"
+        return "module_not_found_ethers"
     if "node" in lowered and "not found" in lowered:
         return "node_runtime_not_found"
     if "invalid private key" in lowered:
@@ -215,11 +220,12 @@ def _sanitize_subprocess_error(*, stdout: str | None = None, stderr: str | None 
         return "insufficient_funds"
     if "nonce" in lowered and "low" in lowered:
         return "nonce_too_low"
+    if "execution reverted" in lowered or "revert" in lowered:
+        return "reverted"
     if "rpc" in lowered or "network" in lowered:
         return "rpc_error"
 
-    compact = " ".join(redacted.split())
-    return compact[:160]
+    return "unknown"
 
 def _rpc_call(rpc_url: str, method: str, params: list[object]) -> object:
     payload = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).encode(

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import re
 from uuid import uuid4
 
@@ -38,7 +37,6 @@ _MONTH_RE = re.compile(r"^\d{6}$")
 _MAX_STAKERS = 200
 _MAX_AUTHORS = 50
 
-logger = logging.getLogger(__name__)
 
 
 @router.post("/settlement/{profit_month_id}", response_model=SettlementPublic)
@@ -283,10 +281,6 @@ def create_distribution(
             },
         )
     except BlockchainTxError as exc:
-        if exc.error_hint:
-            logger.warning("createDistribution submission failed: %s", exc.error_hint)
-        else:
-            logger.warning("createDistribution submission failed")
         _record_oracle_audit(
             request,
             db,

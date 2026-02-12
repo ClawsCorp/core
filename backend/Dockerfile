@@ -6,7 +6,10 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends nodejs npm \
     && rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p /app/contracts \
+RUN mkdir -p /app/contracts
+
+COPY contracts/package.json contracts/package-lock.json /app/contracts/
+RUN npm ci --prefix /app/contracts --omit=dev \
     && npm install --prefix /app/contracts --no-save ethers@6
 
 COPY backend/requirements.txt ./requirements.txt

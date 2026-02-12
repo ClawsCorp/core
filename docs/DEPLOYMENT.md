@@ -51,6 +51,8 @@ Required for backend runtime:
 - `DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS`
 - `ORACLE_HMAC_SECRET`
 
+On-chain distribution creation (`/api/v1/oracle/distributions/{profit_month_id}/create`) executes a Node.js subprocess from inside the backend container. The provided `backend/Dockerfile` installs Node.js/npm and prepares `/app/contracts/node_modules` with `ethers` available at runtime.
+
 Commonly set (recommended/optional depending on environment):
 
 - `APP_VERSION`
@@ -59,6 +61,7 @@ Commonly set (recommended/optional depending on environment):
 - `CHAIN_ID` (`84532` for Base Sepolia)
 - `ORACLE_API_KEY`
 - `ORACLE_SIGNER_PRIVATE_KEY`
+- `CONTRACTS_DIR` (defaults to `/app/contracts`, directory used as subprocess working directory for Node tx submission)
 
 ### 4) Database service
 
