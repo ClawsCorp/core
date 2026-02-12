@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 
 from src.core.database import get_db
+from src.models.dividend_payout import DividendPayout
 from src.models.reconciliation_report import ReconciliationReport
 from src.models.settlement import Settlement
 from src.schemas.reconciliation import ReconciliationReportPublic
@@ -15,6 +16,7 @@ from src.schemas.settlement import (
     SettlementMonthSummary,
     SettlementMonthsData,
     SettlementMonthsResponse,
+    SettlementPayoutPublic,
     SettlementPublic,
 )
 
@@ -37,6 +39,7 @@ def list_settlement_months(
 ) -> SettlementMonthsResponse:
     settlements = db.query(Settlement).order_by(Settlement.profit_month_id.desc(), Settlement.computed_at.desc(), Settlement.id.desc()).all()
     reconciliations = db.query(ReconciliationReport).order_by(ReconciliationReport.profit_month_id.desc(), ReconciliationReport.computed_at.desc(), ReconciliationReport.id.desc()).all()
+    payouts = db.query(DividendPayout).order_by(DividendPayout.profit_month_id.desc(), DividendPayout.payout_executed_at.desc(), DividendPayout.id.desc()).all()
 
     latest_settlement_by_month: dict[str, Settlement] = {}
     for row in settlements:
@@ -46,8 +49,14 @@ def list_settlement_months(
     for row in reconciliations:
         latest_reconciliation_by_month.setdefault(row.profit_month_id, row)
 
+    latest_payout_by_month: dict[str, DividendPayout] = {}
+    for row in payouts:
+        latest_payout_by_month.setdefault(row.profit_month_id, row)
+
     months = sorted(
-        set(latest_settlement_by_month.keys()) | set(latest_reconciliation_by_month.keys()),
+        set(latest_settlement_by_month.keys())
+        | set(latest_reconciliation_by_month.keys())
+        | set(latest_payout_by_month.keys()),
         reverse=True,
     )
     paged = months[offset : offset + limit]
@@ -56,6 +65,7 @@ def list_settlement_months(
     for month in paged:
         settlement = latest_settlement_by_month.get(month)
         reconciliation = latest_reconciliation_by_month.get(month)
+        payout = latest_payout_by_month.get(month)
         items.append(
             SettlementMonthSummary(
                 profit_month_id=month,
@@ -68,6 +78,8 @@ def list_settlement_months(
                 blocked_reason=reconciliation.blocked_reason if reconciliation else "missing_reconciliation",
                 settlement_computed_at=settlement.computed_at if settlement else None,
                 reconciliation_computed_at=reconciliation.computed_at if reconciliation else None,
+                payout_tx_hash=payout.tx_hash if payout else None,
+                payout_executed_at=payout.payout_executed_at if payout else None,
             )
         )
 
@@ -94,12 +106,14 @@ def get_settlement_status(
     _validate_month(profit_month_id)
     settlement = _latest_settlement(db, profit_month_id)
     reconciliation = _latest_reconciliation(db, profit_month_id)
+    payout = _latest_payout(db, profit_month_id)
 
     result = SettlementDetailResponse(
         success=True,
         data=SettlementDetailData(
             settlement=_settlement_public(settlement) if settlement else None,
             reconciliation=_reconciliation_public(reconciliation) if reconciliation else None,
+            payout=_payout_public(payout) if payout else None,
             ready=bool(reconciliation.ready) if reconciliation else False,
         ),
     )
@@ -127,6 +141,15 @@ def _latest_reconciliation(db: Session, profit_month_id: str) -> ReconciliationR
     )
 
 
+def _latest_payout(db: Session, profit_month_id: str) -> DividendPayout | None:
+    return (
+        db.query(DividendPayout)
+        .filter(DividendPayout.profit_month_id == profit_month_id)
+        .order_by(DividendPayout.payout_executed_at.desc(), DividendPayout.id.desc())
+        .first()
+    )
+
+
 def _settlement_public(settlement: Settlement) -> SettlementPublic:
     return SettlementPublic(
         profit_month_id=settlement.profit_month_id,
@@ -136,6 +159,20 @@ def _settlement_public(settlement: Settlement) -> SettlementPublic:
         profit_nonnegative=settlement.profit_nonnegative,
         note=settlement.note,
         computed_at=settlement.computed_at,
+    )
+
+
+def _payout_public(payout: DividendPayout) -> SettlementPayoutPublic:
+    return SettlementPayoutPublic(
+        payout_tx_hash=payout.tx_hash,
+        payout_executed_at=payout.payout_executed_at,
+        payout_stakers_count=payout.stakers_count,
+        payout_authors_count=payout.authors_count,
+        payout_total_stakers_micro_usdc=payout.total_stakers_micro_usdc,
+        payout_total_treasury_micro_usdc=payout.total_treasury_micro_usdc,
+        payout_total_authors_micro_usdc=payout.total_authors_micro_usdc,
+        payout_total_founder_micro_usdc=payout.total_founder_micro_usdc,
+        payout_total_micro_usdc=payout.total_payout_micro_usdc,
     )
 
 

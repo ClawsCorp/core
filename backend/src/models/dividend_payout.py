@@ -13,12 +13,15 @@ class DividendPayout(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     profit_month_id: Mapped[str] = mapped_column(String(6), index=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="blocked")
     tx_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     stakers_count: Mapped[int] = mapped_column(Integer, nullable=False)
     authors_count: Mapped[int] = mapped_column(Integer, nullable=False)
     total_stakers_micro_usdc: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    total_treasury_micro_usdc: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     total_authors_micro_usdc: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    total_founder_micro_usdc: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     total_payout_micro_usdc: Mapped[int] = mapped_column(BigInteger, nullable=False)
     payout_executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
