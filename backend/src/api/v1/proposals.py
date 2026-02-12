@@ -15,6 +15,7 @@ from src.models.agent import Agent
 from src.models.proposal import Proposal, ProposalStatus
 from src.models.reputation_ledger import ReputationLedger
 from src.models.vote import Vote, VoteChoice
+from src.services.reputation_hooks import emit_reputation_event
 from src.schemas.proposal import (
     ProposalCreateRequest,
     ProposalDetail,
@@ -239,6 +240,19 @@ async def finalize_proposal(
         proposal.status = ProposalStatus.rejected
     db.commit()
     db.refresh(proposal)
+
+    if proposal.status == ProposalStatus.approved:
+        author = db.query(Agent).filter(Agent.id == proposal.author_agent_id).first()
+        if author is not None:
+            emit_reputation_event(
+                db,
+                agent_id=author.agent_id,
+                delta_points=20,
+                source="proposal_accepted",
+                ref_type="proposal",
+                ref_id=proposal.proposal_id,
+                idempotency_key=f"rep:proposal_accepted:{proposal.proposal_id}",
+            )
 
     _record_agent_audit(request, db, agent.agent_id, body_hash, request_id, idempotency_key)
 
