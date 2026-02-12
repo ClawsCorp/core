@@ -44,6 +44,7 @@ class Settings:
     usdc_address: str | None
     dividend_distributor_contract_address: str | None
     oracle_signer_private_key: str | None
+    contracts_dir: str
 
 
 @lru_cache
@@ -69,6 +70,7 @@ def get_settings() -> Settings:
     oracle_signer_private_key = (
         oracle_signer_private_key_value if oracle_signer_private_key_value else None
     )
+    contracts_dir = os.getenv("CONTRACTS_DIR", "/app/contracts").strip() or "/app/contracts"
 
     return Settings(
         app_version=app_version,
@@ -80,4 +82,5 @@ def get_settings() -> Settings:
         usdc_address=usdc_address,
         dividend_distributor_contract_address=dividend_distributor_contract_address,
         oracle_signer_private_key=oracle_signer_private_key,
+        contracts_dir=contracts_dir,
     )
