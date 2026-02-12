@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 from dataclasses import dataclass
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -8,6 +10,7 @@ from urllib.request import Request, urlopen
 from src.core.config import get_settings
 
 _BALANCE_OF_SELECTOR = "70a08231"
+_GET_DISTRIBUTION_SELECTOR = "3b345a87"
 
 
 class BlockchainReadError(Exception):
@@ -18,11 +21,22 @@ class BlockchainConfigError(BlockchainReadError):
     pass
 
 
+class BlockchainTxError(Exception):
+    pass
+
+
 @dataclass(frozen=True)
 class BalanceReadResult:
     balance_micro_usdc: int
     rpc_chain_id: int | None
     rpc_url_name: str
+
+
+@dataclass(frozen=True)
+class DistributionState:
+    exists: bool
+    total_profit_micro_usdc: int
+    distributed: bool
 
 
 def read_usdc_balance_of_distributor() -> BalanceReadResult:
@@ -70,6 +84,102 @@ def read_usdc_balance_of_distributor() -> BalanceReadResult:
     )
 
 
+def read_distribution_state(profit_month_value: int) -> DistributionState:
+    settings = get_settings()
+    rpc_url = settings.base_sepolia_rpc_url
+    distributor_address = settings.dividend_distributor_contract_address
+    if _is_invalid_rpc_config(rpc_url, settings.usdc_address, distributor_address):
+        raise BlockchainConfigError(
+            "Missing BASE_SEPOLIA_RPC_URL, USDC_ADDRESS, or DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS"
+        )
+
+    data = f"0x{_GET_DISTRIBUTION_SELECTOR}{_encode_uint256_arg(profit_month_value)}"
+    result = _rpc_call(
+        rpc_url,
+        "eth_call",
+        [{"to": distributor_address, "data": data}, "latest"],
+    )
+    if not isinstance(result, str) or not result.startswith("0x"):
+        raise BlockchainReadError("Invalid eth_call response for getDistribution")
+
+    words = _decode_words(result)
+    if len(words) < 3:
+        raise BlockchainReadError("Invalid tuple response for getDistribution")
+
+    return DistributionState(
+        total_profit_micro_usdc=words[0],
+        distributed=bool(words[1]),
+        exists=bool(words[2]),
+    )
+
+
+def submit_create_distribution_tx(profit_month_value: int, total_profit_micro_usdc: int) -> str:
+    settings = get_settings()
+    rpc_url = settings.base_sepolia_rpc_url
+    distributor_address = settings.dividend_distributor_contract_address
+    signer_private_key = settings.oracle_signer_private_key
+
+    if _is_invalid_rpc_config(rpc_url, settings.usdc_address, distributor_address):
+        raise BlockchainConfigError(
+            "Missing BASE_SEPOLIA_RPC_URL, USDC_ADDRESS, or DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS"
+        )
+    if signer_private_key is None or _is_placeholder(signer_private_key):
+        raise BlockchainConfigError("Missing ORACLE_SIGNER_PRIVATE_KEY")
+
+    node_script = """
+const { JsonRpcProvider, Wallet, Contract } = require('/workspace/core/contracts/node_modules/ethers');
+(async () => {
+  const rpcUrl = process.env.RPC_URL;
+  const privateKey = process.env.PRIVATE_KEY;
+  const contractAddress = process.env.CONTRACT_ADDRESS;
+  const profitMonthId = BigInt(process.env.PROFIT_MONTH_ID);
+  const totalProfit = BigInt(process.env.TOTAL_PROFIT);
+  const provider = new JsonRpcProvider(rpcUrl);
+  const wallet = new Wallet(privateKey, provider);
+  const contract = new Contract(contractAddress, [
+    'function createDistribution(uint256 profitMonthId, uint256 totalProfit) external'
+  ], wallet);
+  const tx = await contract.createDistribution(profitMonthId, totalProfit);
+  process.stdout.write(JSON.stringify({ tx_hash: tx.hash }));
+})().catch((err) => {
+  const message = err && err.message ? err.message : String(err);
+  process.stderr.write(message);
+  process.exit(1);
+});
+"""
+
+    env = os.environ.copy()
+    env.update({
+        "RPC_URL": rpc_url,
+        "PRIVATE_KEY": signer_private_key,
+        "CONTRACT_ADDRESS": distributor_address,
+        "PROFIT_MONTH_ID": str(profit_month_value),
+        "TOTAL_PROFIT": str(total_profit_micro_usdc),
+    })
+
+    try:
+        proc = subprocess.run(
+            ["node", "-e", node_script],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=45,
+        )
+    except (subprocess.SubprocessError, FileNotFoundError) as exc:
+        raise BlockchainTxError("Failed to submit createDistribution transaction") from exc
+
+    try:
+        payload = json.loads(proc.stdout)
+    except json.JSONDecodeError as exc:
+        raise BlockchainTxError("Unable to parse transaction response") from exc
+
+    tx_hash = payload.get("tx_hash")
+    if not isinstance(tx_hash, str) or not tx_hash.startswith("0x"):
+        raise BlockchainTxError("Missing transaction hash")
+    return tx_hash
+
+
 def _rpc_call(rpc_url: str, method: str, params: list[object]) -> object:
     payload = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).encode(
         "utf-8"
@@ -105,6 +215,26 @@ def _encode_address_arg(address: str) -> str:
     except ValueError as exc:
         raise BlockchainReadError("Address must be hex") from exc
     return raw.rjust(64, "0")
+
+
+def _encode_uint256_arg(value: int) -> str:
+    if value < 0:
+        raise BlockchainReadError("uint256 value must be non-negative")
+    return f"{value:064x}"
+
+
+def _decode_words(data: str) -> list[int]:
+    payload = data[2:]
+    if len(payload) % 64 != 0:
+        raise BlockchainReadError("Invalid ABI response length")
+    words: list[int] = []
+    for idx in range(0, len(payload), 64):
+        chunk = payload[idx : idx + 64]
+        try:
+            words.append(int(chunk, 16))
+        except ValueError as exc:
+            raise BlockchainReadError("Invalid ABI response chunk") from exc
+    return words
 
 
 def _is_invalid_rpc_config(
