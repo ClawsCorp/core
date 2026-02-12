@@ -6,6 +6,7 @@ from starlette.middleware.cors import CORSMiddleware
 from src.api.v1.accounting import router as accounting_router
 from src.api.v1.agents import router as agents_router
 from src.api.v1.bounties import router as bounties_router
+from src.api.v1.discussions import router as discussions_router
 from src.api.v1.health import router as health_router
 from src.api.v1.oracle_settlement import router as oracle_settlement_router
 from src.api.v1.projects import router as projects_router
@@ -75,3 +76,4 @@ app.include_router(stats_router)
 app.include_router(oracle_accounting_router)
 app.include_router(oracle_settlement_router)
 app.include_router(settlement_router)
+app.include_router(discussions_router)

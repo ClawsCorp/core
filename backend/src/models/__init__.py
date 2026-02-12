@@ -6,6 +6,7 @@ from src.models.bounty import Bounty, BountyStatus
 from src.models.dividend_payout import DividendPayout
 from src.models.distribution_creation import DistributionCreation
 from src.models.distribution_execution import DistributionExecution
+from src.models.discussions import DiscussionPost, DiscussionThread, DiscussionVote
 from src.models.expense_event import ExpenseEvent
 from src.models.project import Project, ProjectStatus
 from src.models.reconciliation_report import ReconciliationReport
@@ -24,6 +25,9 @@ __all__ = [
     "DividendPayout",
     "DistributionCreation",
     "DistributionExecution",
+    "DiscussionPost",
+    "DiscussionThread",
+    "DiscussionVote",
     "ExpenseEvent",
     "Project",
     "ReconciliationReport",
