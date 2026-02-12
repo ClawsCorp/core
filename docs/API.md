@@ -688,6 +688,62 @@ Audit:
   - `idempotency_key`
   - `tx_hash` (when submitted)
 
+
+### Execute on-chain distribution (oracle/admin, HMAC required)
+
+`POST /api/v1/oracle/distributions/{profit_month_id}/execute`
+
+Submits owner-only `executeDistribution(uint256,address[],uint256[],address[],uint256[])` on `DividendDistributor`.
+
+Request body:
+
+```json
+{
+  "stakers": ["0x1111111111111111111111111111111111111111"],
+  "staker_shares": [700000],
+  "authors": ["0x2222222222222222222222222222222222222222"],
+  "author_shares": [300000],
+  "idempotency_key": "exec_distribution:202602:run-01"
+}
+```
+
+Idempotency:
+
+- Requires idempotency key from `Idempotency-Key` header or `idempotency_key` body field.
+- Stores append-only `distribution_executions` result row with unique `idempotency_key`.
+- Duplicate key returns previously stored result and does not send another tx.
+
+Strict fail-closed gates:
+
+- Requires settlement for month; otherwise `blocked_reason="missing_settlement"`.
+- Requires latest reconciliation with strict equality gate (`ready=true` and `delta_micro_usdc=0`); otherwise `blocked_reason="not_ready"`.
+- Reads on-chain `getDistribution(profitMonthId)`:
+  - `exists=false` -> `blocked_reason="distribution_missing"`
+  - `distributed=true` -> `success=true`, `status="already_distributed"`, `tx_hash=null` (no tx)
+  - `totalProfit != settlement.profit_sum_micro_usdc` -> `blocked_reason="distribution_total_mismatch"`
+- Recipient validations:
+  - `len(stakers) <= 200`, `len(authors) <= 50`
+  - `len(stakers) == len(staker_shares)`, `len(authors) == len(author_shares)`
+  - no zero addresses, no malformed addresses
+  - all shares must be `> 0`
+  - duplicate recipients within stakers/authors are blocked (`blocked_reason="duplicate_recipient"`)
+
+Tx/config failure reasons:
+
+- Missing chain config -> `blocked_reason="rpc_not_configured"`
+- Missing signer key -> `blocked_reason="signer_key_required"`
+- Tx submit failure -> `blocked_reason="tx_error"` and sanitized `error_hint` in audit log
+
+Audit:
+
+- Each request writes append-only `audit_logs` row with oracle route metadata:
+  - `actor_type="oracle"`
+  - `signature_status` (valid/invalid/none)
+  - `body_hash`
+  - `idempotency_key`
+  - `tx_hash` (when submitted)
+  - sanitized `error_hint` (on tx failures)
+
 ### Trigger payout (oracle/admin, HMAC required)
 
 `POST /api/v1/oracle/payouts/{profit_month_id}/trigger`
