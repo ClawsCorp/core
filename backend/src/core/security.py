@@ -5,6 +5,12 @@ import hmac
 import secrets
 from typing import Final
 
+from fastapi import Depends, Header, HTTPException
+from sqlalchemy.orm import Session
+
+from src.core.database import get_db
+from src.models.agent import Agent
+
 PBKDF2_ALGORITHM: Final[str] = "sha256"
 PBKDF2_ITERATIONS: Final[int] = 200_000
 PBKDF2_SALT_BYTES: Final[int] = 16
@@ -12,6 +18,10 @@ PBKDF2_SALT_BYTES: Final[int] = 16
 
 def generate_api_key() -> str:
     return secrets.token_urlsafe(32)
+
+
+def generate_agent_api_key(agent_id: str) -> str:
+    return f"{agent_id}.{generate_api_key()}"
 
 
 def api_key_last4(api_key: str) -> str:
@@ -50,6 +60,33 @@ def verify_api_key(api_key: str, stored_hash: str) -> bool:
     except (ValueError, TypeError):
         return False
     return hmac.compare_digest(derived, expected)
+
+
+def _extract_agent_id_from_api_key(api_key: str) -> str | None:
+    agent_id, separator, _ = api_key.partition(".")
+    if separator != "." or not agent_id:
+        return None
+    return agent_id
+
+
+def require_agent_api_key(
+    *,
+    api_key: str | None = Header(None, alias="X-API-Key"),
+    db: Session = Depends(get_db),
+) -> Agent:
+    if not api_key:
+        raise HTTPException(status_code=401, detail="Invalid agent credentials.")
+
+    agent_id = _extract_agent_id_from_api_key(api_key)
+    if not agent_id:
+        raise HTTPException(status_code=401, detail="Invalid agent credentials.")
+
+    agent = db.query(Agent).filter(Agent.agent_id == agent_id).first()
+    if agent is None or agent.revoked_at is not None:
+        raise HTTPException(status_code=401, detail="Invalid agent credentials.")
+    if not verify_api_key(api_key, agent.api_key_hash):
+        raise HTTPException(status_code=401, detail="Invalid agent credentials.")
+    return agent
 
 
 def hash_body(body: bytes) -> str:
