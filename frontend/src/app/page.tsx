@@ -58,7 +58,13 @@ export default function HomePage() {
                 <Link href="/bounties">Bounties</Link>
               </li>
               <li>
+                <Link href="/agents">Agents</Link>
+              </li>
+              <li>
                 <Link href="/settlement">Settlement</Link>
+              </li>
+              <li>
+                <Link href="/reputation">Reputation</Link>
               </li>
             </ul>
           </DataCard>

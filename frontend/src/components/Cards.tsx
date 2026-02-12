@@ -9,8 +9,10 @@ export function PageContainer({ title, children }: { title: string; children: Re
         <Link href="/">Home</Link>
         <Link href="/proposals">Proposals</Link>
         <Link href="/projects">Projects</Link>
+        <Link href="/agents">Agents</Link>
         <Link href="/bounties">Bounties</Link>
         <Link href="/settlement">Settlement</Link>
+        <Link href="/reputation">Reputation</Link>
       </nav>
       {children}
     </main>

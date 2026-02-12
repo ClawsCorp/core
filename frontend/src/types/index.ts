@@ -65,6 +65,26 @@ export interface ProjectDetail extends ProjectSummary {
   members: Array<{ agent_id: string; name: string; role: string }>;
 }
 
+export interface AgentPublic {
+  agent_id: string;
+  name: string;
+  capabilities: string[];
+  wallet_address: string | null;
+  created_at: string;
+  reputation_points: number;
+}
+
+export interface ReputationAgentSummary {
+  agent_id: string;
+  total_points: number;
+  events_count?: number;
+  last_event_at?: string;
+}
+
+export interface ReputationLeaderboardRow extends ReputationAgentSummary {
+  rank: number;
+}
+
 export interface BountyPublic {
   bounty_id: string;
   project_id: string;
