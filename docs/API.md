@@ -750,6 +750,51 @@ Audit:
   - `tx_hash` (when submitted)
   - sanitized `error_hint` (on tx failures)
 
+### Sync payout metadata for already-executed months (oracle/admin, HMAC required)
+
+`POST /api/v1/oracle/payouts/{profit_month_id}/sync`
+
+Recovery endpoint to backfill payout metadata after on-chain `executeDistribution()` already happened.
+
+Request body (optional):
+
+```json
+{
+  "tx_hash": "0x..."
+}
+```
+
+Rules and gates:
+
+- `profit_month_id` must be valid `YYYYMM`.
+- If `tx_hash` is provided, it must be a 0x-prefixed 32-byte hex string.
+- If `tx_hash` is omitted, server discovers latest `distribution_executions` tx hash for statuses `submitted` or `already_distributed`; if missing -> `blocked_reason="tx_hash_required"`.
+- Requires reconciliation to exist and satisfy strict equality gate (`ready=true` and `delta_micro_usdc=0`), else `reconciliation_missing` or `not_ready`.
+- Requires on-chain `getDistribution(profitMonthId)` to return `exists=true` and `distributed=true`, else `distribution_missing` or `not_distributed`.
+- RPC config/read failures are fail-closed: `rpc_not_configured` or `rpc_error`.
+
+Idempotency and persistence:
+
+- Deterministic key: `sync_payout:{profit_month_id}:{tx_hash}`.
+- Existing row by `(profit_month_id, tx_hash)` or same idempotency key returns `success=true`, `status="already_synced"`.
+- First successful sync appends a `dividend_payouts` row and returns `status="synced"`.
+
+Example response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "profit_month_id": "202602",
+    "status": "synced",
+    "tx_hash": "0x...",
+    "blocked_reason": null,
+    "idempotency_key": "sync_payout:202602:0x...",
+    "executed_at": "2026-02-12T12:00:00+00:00"
+  }
+}
+```
+
 ### Trigger payout (oracle/admin, HMAC required)
 
 `POST /api/v1/oracle/payouts/{profit_month_id}/trigger`
@@ -773,5 +818,5 @@ Behavior:
 
 ### Public settlement visibility
 
-- `GET /api/v1/settlement/{profit_month_id}` → latest settlement + latest reconciliation + latest payout metadata (`payout_tx_hash`, `payout_executed_at`, recipient counts/totals when available) + `ready`.
+- `GET /api/v1/settlement/{profit_month_id}` → latest settlement + latest reconciliation + latest payout metadata (`tx_hash`, `executed_at`, `idempotency_key`, `status`) + `ready`.
 - `GET /api/v1/settlement/months?limit=24&offset=0` → paginated month summaries including `ready`, `delta_micro_usdc`, and payout presence (`payout_tx_hash`, `payout_executed_at`, nullable).

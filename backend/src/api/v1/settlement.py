@@ -145,7 +145,7 @@ def _latest_payout(db: Session, profit_month_id: str) -> DividendPayout | None:
     return (
         db.query(DividendPayout)
         .filter(DividendPayout.profit_month_id == profit_month_id)
-        .order_by(DividendPayout.payout_executed_at.desc(), DividendPayout.id.desc())
+        .order_by(DividendPayout.created_at.desc(), DividendPayout.id.desc())
         .first()
     )
 
@@ -164,15 +164,10 @@ def _settlement_public(settlement: Settlement) -> SettlementPublic:
 
 def _payout_public(payout: DividendPayout) -> SettlementPayoutPublic:
     return SettlementPayoutPublic(
-        payout_tx_hash=payout.tx_hash,
-        payout_executed_at=payout.payout_executed_at,
-        payout_stakers_count=payout.stakers_count,
-        payout_authors_count=payout.authors_count,
-        payout_total_stakers_micro_usdc=payout.total_stakers_micro_usdc,
-        payout_total_treasury_micro_usdc=payout.total_treasury_micro_usdc,
-        payout_total_authors_micro_usdc=payout.total_authors_micro_usdc,
-        payout_total_founder_micro_usdc=payout.total_founder_micro_usdc,
-        payout_total_micro_usdc=payout.total_payout_micro_usdc,
+        tx_hash=payout.tx_hash,
+        executed_at=payout.payout_executed_at,
+        idempotency_key=payout.idempotency_key,
+        status=payout.status,
     )
 
 

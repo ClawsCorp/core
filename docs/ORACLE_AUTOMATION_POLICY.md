@@ -38,6 +38,7 @@ Auto-pay only if:
   - settlement exists for profit_month_id
   - profit_sum_micro_usdc >= 0
   - reconciliation ready will become true AFTER deposit (i.e., deposit amount is exactly profit_sum)
+- Historical payout metadata backfill may be performed with `POST /api/v1/oracle/payouts/{profit_month_id}/sync` only after reconciliation is ready and on-chain distribution is confirmed `distributed=true` (fail-closed recovery path).
 - Payout execution may run automatically ONLY when:
   - latest reconciliation for profit_month_id has ready=true (STRICT EQUALITY)
   - recipients count within contract MAX limits

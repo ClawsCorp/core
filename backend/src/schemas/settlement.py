@@ -18,15 +18,11 @@ class SettlementPublic(BaseModel):
 
 
 class SettlementPayoutPublic(BaseModel):
-    payout_tx_hash: str | None
-    payout_executed_at: datetime | None
-    payout_stakers_count: int | None = None
-    payout_authors_count: int | None = None
-    payout_total_stakers_micro_usdc: int | None = None
-    payout_total_treasury_micro_usdc: int | None = None
-    payout_total_authors_micro_usdc: int | None = None
-    payout_total_founder_micro_usdc: int | None = None
-    payout_total_micro_usdc: int | None = None
+    tx_hash: str | None
+    executed_at: datetime | None
+    idempotency_key: str | None
+    status: str | None
+
 
 class SettlementDetailData(BaseModel):
     settlement: SettlementPublic | None
