@@ -30,6 +30,29 @@ async def create_reputation_event(
     body_hash = request.state.body_hash
     signature_status = getattr(request.state, "signature_status", "invalid")
 
+    try:
+        event, public_agent_id = ingest_reputation_event(db, payload)
+    except ValueError as exc:
+        _record_oracle_audit(
+            request=request,
+            db=db,
+            body_hash=body_hash,
+            request_id=request_id,
+            idempotency_key=payload.idempotency_key,
+            signature_status=signature_status,
+        )
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except LookupError as exc:
+        _record_oracle_audit(
+            request=request,
+            db=db,
+            body_hash=body_hash,
+            request_id=request_id,
+            idempotency_key=payload.idempotency_key,
+            signature_status=signature_status,
+        )
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
     _record_oracle_audit(
         request=request,
         db=db,
@@ -37,14 +60,10 @@ async def create_reputation_event(
         request_id=request_id,
         idempotency_key=payload.idempotency_key,
         signature_status=signature_status,
+        commit=False,
     )
-
-    try:
-        event, public_agent_id = ingest_reputation_event(db, payload)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except LookupError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    db.commit()
+    db.refresh(event)
 
     return ReputationEventDetailResponse(success=True, data=_public_event(public_agent_id, event))
 
@@ -56,6 +75,7 @@ def _record_oracle_audit(
     request_id: str,
     idempotency_key: str,
     signature_status: str,
+    commit: bool = True,
 ) -> None:
     record_audit(
         db,
@@ -67,6 +87,7 @@ def _record_oracle_audit(
         body_hash=body_hash,
         signature_status=signature_status,
         request_id=request_id,
+        commit=commit,
     )
 
 

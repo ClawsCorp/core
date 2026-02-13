@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from src.api.v1.dependencies import require_oracle_hmac
 from src.core.audit import record_audit
 from src.core.database import get_db
+from src.core.db_utils import insert_or_get_by_unique
 from src.models.distribution_creation import DistributionCreation
 from src.models.distribution_execution import DistributionExecution
 from src.models.dividend_payout import DividendPayout
@@ -312,16 +313,20 @@ def create_distribution(
         idempotency_key=idempotency_key,
         tx_hash=tx_hash,
     )
-    db.add(creation)
+    creation, _ = insert_or_get_by_unique(
+        db,
+        instance=creation,
+        model=DistributionCreation,
+        unique_filter={"idempotency_key": idempotency_key},
+    )
+    _record_oracle_audit(request, db, idempotency_key=idempotency_key, tx_hash=tx_hash, commit=False)
     db.commit()
-
-    _record_oracle_audit(request, db, idempotency_key=idempotency_key, tx_hash=tx_hash)
     return DistributionCreateResponse(
         success=True,
         data={
             "profit_month_id": profit_month_id,
             "status": "submitted",
-            "tx_hash": tx_hash,
+            "tx_hash": creation.tx_hash,
             "blocked_reason": None,
             "idempotency_key": idempotency_key,
         },
@@ -433,16 +438,21 @@ def execute_distribution(
             tx_hash=None,
             blocked_reason=None,
         )
-        db.add(execution)
+        execution, _ = insert_or_get_by_unique(
+            db,
+            instance=execution,
+            model=DistributionExecution,
+            unique_filter={"idempotency_key": idempotency_key},
+        )
+        _record_oracle_audit(request, db, idempotency_key=idempotency_key, commit=False)
         db.commit()
-        _record_oracle_audit(request, db, idempotency_key=idempotency_key)
         return DistributionExecuteResponse(
             success=True,
             data={
-                "profit_month_id": profit_month_id,
-                "status": "already_distributed",
-                "tx_hash": None,
-                "blocked_reason": None,
+                "profit_month_id": execution.profit_month_id,
+                "status": execution.status,
+                "tx_hash": execution.tx_hash,
+                "blocked_reason": execution.blocked_reason,
                 "idempotency_key": idempotency_key,
             },
         )
@@ -500,7 +510,12 @@ def execute_distribution(
         tx_hash=tx_hash,
         blocked_reason=None,
     )
-    db.add(execution)
+    execution, _ = insert_or_get_by_unique(
+        db,
+        instance=execution,
+        model=DistributionExecution,
+        unique_filter={"idempotency_key": idempotency_key},
+    )
     _upsert_dividend_payout(
         db,
         profit_month_id=profit_month_id,
@@ -510,16 +525,15 @@ def execute_distribution(
         stakers_count=len(payload.stakers),
         authors_count=len(payload.authors),
     )
+    _record_oracle_audit(request, db, idempotency_key=idempotency_key, tx_hash=tx_hash, commit=False)
     db.commit()
-
-    _record_oracle_audit(request, db, idempotency_key=idempotency_key, tx_hash=tx_hash)
     return DistributionExecuteResponse(
-        success=True,
+        success=execution.status in {"submitted", "already_distributed"},
         data={
-            "profit_month_id": profit_month_id,
-            "status": "submitted",
-            "tx_hash": tx_hash,
-            "blocked_reason": None,
+            "profit_month_id": execution.profit_month_id,
+            "status": execution.status,
+            "tx_hash": execution.tx_hash,
+            "blocked_reason": execution.blocked_reason,
             "idempotency_key": idempotency_key,
         },
     )
@@ -650,11 +664,15 @@ def sync_payout_metadata(
         total_payout_micro_usdc=0,
         payout_executed_at=func.now(),
     )
-    db.add(payout)
+    payout, _ = insert_or_get_by_unique(
+        db,
+        instance=payout,
+        model=DividendPayout,
+        unique_filter={"idempotency_key": idempotency_key},
+    )
+    _record_oracle_audit(request, db, idempotency_key=idempotency_key, tx_hash=tx_hash, commit=False)
     db.commit()
     db.refresh(payout)
-
-    _record_oracle_audit(request, db, idempotency_key=idempotency_key, tx_hash=tx_hash)
     return PayoutSyncResponse(
         success=True,
         data={
@@ -812,18 +830,6 @@ def _upsert_dividend_payout(
     stakers_count: int,
     authors_count: int,
 ) -> None:
-    existing = (
-        db.query(DividendPayout)
-        .filter(
-            (DividendPayout.idempotency_key == idempotency_key)
-            | and_(DividendPayout.profit_month_id == profit_month_id, DividendPayout.tx_hash == tx_hash)
-        )
-        .order_by(DividendPayout.id.desc())
-        .first()
-    )
-    if existing is not None:
-        return
-
     stakers_total, treasury_total, authors_total, founder_total = _split_distribution_totals(total_profit_micro_usdc)
     if stakers_count == 0:
         treasury_total += stakers_total
@@ -832,21 +838,25 @@ def _upsert_dividend_payout(
         treasury_total += authors_total
         authors_total = 0
 
-    db.add(
-        DividendPayout(
-            profit_month_id=profit_month_id,
-            idempotency_key=idempotency_key,
-            status="submitted",
-            tx_hash=tx_hash,
-            stakers_count=stakers_count,
-            authors_count=authors_count,
-            total_stakers_micro_usdc=stakers_total,
-            total_treasury_micro_usdc=treasury_total,
-            total_authors_micro_usdc=authors_total,
-            total_founder_micro_usdc=founder_total,
-            total_payout_micro_usdc=total_profit_micro_usdc,
-            payout_executed_at=func.now(),
-        )
+    payout = DividendPayout(
+        profit_month_id=profit_month_id,
+        idempotency_key=idempotency_key,
+        status="submitted",
+        tx_hash=tx_hash,
+        stakers_count=stakers_count,
+        authors_count=authors_count,
+        total_stakers_micro_usdc=stakers_total,
+        total_treasury_micro_usdc=treasury_total,
+        total_authors_micro_usdc=authors_total,
+        total_founder_micro_usdc=founder_total,
+        total_payout_micro_usdc=total_profit_micro_usdc,
+        payout_executed_at=func.now(),
+    )
+    _, _ = insert_or_get_by_unique(
+        db,
+        instance=payout,
+        model=DividendPayout,
+        unique_filter={"idempotency_key": idempotency_key},
     )
 
 
@@ -871,14 +881,20 @@ def _record_blocked_execution(
         tx_hash=None,
         blocked_reason=blocked_reason,
     )
-    db.add(execution)
-    db.commit()
+    _, _ = insert_or_get_by_unique(
+        db,
+        instance=execution,
+        model=DistributionExecution,
+        unique_filter={"idempotency_key": idempotency_key},
+    )
     _record_oracle_audit(
         request,
         db,
         idempotency_key=idempotency_key,
         error_hint=error_hint,
+        commit=False,
     )
+    db.commit()
     return DistributionExecuteResponse(
         success=False,
         data={
@@ -992,6 +1008,7 @@ def _record_oracle_audit(
     idempotency_key: str | None = None,
     tx_hash: str | None = None,
     error_hint: str | None = None,
+    commit: bool = True,
 ) -> None:
     body_hash = getattr(request.state, "body_hash", "")
     signature_status = getattr(request.state, "signature_status", "invalid")
@@ -1008,6 +1025,7 @@ def _record_oracle_audit(
         request_id=request_id,
         tx_hash=tx_hash,
         error_hint=error_hint,
+        commit=commit,
     )
 
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
+from src.core.db_utils import insert_or_get_by_unique
 from src.models.agent import Agent
 from src.models.reputation_event import ReputationEvent
 from src.schemas.reputation import ReputationEventCreateRequest
@@ -17,14 +18,6 @@ def ingest_reputation_event(
     agent = db.query(Agent).filter(Agent.agent_id == payload.agent_id).first()
     if agent is None:
         raise LookupError("Agent not found")
-
-    existing = (
-        db.query(ReputationEvent)
-        .filter(ReputationEvent.idempotency_key == payload.idempotency_key)
-        .first()
-    )
-    if existing is not None:
-        return existing, agent.agent_id
 
     existing_by_event_id = (
         db.query(ReputationEvent).filter(ReputationEvent.event_id == payload.event_id).first()
@@ -44,8 +37,10 @@ def ingest_reputation_event(
         ref_id=payload.ref_id,
         note=payload.note,
     )
-    db.add(event)
-    db.commit()
-    db.refresh(event)
-
+    event, _ = insert_or_get_by_unique(
+        db,
+        instance=event,
+        model=ReputationEvent,
+        unique_filter={"idempotency_key": payload.idempotency_key},
+    )
     return event, agent.agent_id

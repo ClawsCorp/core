@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from src.api.v1.dependencies import require_agent_auth, require_oracle_hmac
 from src.core.audit import record_audit
 from src.core.database import get_db
+from src.core.db_utils import insert_or_get_by_unique
 from src.core.security import hash_body
 from src.models.agent import Agent
 from src.models.bounty import Bounty, BountyFundingSource, BountyStatus
@@ -343,8 +344,6 @@ async def mark_paid(
     bounty.paid_tx_hash = payload.paid_tx_hash or bounty.paid_tx_hash
 
     _ensure_bounty_paid_expense(db, bounty)
-    db.commit()
-    db.refresh(bounty)
 
     if row.agent_id:
         note = f"paid_tx_hash:{payload.paid_tx_hash}" if payload.paid_tx_hash else None
@@ -367,7 +366,10 @@ async def mark_paid(
         idempotency_key or mark_paid_idempotency_key,
         tx_hash=bounty.paid_tx_hash,
         error_hint=None,
+        commit=False,
     )
+    db.commit()
+    db.refresh(bounty)
 
     return BountyMarkPaidResponse(
         success=True,
@@ -408,6 +410,7 @@ def _record_oracle_audit(
     idempotency_key: str | None,
     tx_hash: str | None = None,
     error_hint: str | None = None,
+    commit: bool = True,
 ) -> None:
     signature_status = getattr(request.state, "signature_status", "invalid")
     record_audit(
@@ -422,6 +425,7 @@ def _record_oracle_audit(
         request_id=request_id,
         tx_hash=tx_hash,
         error_hint=error_hint,
+        commit=commit,
     )
 
 
@@ -488,10 +492,6 @@ def _ensure_bounty_paid_capital_outflow(db: Session, bounty: Bounty, paid_tx_has
         return None
 
     idempotency_key = f"cap:bounty_paid:{bounty.bounty_id}"
-    existing = db.query(ProjectCapitalEvent).filter(ProjectCapitalEvent.idempotency_key == idempotency_key).first()
-    if existing is not None:
-        return None
-
     balance_micro_usdc = get_project_capital_balance_micro_usdc(db, bounty.project_id)
     if balance_micro_usdc < bounty.amount_micro_usdc:
         return "insufficient_project_capital"
@@ -506,16 +506,16 @@ def _ensure_bounty_paid_capital_outflow(db: Session, bounty: Bounty, paid_tx_has
         evidence_tx_hash=paid_tx_hash,
         evidence_url=f"bounty:{bounty.bounty_id}",
     )
-    db.add(event)
-    db.flush()
+    _, _ = insert_or_get_by_unique(
+        db,
+        instance=event,
+        model=ProjectCapitalEvent,
+        unique_filter={"idempotency_key": idempotency_key},
+    )
     return None
 
 def _ensure_bounty_paid_expense(db: Session, bounty: Bounty) -> ExpenseEvent:
     idempotency_key = f"expense:bounty_paid:{bounty.bounty_id}"
-    existing = db.query(ExpenseEvent).filter(ExpenseEvent.idempotency_key == idempotency_key).first()
-    if existing is not None:
-        return existing
-
     profit_month_id = datetime.now(timezone.utc).strftime("%Y%m")
     category = "project_bounty_payout" if bounty.project_id is not None else "platform_bounty_payout"
     event = ExpenseEvent(
@@ -528,8 +528,12 @@ def _ensure_bounty_paid_expense(db: Session, bounty: Bounty) -> ExpenseEvent:
         idempotency_key=idempotency_key,
         evidence_url=None,
     )
-    db.add(event)
-    db.flush()
+    event, _ = insert_or_get_by_unique(
+        db,
+        instance=event,
+        model=ExpenseEvent,
+        unique_filter={"idempotency_key": idempotency_key},
+    )
     return event
 
 
