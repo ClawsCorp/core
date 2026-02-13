@@ -44,7 +44,9 @@ def _client(_db: sessionmaker[Session]) -> TestClient:
             db.close()
 
     app.dependency_overrides[get_db] = _override_get_db
-    client = TestClient(app, raise_server_exceptions=False)
+    # Don't swallow server exceptions: if a route returns 500, we want the
+    # traceback in CI logs to diagnose the underlying bug.
+    client = TestClient(app, raise_server_exceptions=True)
     try:
         yield client
     finally:
@@ -90,4 +92,3 @@ def test_register_agent_creates_bootstrap_reputation_event_and_public_reads_use_
     assert len(items) == 1
     assert items[0]["delta"] == 100
     assert items[0]["reason"] == "bootstrap"
-
