@@ -27,6 +27,7 @@ from src.services.reputation_hooks import emit_reputation_event
 
 from src.schemas.bounty import (
     BountyCreateRequest,
+    BountyAgentCreateRequest,
     BountyDetailResponse,
     BountyEligibilityRequest,
     BountyEligibilityResponse,
@@ -40,6 +41,7 @@ from src.schemas.bounty import (
 )
 
 router = APIRouter(prefix="/api/v1/bounties", tags=["public-bounties", "bounties"])
+agent_router = APIRouter(prefix="/api/v1/agent/bounties", tags=["agent-bounties"])
 
 REQUIRED_APPROVALS_MIN = 1
 REQUIRED_CHECKS = [
@@ -152,6 +154,76 @@ async def create_bounty(
     return BountyDetailResponse(
         success=True,
         data=_bounty_public(bounty, project.project_id if project else None, None),
+    )
+
+
+@agent_router.post("", response_model=BountyDetailResponse, summary="Create bounty (agent)")
+async def create_bounty_agent(
+    payload: BountyAgentCreateRequest,
+    request: Request,
+    agent: Agent = Depends(require_agent_auth),
+    db: Session = Depends(get_db),
+) -> BountyDetailResponse:
+    body_bytes = await request.body()
+    body_hash = hash_body(body_bytes)
+    request_id = request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID") or str(uuid4())
+    idempotency_key = request.headers.get("Idempotency-Key") or payload.idempotency_key
+
+    project: Project | None = None
+    if payload.project_id:
+        project = db.query(Project).filter(Project.project_id == payload.project_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+
+    requested_source = (
+        BountyFundingSource(payload.funding_source.value) if payload.funding_source else None
+    )
+    if project is None:
+        if requested_source is not None and requested_source != BountyFundingSource.platform_treasury:
+            raise HTTPException(status_code=400, detail="Platform bounties must use funding_source=platform_treasury")
+        funding_source = BountyFundingSource.platform_treasury
+    else:
+        if requested_source == BountyFundingSource.platform_treasury:
+            raise HTTPException(status_code=400, detail="Project bounties cannot use funding_source=platform_treasury")
+        funding_source = requested_source or BountyFundingSource.project_capital
+
+    bounty = Bounty(
+        bounty_id=_generate_bounty_id(db),
+        idempotency_key=idempotency_key,
+        project_id=project.id if project else None,
+        funding_source=funding_source,
+        title=payload.title,
+        description_md=payload.description_md,
+        amount_micro_usdc=payload.amount_micro_usdc,
+        status=BountyStatus.open,
+    )
+
+    if idempotency_key:
+        bounty, _ = insert_or_get_by_unique(
+            db,
+            instance=bounty,
+            model=Bounty,
+            unique_filter={"idempotency_key": idempotency_key},
+        )
+    else:
+        db.add(bounty)
+        db.flush()
+
+    db.commit()
+    db.refresh(bounty)
+
+    _record_agent_audit(request, db, agent.agent_id, body_hash, request_id, idempotency_key)
+
+    project_public_id = project.project_id if project else None
+    if project is None and bounty.project_id is not None:
+        # In case idempotency returned an existing row, load its project public id.
+        project_public_id = (
+            db.query(Project.project_id).filter(Project.id == bounty.project_id).scalar()
+        )
+
+    return BountyDetailResponse(
+        success=True,
+        data=_bounty_public(bounty, project_public_id, None),
     )
 
 

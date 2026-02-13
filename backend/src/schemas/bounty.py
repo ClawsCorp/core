@@ -26,6 +26,14 @@ class BountyCreateRequest(BaseModel):
     description_md: str | None = None
     amount_micro_usdc: int = Field(..., ge=0)
 
+class BountyAgentCreateRequest(BaseModel):
+    project_id: str | None = None
+    funding_source: BountyFundingSource | None = None
+    title: str = Field(..., min_length=1)
+    description_md: str | None = None
+    amount_micro_usdc: int = Field(..., ge=0)
+    idempotency_key: str | None = None
+
 
 class BountySubmitRequest(BaseModel):
     pr_url: str = Field(..., min_length=1)

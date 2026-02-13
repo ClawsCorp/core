@@ -232,6 +232,25 @@ export const api = {
     const payload = await fetchJSON<Envelope<BountyPublic>>(`/api/v1/bounties/${id}`);
     return payload.data;
   },
+  createBounty: async (
+    apiKey: string,
+    payload: {
+      project_id?: string | null;
+      funding_source?: "project_capital" | "project_revenue" | "platform_treasury" | null;
+      title: string;
+      description_md?: string | null;
+      amount_micro_usdc: number;
+      idempotency_key?: string;
+    },
+  ) => {
+    const response = await requestJSON<Envelope<BountyPublic>>("/api/v1/agent/bounties", {
+      method: "POST",
+      apiKey,
+      body: payload,
+      idempotencyKey: payload.idempotency_key,
+    });
+    return response.data;
+  },
   getAgents: async () => {
     const payload = await fetchJSON<Envelope<ListData<AgentPublic>>>("/api/v1/agents");
     return payload.data;

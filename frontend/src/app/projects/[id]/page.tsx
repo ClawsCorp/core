@@ -9,6 +9,7 @@ import { CopyButton } from "@/components/CopyButton";
 import { Loading } from "@/components/State";
 import { ErrorState } from "@/components/ErrorState";
 import { api, readErrorMessage } from "@/lib/api";
+import { getAgentApiKey } from "@/lib/agentKey";
 import { getExplorerBaseUrl } from "@/lib/env";
 import { formatMicroUsdc } from "@/lib/format";
 import type { BountyFundingSource, BountyPublic, ProjectCapitalSummary, ProjectDetail } from "@/types";
@@ -25,6 +26,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
   const [createDescription, setCreateDescription] = useState("");
   const [fundingSource, setFundingSource] = useState<BountyFundingSource>("project_capital");
   const [createMessage, setCreateMessage] = useState<string | null>(null);
+  const [createBusy, setCreateBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -54,10 +56,10 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
   }, [params.id]);
 
   const fundingHint = useMemo(() => {
-    if (fundingSource !== "project_capital") {
-      return "Backend currently creates bounties with project_capital funding for project-linked bounties.";
+    if (fundingSource === "project_revenue") {
+      return "Paid from project revenue (accounted as an expense). No project_capital outflow is recorded.";
     }
-    return "If project capital is insufficient, payout transitions can be blocked with insufficient_project_capital.";
+    return "Paid from project capital. Payout transitions can be blocked if capital is insufficient or reconciliation is not fresh/strict-ready.";
   }, [fundingSource]);
 
   const treasuryLink = useMemo(() => {
@@ -82,9 +84,35 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
 
   const onCreate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setCreateMessage("Agent create-bounty endpoint is not available in backend. Only oracle-signed create exists at /api/v1/bounties.");
-    if (Number(createAmount) < 0 || !createTitle.trim() || !createDescription.trim()) {
-      setCreateMessage("Fill title, description, and non-negative amount.");
+    setCreateMessage(null);
+    if (Number(createAmount) < 0 || !createTitle.trim()) {
+      setCreateMessage("Fill title and non-negative amount.");
+      return;
+    }
+
+    const apiKey = getAgentApiKey();
+    if (!apiKey) {
+      setCreateMessage("Missing agent key. Save X-API-Key above, then retry.");
+      return;
+    }
+
+    setCreateBusy(true);
+    try {
+      const created = await api.createBounty(apiKey, {
+        project_id: params.id,
+        funding_source: fundingSource,
+        title: createTitle.trim(),
+        description_md: createDescription.trim() ? createDescription.trim() : null,
+        amount_micro_usdc: Number(createAmount),
+      });
+      setCreateMessage(`Created bounty ${created.bounty_id}.`);
+      setCreateTitle("");
+      setCreateDescription("");
+      await load();
+    } catch (err) {
+      setCreateMessage(readErrorMessage(err));
+    } finally {
+      setCreateBusy(false);
     }
   };
 
@@ -190,11 +218,12 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
                   <select value={fundingSource} onChange={(event) => setFundingSource(event.target.value as BountyFundingSource)}>
                     <option value="project_capital">project_capital</option>
                     <option value="project_revenue">project_revenue</option>
-                    <option value="platform_treasury">platform_treasury</option>
                   </select>
                 </label>
               </div>
-              <button type="submit">Create bounty</button>
+              <button type="submit" disabled={createBusy}>
+                {createBusy ? "Creating..." : "Create bounty"}
+              </button>
               <p>{fundingHint}</p>
               {reconciliation?.ready === false ? (
                 <p>Funding readiness is blocked by capital reconciliation ({reconciliation.blocked_reason ?? "not_ready"}).</p>
