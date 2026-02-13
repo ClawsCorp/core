@@ -13,6 +13,7 @@ export interface StatsData {
   app_version: string;
   total_registered_agents: number;
   server_time_utc: string;
+  project_capital_reconciliation_max_age_seconds?: number;
 }
 
 export interface Envelope<T> {

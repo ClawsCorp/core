@@ -21,17 +21,21 @@ export default function BountyDetailPage({ params }: { params: { id: string } })
 
   const [prUrl, setPrUrl] = useState("");
   const [mergeSha, setMergeSha] = useState("");
+  const [paidTxHash, setPaidTxHash] = useState("");
   const [projectCapital, setProjectCapital] = useState<ProjectCapitalSummary | null>(null);
   const [capitalReconciliation, setCapitalReconciliation] = useState<ProjectCapitalReconciliationReport | null>(null);
+  const [reconciliationMaxAgeSeconds, setReconciliationMaxAgeSeconds] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const result = await api.getBounty(params.id);
+      const [result, stats] = await Promise.all([api.getBounty(params.id), api.getStats().catch(() => null)]);
       setBounty(result);
       setPrUrl(result.pr_url ?? "");
       setMergeSha(result.merge_sha ?? "");
+      setPaidTxHash(result.paid_tx_hash ?? "");
+      setReconciliationMaxAgeSeconds(stats?.project_capital_reconciliation_max_age_seconds ?? null);
       if (result.project_id) {
         const [capital, reconciliation] = await Promise.all([
           api.getProjectCapitalSummary(result.project_id).catch(() => null),
@@ -116,6 +120,45 @@ export default function BountyDetailPage({ params }: { params: { id: string } })
       : null;
   const eligibilityPayloadJson = eligibilityPayload ? JSON.stringify(eligibilityPayload, null, 2) : "";
 
+  const isProjectCapitalFunded =
+    Boolean(bounty?.project_id) && bounty?.funding_source === "project_capital";
+
+  const reconciliationAgeSeconds =
+    capitalReconciliation?.computed_at
+      ? Math.floor((Date.now() - new Date(capitalReconciliation.computed_at).getTime()) / 1000)
+      : null;
+
+  const isReconciliationStale =
+    reconciliationAgeSeconds !== null && reconciliationMaxAgeSeconds !== null
+      ? reconciliationAgeSeconds > reconciliationMaxAgeSeconds
+      : null;
+
+  const markPaidWouldBlockReasons: string[] = [];
+  if (bounty) {
+    if (bounty.status !== "eligible_for_payout" && bounty.status !== "paid") {
+      markPaidWouldBlockReasons.push("bounty_not_eligible_for_payout");
+    }
+    if (isProjectCapitalFunded) {
+      if (!capitalReconciliation) {
+        markPaidWouldBlockReasons.push("project_capital_reconciliation_missing");
+      } else {
+        if (!capitalReconciliation.ready || (capitalReconciliation.delta_micro_usdc ?? 0) !== 0) {
+          markPaidWouldBlockReasons.push("project_capital_not_reconciled");
+        } else if (isReconciliationStale === true) {
+          markPaidWouldBlockReasons.push("project_capital_reconciliation_stale");
+        }
+      }
+      if (projectCapital && projectCapital.balance_micro_usdc < bounty.amount_micro_usdc) {
+        markPaidWouldBlockReasons.push("insufficient_project_capital");
+      }
+    }
+  }
+
+  const markPaidCommand =
+    paidTxHash.trim()
+      ? `PYTHONPATH=src python -m oracle_runner mark-bounty-paid --bounty-id ${params.id} --paid-tx-hash ${paidTxHash.trim()}`
+      : `PYTHONPATH=src python -m oracle_runner mark-bounty-paid --bounty-id ${params.id} --paid-tx-hash 0x...`;
+
   return (
     <PageContainer title={`Bounty ${params.id}`}>
       <AgentKeyPanel />
@@ -185,6 +228,36 @@ export default function BountyDetailPage({ params }: { params: { id: string } })
             {bounty.status === "paid" ? <p>This bounty is paid.</p> : null}
           </DataCard>
 
+          <DataCard title="Oracle mark-paid helper (runner)">
+            <p>
+              Command: <code>{markPaidCommand}</code>{" "}
+              <CopyButton value={markPaidCommand} label="Copy command" />
+            </p>
+            <div style={{ marginTop: 8 }}>
+              <label>
+                paid_tx_hash:{" "}
+                <input
+                  value={paidTxHash}
+                  onChange={(event) => setPaidTxHash(event.target.value)}
+                  placeholder="0x..."
+                  style={{ minWidth: 420, padding: 6 }}
+                />
+              </label>
+            </div>
+            {markPaidWouldBlockReasons.length > 0 ? (
+              <>
+                <p style={{ marginTop: 12 }}>If you run it now, backend may block (fail-closed) because:</p>
+                <ul>
+                  {markPaidWouldBlockReasons.map((r) => (
+                    <li key={r}>{r}</li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p style={{ marginTop: 12 }}>No obvious blockers detected from public data (oracle may still block for other reasons).</p>
+            )}
+          </DataCard>
+
           <DataCard title="Project capital gate (for payouts)">
             {bounty.project_id ? (
               <>
@@ -201,6 +274,12 @@ export default function BountyDetailPage({ params }: { params: { id: string } })
                     <p>blocked_reason: {capitalReconciliation.blocked_reason ?? "—"}</p>
                     <p>delta_micro_usdc: {formatMicroUsdc(capitalReconciliation.delta_micro_usdc)}</p>
                     <p>computed_at: {new Date(capitalReconciliation.computed_at).toLocaleString()}</p>
+                    <p>
+                      max_age_seconds:{" "}
+                      {reconciliationMaxAgeSeconds !== null ? reconciliationMaxAgeSeconds : "unknown"}{" "}
+                      {reconciliationAgeSeconds !== null ? `(age=${reconciliationAgeSeconds}s)` : null}{" "}
+                      {isReconciliationStale === true ? "(stale)" : null}
+                    </p>
                     <p>
                       Run: <code>PYTHONPATH=src python -m oracle_runner reconcile-project-capital --project-id {bounty.project_id}</code>
                     </p>
