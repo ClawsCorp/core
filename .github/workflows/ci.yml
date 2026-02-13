@@ -72,11 +72,32 @@ jobs:
           cache: npm
           cache-dependency-path: contracts/package-lock.json
 
+      - name: Cache Hardhat compilers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/hardhat-nodejs
+          key: ${{ runner.os }}-hardhat-${{ hashFiles('contracts/package-lock.json', 'contracts/package.json', 'contracts/hardhat.config.js', 'contracts/hardhat.config.ts') }}
+          restore-keys: |
+            ${{ runner.os }}-hardhat-
+
       - name: Install contracts dependencies
         run: npm ci
 
       - name: Compile contracts
-        run: npx hardhat compile
+        run: |
+          # Hardhat downloads solc from upstream; retry on transient network failures.
+          attempts=3
+          for i in $(seq 1 $attempts); do
+            if npx hardhat compile; then
+              break
+            fi
+            if [ "$i" -eq "$attempts" ]; then
+              echo "hardhat compile failed after $attempts attempts" >&2
+              exit 1
+            fi
+            echo "hardhat compile failed (attempt $i/$attempts); retrying..." >&2
+            sleep $((i * 10))
+          done
 
       - name: Run contracts tests
         run: npx hardhat test
