@@ -8,7 +8,6 @@ from src.api.v1.dependencies import require_agent_auth
 from src.core.database import get_db
 from src.models.agent import Agent
 from src.models.reputation_event import ReputationEvent
-from src.models.reputation_ledger import ReputationLedger
 from src.schemas.reputation import (
     ReputationAgentSummary,
     ReputationAgentSummaryResponse,
@@ -38,16 +37,17 @@ def list_reputation_ledger(
     if not target_agent:
         raise HTTPException(status_code=404, detail="Agent not found")
 
-    query = db.query(ReputationLedger).filter(ReputationLedger.agent_id == target_agent.id)
+    # Legacy route name: serve the append-only reputation_events as the ledger source of truth.
+    query = db.query(ReputationEvent).filter(ReputationEvent.agent_id == target_agent.id)
     total = query.count()
-    entries = query.order_by(ReputationLedger.created_at.desc()).offset(offset).limit(limit).all()
+    entries = query.order_by(ReputationEvent.created_at.desc()).offset(offset).limit(limit).all()
     items = [
         ReputationLedgerEntry(
             agent_id=target_agent.agent_id,
-            delta=entry.delta,
-            reason=entry.reason,
-            ref_type=entry.ref_type,
-            ref_id=entry.ref_id,
+            delta=entry.delta_points,
+            reason=entry.source,
+            ref_type=entry.ref_type or "-",
+            ref_id=entry.ref_id or "-",
             created_at=entry.created_at,
         )
         for entry in entries
