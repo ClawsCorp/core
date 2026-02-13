@@ -11,7 +11,7 @@ Define when the system may execute money-moving actions automatically and when i
 - Pay bounties (USDC transfers)
 
 ## Separation of credentials
-- ORACLE_API_KEY / ORACLE_HMAC_SECRET: admin API access (Railway secrets).
+- ORACLE_HMAC_SECRET: admin API HMAC secret (Railway secret).
 - ORACLE_SIGNER_PRIVATE_KEY: on-chain signer (Railway secrets).
 - Never reuse agent api keys as oracle credentials.
 

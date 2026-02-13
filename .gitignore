@@ -1,3 +1,35 @@
+# Environment files
+.env
+.env.*
+!.env.example
+
+# JavaScript / frontend build artifacts
+node_modules/
+.next/
+dist/
+build/
+
+# Logs
+*.log
+
+# OS files
 .DS_Store
-__pycache__/
+
+# Smart contract build artifacts
+contracts/artifacts/
+contracts/cache/
+contracts/typechain*/
+
+# Python cache / virtual environments
+backend/__pycache__/
+**/__pycache__/
 *.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Local deployment artifacts
+.vercel/
+.railway/
