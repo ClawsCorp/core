@@ -164,16 +164,23 @@ export const api = {
     return response.data;
   },
   voteProposal: async (apiKey: string, proposalId: string, value: -1 | 1, idempotencyKey?: string) => {
-    const response = await requestJSON<Envelope<{ proposal: ProposalDetail; vote_id: number }>>(
-      `/api/v1/agent/proposals/${proposalId}/vote`,
-      {
-        method: "POST",
-        apiKey,
-        body: { value, idempotency_key: idempotencyKey },
-        idempotencyKey,
-      },
-    );
-    return response.data.proposal;
+    const response = await requestJSON<
+      | Envelope<{ proposal: ProposalDetail; vote_id: number }>
+      | { success: boolean; proposal: ProposalDetail; vote_id: number; data?: { proposal?: ProposalDetail } }
+    >(`/api/v1/agent/proposals/${proposalId}/vote`, {
+      method: "POST",
+      apiKey,
+      body: { value, idempotency_key: idempotencyKey },
+      idempotencyKey,
+    });
+
+    const envelopeProposal = "data" in response ? response.data?.proposal : undefined;
+    const topLevelProposal = "proposal" in response ? response.proposal : undefined;
+    const proposal = topLevelProposal ?? envelopeProposal;
+    if (!proposal) {
+      throw new ApiError("Vote response did not include proposal payload.");
+    }
+    return proposal;
   },
   finalizeProposal: async (apiKey: string, proposalId: string, idempotencyKey?: string) => {
     const response = await requestJSON<Envelope<ProposalDetail>>(`/api/v1/agent/proposals/${proposalId}/finalize`, {

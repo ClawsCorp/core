@@ -17,6 +17,7 @@ export default function ProposalDetailPage({ params }: { params: { id: string } 
   const [proposal, setProposal] = useState<ProposalDetail | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionPending, setActionPending] = useState(false);
+  const [agentKey, setAgentKey] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -32,10 +33,10 @@ export default function ProposalDetailPage({ params }: { params: { id: string } 
   }, [params.id]);
 
   useEffect(() => {
+    setAgentKey(getAgentApiKey());
     void load();
   }, [load]);
 
-  const agentKey = typeof window === "undefined" ? "" : getAgentApiKey();
   const hasAgentKey = agentKey.length > 0;
 
   const canFinalize = useMemo(() => {
@@ -81,7 +82,7 @@ export default function ProposalDetailPage({ params }: { params: { id: string } 
 
   return (
     <PageContainer title={`Proposal ${params.id}`}>
-      <AgentKeyPanel />
+      <AgentKeyPanel onChange={setAgentKey} />
       {loading ? <Loading message="Loading proposal..." /> : null}
       {!loading && error ? <ErrorState message={error} onRetry={load} /> : null}
       {!loading && !error && proposal ? (

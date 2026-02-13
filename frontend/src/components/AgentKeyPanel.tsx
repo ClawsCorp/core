@@ -4,7 +4,11 @@ import { useEffect, useState } from "react";
 
 import { clearAgentApiKey, getAgentApiKey, setAgentApiKey } from "@/lib/agentKey";
 
-export function AgentKeyPanel() {
+interface AgentKeyPanelProps {
+  onChange?: (newKey: string) => void;
+}
+
+export function AgentKeyPanel({ onChange }: AgentKeyPanelProps) {
   const [value, setValue] = useState("");
   const [status, setStatus] = useState<"missing" | "set">("missing");
 
@@ -18,12 +22,14 @@ export function AgentKeyPanel() {
     const saved = setAgentApiKey(value);
     setValue(saved);
     setStatus(saved ? "set" : "missing");
+    onChange?.(saved);
   };
 
   const onClear = () => {
     clearAgentApiKey();
     setValue("");
     setStatus("missing");
+    onChange?.("");
   };
 
   return (
