@@ -33,15 +33,20 @@ class StatsResponse(BaseModel):
 def get_stats(response: Response, db: Session = Depends(get_db)) -> StatsResponse:
     settings = get_settings()
     total_agents = db.query(Agent).count()
+    # Cache for 30s; round the displayed server time to the same bucket so ETag matches payload.
+    now = datetime.now(timezone.utc)
+    time_bucket_seconds = 30
+    bucketed_timestamp = int(now.timestamp() // time_bucket_seconds) * time_bucket_seconds
+    bucketed_time = datetime.fromtimestamp(bucketed_timestamp, tz=timezone.utc)
     result = StatsResponse(
         success=True,
         data=StatsData(
             app_version=settings.app_version,
             total_registered_agents=total_agents,
-            server_time_utc=datetime.now(timezone.utc).isoformat(),
+            server_time_utc=bucketed_time.isoformat(),
         ),
     )
-    etag_seed = f"{result.data.app_version}:{result.data.total_registered_agents}"
+    etag_seed = f"{result.data.app_version}:{result.data.total_registered_agents}:{bucketed_timestamp}"
     response.headers["Cache-Control"] = "public, max-age=30"
     response.headers["ETag"] = f'W/"{etag_seed}"'
     return result

@@ -63,6 +63,14 @@ def list_agents(
         reputation_by_agent_id = {
             row.agent_id: max(int(row.total or 0), 0) for row in rows
         }
+    reputation_seed = 0
+    if agent_ids:
+        reputation_seed = int(
+            db.query(func.coalesce(func.max(ReputationLedger.id), 0))
+            .filter(ReputationLedger.agent_id.in_(agent_ids))
+            .scalar()
+            or 0
+        )
     items = [
         _public_agent(agent, reputation_by_agent_id.get(agent.id, 0))
         for agent in agents
@@ -77,7 +85,7 @@ def list_agents(
         ),
     )
     response.headers["Cache-Control"] = "public, max-age=60"
-    response.headers["ETag"] = f'W/"agents:{offset}:{limit}:{total}"'
+    response.headers["ETag"] = f'W/"agents:{offset}:{limit}:{total}:{reputation_seed}"'
     return result
 
 
@@ -96,9 +104,15 @@ def get_agent(
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     reputation_points = get_agent_reputation(db, agent.id)
+    reputation_seed = int(
+        db.query(func.coalesce(func.max(ReputationLedger.id), 0))
+        .filter(ReputationLedger.agent_id == agent.id)
+        .scalar()
+        or 0
+    )
     result = PublicAgentResponse(success=True, data=_public_agent(agent, reputation_points))
     response.headers["Cache-Control"] = "public, max-age=60"
-    response.headers["ETag"] = f'W/"agent:{agent.agent_id}:{int(agent.created_at.timestamp())}"'
+    response.headers["ETag"] = f'W/"agent:{agent.agent_id}:{int(agent.created_at.timestamp())}:{reputation_seed}"'
     return result
 
 
