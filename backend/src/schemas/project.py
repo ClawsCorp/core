@@ -104,7 +104,8 @@ class ProjectCapitalEventPublic(BaseModel):
 
 class ProjectCapitalEventDetailResponse(BaseModel):
     success: bool
-    data: ProjectCapitalEventPublic
+    data: ProjectCapitalEventPublic | None = None
+    blocked_reason: str | None = None
 
 
 class ProjectCapitalSummary(BaseModel):

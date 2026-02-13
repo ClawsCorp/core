@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from src.api.v1.dependencies import require_oracle_hmac
 from src.core.audit import record_audit
+from src.core.config import get_settings
 from src.core.database import get_db
 from src.core.db_utils import insert_or_get_by_unique
 from src.models.project import Project
@@ -24,6 +25,7 @@ from src.schemas.oracle_projects import (
 from src.schemas.project import ProjectCapitalEventCreateRequest, ProjectCapitalEventDetailResponse, ProjectCapitalEventPublic
 from src.schemas.project import ProjectCapitalReconciliationReportPublic
 from src.services.blockchain import BlockchainConfigError, BlockchainReadError, get_usdc_balance_micro_usdc
+from src.services.project_capital import get_latest_project_capital_reconciliation, is_reconciliation_fresh
 
 router = APIRouter(prefix="/api/v1/oracle", tags=["oracle-project-capital"])
 
@@ -50,6 +52,35 @@ async def create_project_capital_event(
     request_id = request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID") or str(uuid4())
     body_hash = request.state.body_hash
 
+    # Fail-closed: any project capital outflow requires a fresh strict-ready reconciliation
+    # for the project's treasury anchor. This reduces the risk of drifting the ledger away
+    # from on-chain reality before money-moving actions.
+    if payload.delta_micro_usdc < 0:
+        blocked_reason = _ensure_project_capital_outflow_reconciliation_gate(db, project.id)
+        if blocked_reason is not None:
+            compact_error_hint = (
+                f"br={blocked_reason};"
+                f"p={project.project_id};"
+                f"idem={payload.idempotency_key};"
+                f"d={payload.delta_micro_usdc};"
+                f"src={payload.source}"
+            )
+            _record_oracle_audit(
+                request,
+                db,
+                body_hash,
+                request_id,
+                payload.idempotency_key,
+                error_hint=compact_error_hint,
+                commit=False,
+            )
+            db.commit()
+            return ProjectCapitalEventDetailResponse(
+                success=False,
+                data=None,
+                blocked_reason=blocked_reason,
+            )
+
     event = ProjectCapitalEvent(
         event_id=payload.event_id or _generate_event_id(db),
         idempotency_key=payload.idempotency_key,
@@ -69,7 +100,7 @@ async def create_project_capital_event(
     _record_oracle_audit(request, db, body_hash, request_id, payload.idempotency_key, commit=False)
     db.commit()
     db.refresh(event)
-    return ProjectCapitalEventDetailResponse(success=True, data=_public(project.project_id, event))
+    return ProjectCapitalEventDetailResponse(success=True, data=_public(project.project_id, event), blocked_reason=None)
 
 
 @router.post("/projects/{project_id}/treasury", response_model=ProjectTreasurySetResponse)
@@ -214,6 +245,7 @@ def _record_oracle_audit(
     body_hash: str,
     request_id: str,
     idempotency_key: str,
+    error_hint: str | None = None,
     commit: bool = True,
 ) -> None:
     signature_status = getattr(request.state, "signature_status", "invalid")
@@ -227,8 +259,22 @@ def _record_oracle_audit(
         body_hash=body_hash,
         signature_status=signature_status,
         request_id=request_id,
+        error_hint=error_hint,
         commit=commit,
     )
+
+
+def _ensure_project_capital_outflow_reconciliation_gate(db: Session, project_db_id: int) -> str | None:
+    latest = get_latest_project_capital_reconciliation(db, project_db_id)
+    if latest is None:
+        return "project_capital_reconciliation_missing"
+    if not latest.ready or latest.delta_micro_usdc != 0:
+        return "project_capital_not_reconciled"
+
+    settings = get_settings()
+    if not is_reconciliation_fresh(latest, settings.project_capital_reconciliation_max_age_seconds):
+        return "project_capital_reconciliation_stale"
+    return None
 
 
 def _public(project_id: str, event: ProjectCapitalEvent) -> ProjectCapitalEventPublic:
