@@ -311,6 +311,10 @@ async def mark_paid(
             status_code=400, detail="Bounty is not eligible for payout."
         )
 
+    mark_paid_idempotency_key = f"mark_paid:bounty:{bounty.bounty_id}"
+    expense_idempotency_key = f"expense:bounty_paid:{bounty.bounty_id}"
+    capital_idempotency_key = f"cap:bounty_paid:{bounty.bounty_id}"
+
     blocked_reason = _ensure_bounty_paid_capital_outflow(db, bounty, payload.paid_tx_hash)
     if blocked_reason is not None:
         _record_oracle_audit(
@@ -318,8 +322,16 @@ async def mark_paid(
             db,
             body_hash,
             request_id,
-            idempotency_key,
-            error_hint=blocked_reason,
+            idempotency_key or mark_paid_idempotency_key,
+            tx_hash=payload.paid_tx_hash,
+            error_hint=(
+                f"blocked_reason={blocked_reason};"
+                f"bounty_id={bounty.bounty_id};"
+                f"project_id={row.project_id or 'none'};"
+                f"funding_source={bounty.funding_source.value};"
+                f"expense_idempotency_key={expense_idempotency_key};"
+                f"capital_idempotency_key={capital_idempotency_key}"
+            ),
         )
         return BountyMarkPaidResponse(
             success=False,
@@ -348,7 +360,22 @@ async def mark_paid(
             note=note,
         )
 
-    _record_oracle_audit(request, db, body_hash, request_id, idempotency_key)
+    _record_oracle_audit(
+        request,
+        db,
+        body_hash,
+        request_id,
+        idempotency_key or mark_paid_idempotency_key,
+        tx_hash=bounty.paid_tx_hash,
+        error_hint=(
+            f"blocked_reason=null;"
+            f"bounty_id={bounty.bounty_id};"
+            f"project_id={row.project_id or 'none'};"
+            f"funding_source={bounty.funding_source.value};"
+            f"expense_idempotency_key={expense_idempotency_key};"
+            f"capital_idempotency_key={capital_idempotency_key}"
+        ),
+    )
 
     return BountyMarkPaidResponse(
         success=True,
@@ -387,6 +414,7 @@ def _record_oracle_audit(
     body_hash: str,
     request_id: str,
     idempotency_key: str | None,
+    tx_hash: str | None = None,
     error_hint: str | None = None,
 ) -> None:
     signature_status = getattr(request.state, "signature_status", "invalid")
@@ -400,6 +428,7 @@ def _record_oracle_audit(
         body_hash=body_hash,
         signature_status=signature_status,
         request_id=request_id,
+        tx_hash=tx_hash,
         error_hint=error_hint,
     )
 
