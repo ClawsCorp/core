@@ -30,6 +30,8 @@ Global flag:
 ```bash
 PYTHONPATH=src python -m oracle_runner reconcile --month 202601
 PYTHONPATH=src python -m oracle_runner reconcile-project-capital --project-id proj_...
+PYTHONPATH=src python -m oracle_runner evaluate-bounty-eligibility --bounty-id bty_... --payload /path/eligibility.json
+PYTHONPATH=src python -m oracle_runner mark-bounty-paid --bounty-id bty_... --paid-tx-hash 0x...
 PYTHONPATH=src python -m oracle_runner create-distribution --month 202601
 PYTHONPATH=src python -m oracle_runner execute-distribution --month 202601 --payload /path/execute.json
 PYTHONPATH=src python -m oracle_runner confirm-payout --month 202601 [--tx-hash 0x...]
@@ -37,6 +39,8 @@ PYTHONPATH=src python -m oracle_runner sync-payout --month 202601 [--tx-hash 0x.
 PYTHONPATH=src python -m oracle_runner run-month --month 202601 --execute-payload /path/execute.json
 PYTHONPATH=src python -m oracle_runner --json reconcile --month 202601
 PYTHONPATH=src python -m oracle_runner --json reconcile-project-capital --project-id proj_...
+PYTHONPATH=src python -m oracle_runner --json evaluate-bounty-eligibility --bounty-id bty_... --payload /path/eligibility.json
+PYTHONPATH=src python -m oracle_runner --json mark-bounty-paid --bounty-id bty_... --paid-tx-hash 0x...
 ```
 
 `run-month` always prints exactly one JSON summary object to stdout (pipeline-friendly).

@@ -24,6 +24,8 @@ class _FakeClient:
                 "blocked_reason": None,
                 "computed_at": "2026-01-01T00:00:00Z",
             },
+            "/api/v1/bounties/bty_123/evaluate-eligibility": {"status": "eligible_for_payout", "reasons": None},
+            "/api/v1/bounties/bty_123/mark-paid": {"status": "paid", "blocked_reason": None},
         }
 
     def post(self, path: str, *, body_bytes: bytes, idempotency_key: str | None = None):
@@ -108,3 +110,38 @@ def test_reconcile_project_capital_without_json_writes_human_summary_to_stderr(m
     assert captured.out.strip() == ""
     assert "ready=True" in captured.err
     assert "delta_micro_usdc=0" in captured.err
+
+
+def test_evaluate_bounty_eligibility_json_flag(monkeypatch, capsys, tmp_path: Path) -> None:
+    _setup_fake_runner(monkeypatch)
+    payload = tmp_path / "elig.json"
+    payload.write_text(
+        json.dumps(
+            {
+                "pr_url": "https://example.com/pr/1",
+                "merged": True,
+                "merge_sha": "deadbeef",
+                "required_approvals": 1,
+                "required_checks": [{"name": "backend", "status": "success"}],
+            }
+        )
+    )
+
+    exit_code = cli.run(["evaluate-bounty-eligibility", "--bounty-id", "bty_123", "--payload", str(payload), "--json"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    data = json.loads(captured.out.strip())
+    assert data["status"] == "eligible_for_payout"
+    assert captured.err.strip() == ""
+
+
+def test_mark_bounty_paid_without_json_writes_human_summary_to_stderr(monkeypatch, capsys) -> None:
+    _setup_fake_runner(monkeypatch)
+
+    exit_code = cli.run(["mark-bounty-paid", "--bounty-id", "bty_123", "--paid-tx-hash", "0xabc"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.out.strip() == ""
+    assert "status=paid" in captured.err
