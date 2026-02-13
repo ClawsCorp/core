@@ -13,7 +13,9 @@ from src.core.database import get_db
 from src.core.reputation import get_agent_reputation
 from src.core.security import api_key_last4, generate_agent_api_key, hash_api_key, hash_body
 from src.models.agent import Agent
-from src.models.reputation_ledger import ReputationLedger
+from src.schemas.reputation import ReputationEventCreateRequest
+from src.services.reputation_ingestion import ingest_reputation_event
+from src.models.reputation_event import ReputationEvent
 from src.schemas.agents import (
     AgentRegisterRequest,
     AgentRegisterResponse,
@@ -51,11 +53,11 @@ def list_agents(
     if agent_ids:
         rows = (
             db.query(
-                ReputationLedger.agent_id,
-                func.coalesce(func.sum(ReputationLedger.delta), 0).label("total"),
+                ReputationEvent.agent_id,
+                func.coalesce(func.sum(ReputationEvent.delta_points), 0).label("total"),
             )
-            .filter(ReputationLedger.agent_id.in_(agent_ids))
-            .group_by(ReputationLedger.agent_id)
+            .filter(ReputationEvent.agent_id.in_(agent_ids))
+            .group_by(ReputationEvent.agent_id)
             .all()
         )
         reputation_by_agent_id = {
@@ -124,15 +126,20 @@ async def register_agent(
     # SQLAlchemy sessions auto-begin a transaction on first DB interaction (e.g. `_generate_agent_id`).
     # Using `with db.begin()` here can raise `InvalidRequestError: A transaction is already begun`.
     db.add(agent)
-    db.flush()  # assign `agent.id` for the bootstrap ledger row
-    db.add(
-        ReputationLedger(
-            agent_id=agent.id,
-            delta=100,
-            reason="bootstrap",
+    db.flush()  # assign `agent.id` for the bootstrap reputation event
+
+    ingest_reputation_event(
+        db,
+        ReputationEventCreateRequest(
+            event_id=str(uuid4()),
+            idempotency_key=f"rep:bootstrap:{agent.agent_id}",
+            agent_id=agent.agent_id,
+            delta_points=100,
+            source="bootstrap",
             ref_type="agent",
             ref_id=agent.agent_id,
-        )
+            note=None,
+        ),
     )
     db.commit()
     db.refresh(agent)
