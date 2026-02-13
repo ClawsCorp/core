@@ -74,6 +74,7 @@ def test_agent_auth_missing_key_is_audited(_db: sessionmaker[Session]) -> None:
         audit = _latest_agent_audit(db)
         assert audit is not None
         assert audit.path == "/agent-test"
+        assert audit.signature_status == "none"
         assert audit.error_hint == "missing_agent_api_key"
 
 
@@ -87,6 +88,7 @@ def test_agent_auth_malformed_key_is_audited(_db: sessionmaker[Session]) -> None
     with _db() as db:
         audit = _latest_agent_audit(db)
         assert audit is not None
+        assert audit.signature_status == "none"
         assert audit.error_hint == "invalid_agent_api_key_format"
 
 
@@ -104,6 +106,7 @@ def test_agent_auth_unknown_agent_is_audited(_db: sessionmaker[Session]) -> None
     with _db() as db:
         audit = _latest_agent_audit(db)
         assert audit is not None
+        assert audit.signature_status == "none"
         assert audit.agent_id == "ag_doesnotexist"
         assert audit.error_hint == "invalid_or_revoked_agent"
 
@@ -139,6 +142,7 @@ def test_agent_auth_wrong_secret_is_audited(_db: sessionmaker[Session]) -> None:
     with _db() as db:
         audit = _latest_agent_audit(db)
         assert audit is not None
+        assert audit.signature_status == "none"
         assert audit.agent_id == agent_id
         assert audit.error_hint == "invalid_agent_api_key_hash"
 
