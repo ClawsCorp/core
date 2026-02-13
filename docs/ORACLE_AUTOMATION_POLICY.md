@@ -26,6 +26,7 @@ Behavior:
 - Reusing `X-Request-Id` is rejected as replay (`409`).
 - `X-Request-Id` is part of the signed payload; changing only request_id invalidates the signature (anti-replay within TTL).
 - All oracle requests (accepted or rejected) must produce an `audit_logs` row with `signature_status` (`ok|ok_legacy|invalid|stale|replay`, where `ok_legacy` is optional migration mode).
+- Legacy compatibility toggle: `ORACLE_ACCEPT_LEGACY_SIGNATURES=false` by default. Set to `true` only for controlled migration windows, then return to `false` (v2-only fail-closed mode).
 
 ## Default Mode (MVP)
 - Eligibility can be automated.

@@ -106,9 +106,9 @@ def _build_signed_request(secret: str, request_id: str, payload: dict[str, objec
     signature_payload = build_oracle_hmac_v2_payload(
         request_timestamp,
         request_id,
+        "POST",
+        ORACLE_PATH,
         body_hash,
-        method="POST",
-        path=ORACLE_PATH,
     )
     signature = _sign(secret, signature_payload)
     return body, {

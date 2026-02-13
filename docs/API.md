@@ -885,7 +885,7 @@ Audit:
 
 - Each request writes an append-only `audit_logs` row with:
   - `actor_type="oracle"`
-  - `signature_status` (`ok`/`invalid`/`stale`/`replay`)
+  - `signature_status` (`ok`/`ok_legacy`/`invalid`/`stale`/`replay`)
   - `body_hash`
   - `idempotency_key`
   - `tx_hash` (when submitted)
@@ -946,7 +946,7 @@ Audit:
 
 - Each request writes append-only `audit_logs` row with oracle route metadata:
   - `actor_type="oracle"`
-  - `signature_status` (`ok`/`invalid`/`stale`/`replay`)
+  - `signature_status` (`ok`/`ok_legacy`/`invalid`/`stale`/`replay`)
   - `body_hash`
   - `idempotency_key`
   - `tx_hash` (when submitted)
