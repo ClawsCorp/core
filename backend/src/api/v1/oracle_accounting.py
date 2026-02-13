@@ -42,26 +42,30 @@ async def create_revenue_event(
     request_id = request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID") or str(uuid4())
     body_hash = request.state.body_hash
 
-    project = _project_by_public_id(db, payload.project_id)
-    event = RevenueEvent(
-        event_id=_generate_event_id(db, RevenueEvent, "rev_"),
-        profit_month_id=payload.profit_month_id,
-        project_id=project.id if project else None,
-        amount_micro_usdc=payload.amount_micro_usdc,
-        tx_hash=payload.tx_hash,
-        source=payload.source,
-        idempotency_key=payload.idempotency_key,
-        evidence_url=payload.evidence_url,
-    )
-    event, _ = insert_or_get_by_unique(
-        db,
-        instance=event,
-        model=RevenueEvent,
-        unique_filter={"idempotency_key": payload.idempotency_key},
-    )
-    _record_oracle_audit(request, db, body_hash, request_id, payload.idempotency_key, commit=False)
-    db.commit()
-    db.refresh(event)
+    try:
+        project = _project_by_public_id(db, payload.project_id)
+        event = RevenueEvent(
+            event_id=_generate_event_id(db, RevenueEvent, "rev_"),
+            profit_month_id=payload.profit_month_id,
+            project_id=project.id if project else None,
+            amount_micro_usdc=payload.amount_micro_usdc,
+            tx_hash=payload.tx_hash,
+            source=payload.source,
+            idempotency_key=payload.idempotency_key,
+            evidence_url=payload.evidence_url,
+        )
+        event, _ = insert_or_get_by_unique(
+            db,
+            instance=event,
+            model=RevenueEvent,
+            unique_filter={"idempotency_key": payload.idempotency_key},
+        )
+        _record_oracle_audit(request, db, body_hash, request_id, payload.idempotency_key, commit=False)
+        db.commit()
+        db.refresh(event)
+    except Exception:
+        db.rollback()
+        raise
 
     return RevenueEventDetailResponse(success=True, data=_revenue_public(db, event))
 
@@ -79,26 +83,30 @@ async def create_expense_event(
     request_id = request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID") or str(uuid4())
     body_hash = request.state.body_hash
 
-    project = _project_by_public_id(db, payload.project_id)
-    event = ExpenseEvent(
-        event_id=_generate_event_id(db, ExpenseEvent, "exp_"),
-        profit_month_id=payload.profit_month_id,
-        project_id=project.id if project else None,
-        amount_micro_usdc=payload.amount_micro_usdc,
-        tx_hash=payload.tx_hash,
-        category=payload.category,
-        idempotency_key=payload.idempotency_key,
-        evidence_url=payload.evidence_url,
-    )
-    event, _ = insert_or_get_by_unique(
-        db,
-        instance=event,
-        model=ExpenseEvent,
-        unique_filter={"idempotency_key": payload.idempotency_key},
-    )
-    _record_oracle_audit(request, db, body_hash, request_id, payload.idempotency_key, commit=False)
-    db.commit()
-    db.refresh(event)
+    try:
+        project = _project_by_public_id(db, payload.project_id)
+        event = ExpenseEvent(
+            event_id=_generate_event_id(db, ExpenseEvent, "exp_"),
+            profit_month_id=payload.profit_month_id,
+            project_id=project.id if project else None,
+            amount_micro_usdc=payload.amount_micro_usdc,
+            tx_hash=payload.tx_hash,
+            category=payload.category,
+            idempotency_key=payload.idempotency_key,
+            evidence_url=payload.evidence_url,
+        )
+        event, _ = insert_or_get_by_unique(
+            db,
+            instance=event,
+            model=ExpenseEvent,
+            unique_filter={"idempotency_key": payload.idempotency_key},
+        )
+        _record_oracle_audit(request, db, body_hash, request_id, payload.idempotency_key, commit=False)
+        db.commit()
+        db.refresh(event)
+    except Exception:
+        db.rollback()
+        raise
 
     return ExpenseEventDetailResponse(success=True, data=_expense_public(db, event))
 
