@@ -36,6 +36,8 @@ def _print_json(data: dict[str, Any]) -> None:
 
 
 def _print_progress(stage: str, status: str, detail: str | None = None) -> None:
+    # NOTE: `stage` and `status` are part of the stderr output contract (see docs).
+    # `detail` is best-effort diagnostic text only and may change over time.
     suffix = f" detail={detail}" if detail else ""
     print(f"stage={stage} status={status}{suffix}", file=sys.stderr)
 
