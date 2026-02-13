@@ -124,6 +124,11 @@ def _derive_execute_idempotency_key(month: str, payload: dict[str, Any]) -> str:
     digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
     return f"execute_distribution:{month}:{digest}"
 
+def _derive_idempotency_key(prefix: str, payload: dict[str, Any]) -> str:
+    canonical = json.dumps(payload, separators=(",", ":"), ensure_ascii=True, sort_keys=True)
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return f"{prefix}:{digest}"
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="oracle_runner", description="Oracle month orchestration runner")
@@ -140,6 +145,34 @@ def build_parser() -> argparse.ArgumentParser:
     )
     reconcile_project_capital.add_argument("--project-id", required=True)
     reconcile_project_capital.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
+
+    project_reconcile = subparsers.add_parser(
+        "project-reconcile",
+        help="Alias for reconcile-project-capital.",
+    )
+    project_reconcile.add_argument("--project-id", required=True)
+    project_reconcile.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
+
+    project_capital_event = subparsers.add_parser(
+        "project-capital-event",
+        help="Append a project capital ledger event (oracle HMAC protected).",
+    )
+    project_capital_event.add_argument("--project-id", required=True)
+    project_capital_event.add_argument("--delta-micro-usdc", required=True, type=int)
+    project_capital_event.add_argument("--source", required=True)
+    project_capital_event.add_argument("--profit-month-id")
+    project_capital_event.add_argument("--evidence-tx-hash")
+    project_capital_event.add_argument("--evidence-url")
+    project_capital_event.add_argument("--idempotency-key")
+    project_capital_event.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
+
+    run_project_month = subparsers.add_parser(
+        "run-project-month",
+        help="Project month orchestration (MVP): refresh project capital reconciliation and report readiness.",
+    )
+    run_project_month.add_argument("--project-id", required=True)
+    # run-project-month always prints a single JSON summary to stdout, regardless of --json.
+    run_project_month.add_argument("--json", action="store_true", help=argparse.SUPPRESS)
 
     evaluate_bounty = subparsers.add_parser(
         "evaluate-bounty-eligibility",
@@ -225,6 +258,78 @@ def run(argv: list[str] | None = None) -> int:
                 _print_json(data)
             else:
                 _print_fields(data, ["ready", "blocked_reason", "delta_micro_usdc", "onchain_balance_micro_usdc", "ledger_balance_micro_usdc", "computed_at"])
+            return 0
+
+        if args.command == "project-reconcile":
+            project_id = str(args.project_id).strip()
+            if not project_id:
+                raise OracleRunnerError("--project-id is required.")
+            data = _post_action(client, f"/api/v1/oracle/projects/{project_id}/capital/reconciliation", b"")
+            if json_mode:
+                _print_json(data)
+            else:
+                _print_fields(data, ["ready", "blocked_reason", "delta_micro_usdc", "onchain_balance_micro_usdc", "ledger_balance_micro_usdc", "computed_at"])
+            return 0
+
+        if args.command == "project-capital-event":
+            project_id = str(args.project_id).strip()
+            if not project_id:
+                raise OracleRunnerError("--project-id is required.")
+            source = str(args.source).strip()
+            if not source:
+                raise OracleRunnerError("--source is required.")
+
+            payload: dict[str, Any] = {
+                "project_id": project_id,
+                "delta_micro_usdc": int(args.delta_micro_usdc),
+                "source": source,
+                "idempotency_key": args.idempotency_key or "",
+                "profit_month_id": args.profit_month_id,
+                "evidence_tx_hash": args.evidence_tx_hash,
+                "evidence_url": args.evidence_url,
+            }
+            # Remove nulls to keep canonical key stable.
+            payload = {k: v for k, v in payload.items() if v is not None}
+            if not payload.get("idempotency_key"):
+                derived = dict(payload)
+                derived.pop("idempotency_key", None)
+                payload["idempotency_key"] = _derive_idempotency_key("project_capital_event", derived)
+
+            body_bytes = json.dumps(payload, separators=(",", ":"), ensure_ascii=True, sort_keys=True).encode("utf-8")
+            data = _post_action(client, "/api/v1/oracle/project-capital-events", body_bytes, idempotency_key=payload["idempotency_key"])
+            if json_mode:
+                _print_json(data)
+            else:
+                # API returns the public event shape under data.
+                _print_fields(data, ["event_id", "project_id", "delta_micro_usdc", "source", "profit_month_id"])
+            return 0
+
+        if args.command == "run-project-month":
+            project_id = str(args.project_id).strip()
+            if not project_id:
+                raise OracleRunnerError("--project-id is required.")
+
+            summary: dict[str, Any] = {"project_id": project_id, "success": False}
+            try:
+                _print_progress("reconcile_project_capital", "start")
+                rec = _post_action(client, f"/api/v1/oracle/projects/{project_id}/capital/reconciliation", b"")
+                summary["reconciliation"] = rec
+            except OracleRunnerError as exc:
+                _print_progress("reconcile_project_capital", "error", str(exc))
+                summary["failed_step"] = "reconcile_project_capital"
+                summary["error"] = str(exc)
+                _print_json(summary)
+                return 1
+
+            if not rec.get("ready"):
+                _print_progress("reconcile_project_capital", "blocked")
+                summary["failed_step"] = "reconcile_project_capital"
+                _print_json(summary)
+                return 2
+
+            _print_progress("reconcile_project_capital", "ok")
+            summary["success"] = True
+            _print_json(summary)
             return 0
 
         if args.command == "evaluate-bounty-eligibility":
