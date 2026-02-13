@@ -41,6 +41,7 @@ async def create_revenue_event(
 
     request_id = request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID") or str(uuid4())
     body_hash = request.state.body_hash
+    transaction = db.begin()
 
     try:
         project = _project_by_public_id(db, payload.project_id)
@@ -61,10 +62,10 @@ async def create_revenue_event(
             unique_filter={"idempotency_key": payload.idempotency_key},
         )
         _record_oracle_audit(request, db, body_hash, request_id, payload.idempotency_key, commit=False)
-        db.commit()
+        transaction.commit()
         db.refresh(event)
     except Exception:
-        db.rollback()
+        transaction.rollback()
         raise
 
     return RevenueEventDetailResponse(success=True, data=_revenue_public(db, event))
@@ -82,6 +83,7 @@ async def create_expense_event(
 
     request_id = request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID") or str(uuid4())
     body_hash = request.state.body_hash
+    transaction = db.begin()
 
     try:
         project = _project_by_public_id(db, payload.project_id)
@@ -102,10 +104,10 @@ async def create_expense_event(
             unique_filter={"idempotency_key": payload.idempotency_key},
         )
         _record_oracle_audit(request, db, body_hash, request_id, payload.idempotency_key, commit=False)
-        db.commit()
+        transaction.commit()
         db.refresh(event)
     except Exception:
-        db.rollback()
+        transaction.rollback()
         raise
 
     return ExpenseEventDetailResponse(success=True, data=_expense_public(db, event))
