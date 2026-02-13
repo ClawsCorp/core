@@ -1,7 +1,7 @@
 """add bounty funding source policy
 
 Revision ID: 0018_bounty_funding_source
-Revises: 0017_project_activation_and_capital
+Revises: 0017_project_activation_capital
 Create Date: 2026-02-13 00:00:00.000000
 
 """
@@ -14,7 +14,7 @@ from sqlalchemy.dialects import postgresql
 
 
 revision = "0018_bounty_funding_source"
-down_revision = "0017_project_activation_and_capital"
+down_revision = "0017_project_activation_capital"
 branch_labels = None
 depends_on = None
 
