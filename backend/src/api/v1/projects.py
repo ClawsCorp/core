@@ -86,12 +86,15 @@ def list_projects(
     total = query.count()
     projects = query.order_by(Project.created_at.desc()).offset(offset).limit(limit).all()
     items = [_project_summary(project) for project in projects]
+    page_max_updated_at = 0
+    if projects:
+        page_max_updated_at = max(int(project.updated_at.timestamp()) for project in projects)
     result = ProjectListResponse(
         success=True,
         data=ProjectListData(items=items, limit=limit, offset=offset, total=total),
     )
     response.headers["Cache-Control"] = "public, max-age=60"
-    response.headers["ETag"] = f'W/"projects:{status or "all"}:{offset}:{limit}:{total}"'
+    response.headers["ETag"] = f'W/"projects:{status or "all"}:{offset}:{limit}:{total}:{page_max_updated_at}"'
     return result
 
 
@@ -109,9 +112,13 @@ def get_project_by_slug(
     project = db.query(Project).filter(Project.slug == slug).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    result = ProjectDetailResponse(success=True, data=_project_detail(db, project))
+    detail = _project_detail(db, project)
+    result = ProjectDetailResponse(success=True, data=detail)
     response.headers["Cache-Control"] = "public, max-age=60"
-    response.headers["ETag"] = f'W/"project-slug:{project.slug}:{int(project.updated_at.timestamp())}"'
+    cap_recon_ts = 0
+    if detail.capital_reconciliation is not None:
+        cap_recon_ts = int(detail.capital_reconciliation.computed_at.timestamp())
+    response.headers["ETag"] = f'W/"project-slug:{project.slug}:{int(project.updated_at.timestamp())}:{cap_recon_ts}"'
     return result
 
 
@@ -175,9 +182,13 @@ def get_project(
     project = db.query(Project).filter(Project.project_id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    result = ProjectDetailResponse(success=True, data=_project_detail(db, project))
+    detail = _project_detail(db, project)
+    result = ProjectDetailResponse(success=True, data=detail)
     response.headers["Cache-Control"] = "public, max-age=60"
-    response.headers["ETag"] = f'W/"project:{project.project_id}:{int(project.updated_at.timestamp())}"'
+    cap_recon_ts = 0
+    if detail.capital_reconciliation is not None:
+        cap_recon_ts = int(detail.capital_reconciliation.computed_at.timestamp())
+    response.headers["ETag"] = f'W/"project:{project.project_id}:{int(project.updated_at.timestamp())}:{cap_recon_ts}"'
     return result
 
 

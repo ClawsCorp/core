@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import hashlib
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
@@ -88,8 +89,16 @@ def list_settlement_months(
         success=True,
         data=SettlementMonthsData(items=items, limit=limit, offset=offset, total=len(months)),
     )
+    # ETag should reflect the actual page contents (not just the total).
+    etag_payload = "|".join(
+        [
+            f"{i.profit_month_id}:{i.ready}:{i.delta_micro_usdc}:{i.payout_status}:{i.payout_tx_hash}:{i.settlement_computed_at}:{i.reconciliation_computed_at}:{i.payout_executed_at}"
+            for i in items
+        ]
+    ).encode("utf-8", errors="replace")
+    etag_hash = hashlib.sha256(etag_payload).hexdigest()[:16]
     response.headers["Cache-Control"] = "public, max-age=30"
-    response.headers["ETag"] = f'W/"settlement-months:{offset}:{limit}:{len(months)}"'
+    response.headers["ETag"] = f'W/"settlement-months:{offset}:{limit}:{len(months)}:{etag_hash}"'
     return result
 
 
@@ -118,9 +127,15 @@ def get_settlement_status(
             ready=bool(reconciliation.ready) if reconciliation else False,
         ),
     )
-    etag_part = int(settlement.computed_at.timestamp()) if settlement else 0
+    settlement_ts = int(settlement.computed_at.timestamp()) if settlement else 0
+    reconciliation_ts = int(reconciliation.computed_at.timestamp()) if reconciliation else 0
+    payout_ts = int(payout.created_at.timestamp()) if payout else 0
+    # Include key fields that can change without settlement recompute.
+    payout_part = f"{getattr(payout, 'status', None)}:{getattr(payout, 'tx_hash', None)}"
+    recon_part = f"{getattr(reconciliation, 'ready', None)}:{getattr(reconciliation, 'delta_micro_usdc', None)}"
+    etag_seed = f"{profit_month_id}:{max(settlement_ts, reconciliation_ts, payout_ts)}:{payout_part}:{recon_part}"
     response.headers["Cache-Control"] = "public, max-age=30"
-    response.headers["ETag"] = f'W/"settlement:{profit_month_id}:{etag_part}"'
+    response.headers["ETag"] = f'W/"settlement:{etag_seed}"'
     return result
 
 
