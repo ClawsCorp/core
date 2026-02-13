@@ -169,7 +169,8 @@ def create_distribution(
 
     report = _latest_reconciliation(db, profit_month_id)
     if report is None:
-        _record_oracle_audit(request, db)
+        idempotency_key = _distribution_idempotency_key(profit_month_id, 0)
+        _record_oracle_audit(request, db, idempotency_key=idempotency_key)
         return DistributionCreateResponse(
             success=False,
             data={
@@ -177,11 +178,14 @@ def create_distribution(
                 "status": "blocked",
                 "tx_hash": None,
                 "blocked_reason": "reconciliation_missing",
-                "idempotency_key": _distribution_idempotency_key(profit_month_id, 0),
+                "idempotency_key": idempotency_key,
             },
         )
     if not report.ready:
-        _record_oracle_audit(request, db)
+        idempotency_key = _distribution_idempotency_key(
+            profit_month_id, report.profit_sum_micro_usdc
+        )
+        _record_oracle_audit(request, db, idempotency_key=idempotency_key)
         return DistributionCreateResponse(
             success=False,
             data={
@@ -189,13 +193,14 @@ def create_distribution(
                 "status": "blocked",
                 "tx_hash": None,
                 "blocked_reason": "not_ready",
-                "idempotency_key": _distribution_idempotency_key(
-                    profit_month_id, report.profit_sum_micro_usdc
-                ),
+                "idempotency_key": idempotency_key,
             },
         )
     if report.profit_sum_micro_usdc <= 0:
-        _record_oracle_audit(request, db)
+        idempotency_key = _distribution_idempotency_key(
+            profit_month_id, report.profit_sum_micro_usdc
+        )
+        _record_oracle_audit(request, db, idempotency_key=idempotency_key)
         return DistributionCreateResponse(
             success=False,
             data={
@@ -203,9 +208,7 @@ def create_distribution(
                 "status": "blocked",
                 "tx_hash": None,
                 "blocked_reason": "profit_required",
-                "idempotency_key": _distribution_idempotency_key(
-                    profit_month_id, report.profit_sum_micro_usdc
-                ),
+                "idempotency_key": idempotency_key,
             },
         )
 
