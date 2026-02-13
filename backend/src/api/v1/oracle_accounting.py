@@ -5,12 +5,12 @@ import secrets
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from src.api.v1.dependencies import require_oracle_hmac
 from src.core.audit import record_audit
 from src.core.database import get_db
-from src.core.db_utils import insert_or_get_by_unique
 from src.models.expense_event import ExpenseEvent
 from src.models.project import Project
 from src.models.revenue_event import RevenueEvent
@@ -41,8 +41,6 @@ async def create_revenue_event(
 
     request_id = request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID") or str(uuid4())
     body_hash = request.state.body_hash
-    transaction = db.begin()
-
     try:
         project = _project_by_public_id(db, payload.project_id)
         event = RevenueEvent(
@@ -55,17 +53,22 @@ async def create_revenue_event(
             idempotency_key=payload.idempotency_key,
             evidence_url=payload.evidence_url,
         )
-        event, _ = insert_or_get_by_unique(
-            db,
-            instance=event,
-            model=RevenueEvent,
-            unique_filter={"idempotency_key": payload.idempotency_key},
-        )
+        db.add(event)
         _record_oracle_audit(request, db, body_hash, request_id, payload.idempotency_key, commit=False)
-        transaction.commit()
+        db.commit()
         db.refresh(event)
+    except IntegrityError:
+        db.rollback()
+        event = (
+            db.query(RevenueEvent)
+            .filter(RevenueEvent.idempotency_key == payload.idempotency_key)
+            .first()
+        )
+        if event is None:
+            raise
+        _record_oracle_audit(request, db, body_hash, request_id, payload.idempotency_key)
     except Exception:
-        transaction.rollback()
+        db.rollback()
         raise
 
     return RevenueEventDetailResponse(success=True, data=_revenue_public(db, event))
@@ -83,8 +86,6 @@ async def create_expense_event(
 
     request_id = request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID") or str(uuid4())
     body_hash = request.state.body_hash
-    transaction = db.begin()
-
     try:
         project = _project_by_public_id(db, payload.project_id)
         event = ExpenseEvent(
@@ -97,17 +98,22 @@ async def create_expense_event(
             idempotency_key=payload.idempotency_key,
             evidence_url=payload.evidence_url,
         )
-        event, _ = insert_or_get_by_unique(
-            db,
-            instance=event,
-            model=ExpenseEvent,
-            unique_filter={"idempotency_key": payload.idempotency_key},
-        )
+        db.add(event)
         _record_oracle_audit(request, db, body_hash, request_id, payload.idempotency_key, commit=False)
-        transaction.commit()
+        db.commit()
         db.refresh(event)
+    except IntegrityError:
+        db.rollback()
+        event = (
+            db.query(ExpenseEvent)
+            .filter(ExpenseEvent.idempotency_key == payload.idempotency_key)
+            .first()
+        )
+        if event is None:
+            raise
+        _record_oracle_audit(request, db, body_hash, request_id, payload.idempotency_key)
     except Exception:
-        transaction.rollback()
+        db.rollback()
         raise
 
     return ExpenseEventDetailResponse(success=True, data=_expense_public(db, event))
