@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from src.api.v1.dependencies import require_agent_auth, require_oracle_hmac
 from src.core.audit import record_audit
+from src.core.config import get_settings
 from src.core.database import get_db
 from src.core.db_utils import insert_or_get_by_unique
 from src.core.security import hash_body
@@ -17,7 +18,11 @@ from src.models.bounty import Bounty, BountyFundingSource, BountyStatus
 from src.models.expense_event import ExpenseEvent
 from src.models.project_capital_event import ProjectCapitalEvent
 from src.models.project import Project
-from src.services.project_capital import get_project_capital_balance_micro_usdc
+from src.services.project_capital import (
+    get_latest_project_capital_reconciliation,
+    get_project_capital_balance_micro_usdc,
+    is_reconciliation_fresh,
+)
 from src.services.reputation_hooks import emit_reputation_event
 
 from src.schemas.bounty import (
@@ -315,7 +320,9 @@ async def mark_paid(
     mark_paid_idempotency_key = f"mark_paid:bounty:{bounty.bounty_id}"
     expense_idempotency_key = f"expense:bounty_paid:{bounty.bounty_id}"
 
-    blocked_reason = _ensure_bounty_paid_capital_outflow(db, bounty, payload.paid_tx_hash)
+    blocked_reason = _ensure_project_capital_reconciliation_gate(db, bounty)
+    if blocked_reason is None:
+        blocked_reason = _ensure_bounty_paid_capital_outflow(db, bounty, payload.paid_tx_hash)
     if blocked_reason is not None:
         compact_error_hint = (
             f"br={blocked_reason};"
@@ -483,6 +490,28 @@ def _bounty_public(
         updated_at=bounty.updated_at,
     )
 
+
+
+def _ensure_project_capital_reconciliation_gate(db: Session, bounty: Bounty) -> str | None:
+    if bounty.project_id is None:
+        return None
+    if bounty.funding_source != BountyFundingSource.project_capital:
+        return None
+
+    latest_reconciliation = get_latest_project_capital_reconciliation(db, bounty.project_id)
+    if latest_reconciliation is None:
+        return "project_capital_reconciliation_missing"
+    if not latest_reconciliation.ready or latest_reconciliation.delta_micro_usdc != 0:
+        return "project_capital_not_reconciled"
+
+    settings = get_settings()
+    if not is_reconciliation_fresh(
+        latest_reconciliation,
+        settings.project_capital_reconciliation_max_age_seconds,
+    ):
+        return "project_capital_reconciliation_stale"
+
+    return None
 
 
 def _ensure_bounty_paid_capital_outflow(db: Session, bounty: Bounty, paid_tx_hash: str | None) -> str | None:

@@ -608,8 +608,11 @@ Funding policy (autonomy-first, fail-closed):
 - Every bounty exposes `funding_source` in public read payloads (`project_capital`, `project_revenue`, `platform_treasury`).
 - If bounty has a project, default `funding_source` is `project_capital`.
 - If bounty has no project (`project_id = null`), default `funding_source` is `platform_treasury`.
-- For project bounties funded by `project_capital`, payout attempts are blocked when capital balance is insufficient.
-- Blocked payout response is `success=false` with `blocked_reason="insufficient_project_capital"`.
+- For project bounties funded by `project_capital`, payout attempts are reconciliation-gated first:
+  - latest project capital reconciliation must exist, or `blocked_reason="project_capital_reconciliation_missing"`
+  - latest reconciliation must satisfy strict equality (`ready=true` and `delta_micro_usdc=0`), or `blocked_reason="project_capital_not_reconciled"`
+  - latest reconciliation must be fresh (`computed_at >= now - PROJECT_CAPITAL_RECONCILIATION_MAX_AGE_SECONDS`, default `3600`), or `blocked_reason="project_capital_reconciliation_stale"`
+- After passing the reconciliation gate, payout attempts are still blocked when capital balance is insufficient with `blocked_reason="insufficient_project_capital"`.
 - Every mark-paid attempt writes an audit log entry, including blocked outcomes (with `blocked_reason` captured in audit metadata).
 
 Request body:

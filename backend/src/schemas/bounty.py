@@ -49,6 +49,13 @@ class BountyMarkPaidRequest(BaseModel):
     paid_tx_hash: str = Field(..., min_length=1)
 
 
+class BountyMarkPaidBlockedReason(str, Enum):
+    insufficient_project_capital = "insufficient_project_capital"
+    project_capital_reconciliation_missing = "project_capital_reconciliation_missing"
+    project_capital_not_reconciled = "project_capital_not_reconciled"
+    project_capital_reconciliation_stale = "project_capital_reconciliation_stale"
+
+
 class BountyPublic(BaseModel):
     bounty_id: str
     project_id: str | None
@@ -87,7 +94,7 @@ class BountyDetailResponse(BaseModel):
 class BountyMarkPaidResponse(BaseModel):
     success: bool
     data: BountyPublic
-    blocked_reason: str | None = None
+    blocked_reason: BountyMarkPaidBlockedReason | None = None
 
 
 class BountyEligibilityResponse(BaseModel):

@@ -1,0 +1,292 @@
+from __future__ import annotations
+
+import hashlib
+import hmac
+import json
+import sys
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
+
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
+from src.core.config import get_settings
+from src.core.database import Base, get_db
+from src.core.security import build_oracle_hmac_v2_payload
+from src.main import app
+
+import src.models  # noqa: F401
+from src.api.v1 import bounties as bounties_api
+from src.models.audit_log import AuditLog
+from src.models.bounty import Bounty, BountyFundingSource, BountyStatus
+from src.models.expense_event import ExpenseEvent
+from src.models.project import Project, ProjectStatus
+from src.models.project_capital_event import ProjectCapitalEvent
+from src.models.project_capital_reconciliation_report import ProjectCapitalReconciliationReport
+
+ORACLE_SECRET = "test-oracle-secret"
+
+
+def _sign(secret: str, payload: str) -> str:
+    return hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _oracle_headers(path: str, body: bytes, request_id: str, *, idem: str) -> dict[str, str]:
+    timestamp = str(int(time.time()))
+    body_hash = hashlib.sha256(body).hexdigest()
+    payload = build_oracle_hmac_v2_payload(timestamp, request_id, "POST", path, body_hash)
+    return {
+        "Content-Type": "application/json",
+        "X-Request-Timestamp": timestamp,
+        "X-Request-Id": request_id,
+        "Idempotency-Key": idem,
+        "X-Signature": _sign(ORACLE_SECRET, payload),
+    }
+
+
+@pytest.fixture(autouse=True)
+def _isolate_settings_cache() -> None:
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
+@pytest.fixture()
+def _db() -> sessionmaker[Session]:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+    return session_local
+
+
+@pytest.fixture()
+def _client(_db: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    monkeypatch.setenv("ORACLE_HMAC_SECRET", ORACLE_SECRET)
+    monkeypatch.setenv("ORACLE_REQUEST_TTL_SECONDS", "300")
+    monkeypatch.setenv("ORACLE_CLOCK_SKEW_SECONDS", "5")
+    monkeypatch.setenv("ORACLE_ACCEPT_LEGACY_SIGNATURES", "false")
+    monkeypatch.setenv("PROJECT_CAPITAL_RECONCILIATION_MAX_AGE_SECONDS", "3600")
+
+    def _override_get_db():
+        db = _db()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = _override_get_db
+    client = TestClient(app, raise_server_exceptions=False)
+    try:
+        yield client
+    finally:
+        app.dependency_overrides.clear()
+
+
+def _seed_project_bounty(db: Session) -> Bounty:
+    project = Project(
+        project_id="prj_gate_1",
+        slug="gate-prj",
+        name="Gate Project",
+        status=ProjectStatus.active,
+    )
+    db.add(project)
+    db.flush()
+
+    bounty = Bounty(
+        bounty_id="bty_gate_1",
+        project_id=project.id,
+        funding_source=BountyFundingSource.project_capital,
+        title="Reconciliation gate",
+        description_md=None,
+        amount_micro_usdc=1_000_000,
+        status=BountyStatus.eligible_for_payout,
+    )
+    db.add(bounty)
+    db.commit()
+    return bounty
+
+
+def _insert_reconciliation(
+    db: Session,
+    *,
+    project_id: int,
+    ready: bool,
+    delta_micro_usdc: int | None,
+    computed_at: datetime,
+) -> None:
+    db.add(
+        ProjectCapitalReconciliationReport(
+            project_id=project_id,
+            treasury_address="0x" + "1" * 40,
+            ledger_balance_micro_usdc=10_000_000,
+            onchain_balance_micro_usdc=10_000_000,
+            delta_micro_usdc=delta_micro_usdc,
+            ready=ready,
+            blocked_reason=None if ready and delta_micro_usdc == 0 else "balance_mismatch",
+            computed_at=computed_at,
+        )
+    )
+    db.commit()
+
+
+def _call_mark_paid(client: TestClient, *, idem: str) -> tuple[int, dict[str, object]]:
+    path = "/api/v1/bounties/bty_gate_1/mark-paid"
+    body = json.dumps({"paid_tx_hash": "0x" + "a" * 64}, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    response = client.post(path, content=body, headers=_oracle_headers(path, body, f"req-{idem}", idem=idem))
+    return response.status_code, response.json()
+
+
+def _assert_blocked_side_effects(db: Session) -> None:
+    bounty = db.query(Bounty).filter(Bounty.bounty_id == "bty_gate_1").first()
+    assert bounty is not None
+    assert bounty.status == BountyStatus.eligible_for_payout
+
+    assert db.query(ExpenseEvent).count() == 0
+    assert db.query(ProjectCapitalEvent).count() == 0
+
+
+def _assert_latest_audit(db: Session, *, idem: str, blocked_reason: str) -> None:
+    audit = (
+        db.query(AuditLog)
+        .filter(AuditLog.path == "/api/v1/bounties/bty_gate_1/mark-paid")
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+    assert audit is not None
+    assert audit.idempotency_key == idem
+    assert audit.error_hint is not None
+    assert f"br={blocked_reason};" in audit.error_hint
+    assert len(audit.error_hint) <= 255
+
+
+def test_mark_paid_blocked_when_reconciliation_missing(
+    _client: TestClient,
+    _db: sessionmaker[Session],
+) -> None:
+    with _db() as db:
+        _seed_project_bounty(db)
+
+    status_code, data = _call_mark_paid(_client, idem="idem-missing-recon")
+    assert status_code == 200
+    assert data["success"] is False
+    assert data["blocked_reason"] == "project_capital_reconciliation_missing"
+
+    with _db() as db:
+        _assert_blocked_side_effects(db)
+        _assert_latest_audit(
+            db,
+            idem="idem-missing-recon",
+            blocked_reason="project_capital_reconciliation_missing",
+        )
+
+
+def test_mark_paid_blocked_when_reconciliation_not_ready(
+    _client: TestClient,
+    _db: sessionmaker[Session],
+) -> None:
+    with _db() as db:
+        bounty = _seed_project_bounty(db)
+        _insert_reconciliation(
+            db,
+            project_id=bounty.project_id,
+            ready=False,
+            delta_micro_usdc=50,
+            computed_at=datetime.now(timezone.utc),
+        )
+
+    status_code, data = _call_mark_paid(_client, idem="idem-not-ready")
+    assert status_code == 200
+    assert data["success"] is False
+    assert data["blocked_reason"] == "project_capital_not_reconciled"
+
+    with _db() as db:
+        _assert_blocked_side_effects(db)
+        _assert_latest_audit(
+            db,
+            idem="idem-not-ready",
+            blocked_reason="project_capital_not_reconciled",
+        )
+
+
+def test_mark_paid_blocked_when_reconciliation_stale(
+    _client: TestClient,
+    _db: sessionmaker[Session],
+) -> None:
+    with _db() as db:
+        bounty = _seed_project_bounty(db)
+        _insert_reconciliation(
+            db,
+            project_id=bounty.project_id,
+            ready=True,
+            delta_micro_usdc=0,
+            computed_at=datetime(2026, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+        )
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(
+        bounties_api,
+        "is_reconciliation_fresh",
+        lambda reconciliation, max_age_seconds: False,
+    )
+    try:
+        status_code, data = _call_mark_paid(_client, idem="idem-stale")
+    finally:
+        monkeypatch.undo()
+
+    assert status_code == 200
+    assert data["success"] is False
+    assert data["blocked_reason"] == "project_capital_reconciliation_stale"
+
+    with _db() as db:
+        _assert_blocked_side_effects(db)
+        _assert_latest_audit(
+            db,
+            idem="idem-stale",
+            blocked_reason="project_capital_reconciliation_stale",
+        )
+
+
+def test_mark_paid_fresh_reconciliation_reaches_insufficient_capital_check(
+    _client: TestClient,
+    _db: sessionmaker[Session],
+) -> None:
+    with _db() as db:
+        bounty = _seed_project_bounty(db)
+        _insert_reconciliation(
+            db,
+            project_id=bounty.project_id,
+            ready=True,
+            delta_micro_usdc=0,
+            computed_at=datetime(2026, 1, 1, 11, 50, 0, tzinfo=timezone.utc),
+        )
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(
+        bounties_api,
+        "is_reconciliation_fresh",
+        lambda reconciliation, max_age_seconds: True,
+    )
+    try:
+        status_code, data = _call_mark_paid(_client, idem="idem-insufficient")
+    finally:
+        monkeypatch.undo()
+
+    assert status_code == 200
+    assert data["success"] is False
+    assert data["blocked_reason"] == "insufficient_project_capital"
+
+    with _db() as db:
+        _assert_blocked_side_effects(db)
+        _assert_latest_audit(db, idem="idem-insufficient", blocked_reason="insufficient_project_capital")
