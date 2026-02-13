@@ -2,14 +2,19 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 import secrets
 from typing import Final
+from uuid import uuid4
 
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 
+from src.core.audit import record_audit
 from src.core.database import get_db
 from src.models.agent import Agent
+
+logger = logging.getLogger(__name__)
 
 PBKDF2_ALGORITHM: Final[str] = "sha256"
 PBKDF2_ITERATIONS: Final[int] = 200_000
@@ -69,22 +74,92 @@ def _extract_agent_id_from_api_key(api_key: str) -> str | None:
     return agent_id
 
 
-def require_agent_api_key(
+async def _best_effort_agent_auth_audit(
+    request: Request,
+    db: Session,
     *,
+    agent_id: str | None,
+    error_hint: str,
+) -> None:
+    """
+    Best-effort auditing for agent auth failure paths.
+
+    Rationale: 401 failures can be high-volume and should not be able to turn into 500s
+    if the audit insert/commit fails (transient DB/pool issues).
+    """
+
+    try:
+        body_bytes = await request.body()
+    except Exception:
+        body_bytes = b""
+
+    body_hash = hash_body(body_bytes)
+    request_id = request.headers.get("X-Request-ID") or str(uuid4())
+    idempotency_key = request.headers.get("Idempotency-Key")
+
+    try:
+        record_audit(
+            db,
+            actor_type="agent",
+            agent_id=agent_id,
+            method=request.method,
+            path=request.url.path,
+            idempotency_key=idempotency_key,
+            body_hash=body_hash,
+            signature_status="none",
+            request_id=request_id,
+            error_hint=error_hint,
+        )
+    except Exception as exc:
+        # Keep the session usable for the rest of the request lifecycle.
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        logger.warning("agent auth audit failed: %s", exc)
+
+
+async def require_agent_api_key(
+    *,
+    request: Request,
     api_key: str | None = Header(None, alias="X-API-Key"),
     db: Session = Depends(get_db),
 ) -> Agent:
     if not api_key:
+        await _best_effort_agent_auth_audit(
+            request,
+            db,
+            agent_id=None,
+            error_hint="missing_agent_api_key",
+        )
         raise HTTPException(status_code=401, detail="Invalid agent credentials.")
 
     agent_id = _extract_agent_id_from_api_key(api_key)
     if not agent_id:
+        await _best_effort_agent_auth_audit(
+            request,
+            db,
+            agent_id=None,
+            error_hint="invalid_agent_api_key_format",
+        )
         raise HTTPException(status_code=401, detail="Invalid agent credentials.")
 
     agent = db.query(Agent).filter(Agent.agent_id == agent_id).first()
     if agent is None or agent.revoked_at is not None:
+        await _best_effort_agent_auth_audit(
+            request,
+            db,
+            agent_id=agent_id,
+            error_hint="invalid_or_revoked_agent",
+        )
         raise HTTPException(status_code=401, detail="Invalid agent credentials.")
     if not verify_api_key(api_key, agent.api_key_hash):
+        await _best_effort_agent_auth_audit(
+            request,
+            db,
+            agent_id=agent_id,
+            error_hint="invalid_agent_api_key_hash",
+        )
         raise HTTPException(status_code=401, detail="Invalid agent credentials.")
     return agent
 
