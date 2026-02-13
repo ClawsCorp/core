@@ -21,24 +21,13 @@ export default function BountiesPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [initialized, setInitialized] = useState(false);
 
-  useEffect(() => {
-    // Read query params from the browser URL (avoid useSearchParams to keep the page statically exportable).
-    if (typeof window === "undefined") {
-      return;
-    }
-    const params = new URLSearchParams(window.location.search);
-    setProjectIdFilter(params.get("project_id") ?? "");
-    setStatusFilter(params.get("status") ?? "");
-    setInitialized(true);
-  }, []);
-
-  const load = useCallback(async () => {
+  const fetchBounties = useCallback(async (filters: { projectId: string; status: string }) => {
     setLoading(true);
     setError(null);
     try {
       const result = await api.getBounties({
-        projectId: projectIdFilter.trim() ? projectIdFilter.trim() : undefined,
-        status: statusFilter.trim() ? statusFilter.trim() : undefined,
+        projectId: filters.projectId.trim() ? filters.projectId.trim() : undefined,
+        status: filters.status.trim() ? filters.status.trim() : undefined,
       });
       setItems(result.items);
     } catch (err) {
@@ -46,27 +35,60 @@ export default function BountiesPage() {
     } finally {
       setLoading(false);
     }
-  }, [projectIdFilter, statusFilter]);
+  }, []);
+
+  const syncFromUrl = useCallback(() => {
+    if (typeof window === "undefined") {
+      return { projectId: "", status: "" };
+    }
+    const params = new URLSearchParams(window.location.search);
+    return {
+      projectId: params.get("project_id") ?? "",
+      status: params.get("status") ?? "",
+    };
+  }, []);
+
+  useEffect(() => {
+    // Read query params from the browser URL (avoid useSearchParams to keep the page statically exportable).
+    const fromUrl = syncFromUrl();
+    setProjectIdFilter(fromUrl.projectId);
+    setStatusFilter(fromUrl.status);
+    setInitialized(true);
+    void fetchBounties(fromUrl);
+  }, [fetchBounties, syncFromUrl]);
 
   useEffect(() => {
     if (!initialized) {
       return;
     }
-    void load();
-  }, [initialized, load]);
+    const onPopState = () => {
+      const fromUrl = syncFromUrl();
+      setProjectIdFilter(fromUrl.projectId);
+      setStatusFilter(fromUrl.status);
+      void fetchBounties(fromUrl);
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [fetchBounties, initialized, syncFromUrl]);
 
-  const onApplyFilters = () => {
+  const applyFilters = (filters: { projectId: string; status: string }) => {
+    setProjectIdFilter(filters.projectId);
+    setStatusFilter(filters.status);
     const query = new URLSearchParams();
-    if (projectIdFilter.trim()) {
-      query.set("project_id", projectIdFilter.trim());
+    if (filters.projectId.trim()) {
+      query.set("project_id", filters.projectId.trim());
     }
-    if (statusFilter.trim()) {
-      query.set("status", statusFilter.trim());
+    if (filters.status.trim()) {
+      query.set("status", filters.status.trim());
     }
     const suffix = query.toString() ? `?${query.toString()}` : "";
     router.push(`/bounties${suffix}`);
-    void load();
+    void fetchBounties(filters);
   };
+
+  const onApplyFilters = () => applyFilters({ projectId: projectIdFilter, status: statusFilter });
+  const onReset = () => applyFilters({ projectId: "", status: "" });
+  const onPreset = (status: string) => applyFilters({ projectId: projectIdFilter, status });
 
   return (
     <PageContainer title="Bounties">
@@ -95,12 +117,24 @@ export default function BountiesPage() {
           <button type="button" onClick={onApplyFilters}>
             Apply
           </button>
+          <button type="button" onClick={onReset}>
+            Reset
+          </button>
+          <button type="button" onClick={() => onPreset("submitted")}>
+            Submitted
+          </button>
+          <button type="button" onClick={() => onPreset("eligible_for_payout")}>
+            Ready to pay
+          </button>
+          <button type="button" onClick={() => onPreset("paid")}>
+            Paid
+          </button>
           <Link href="/runbook">Open runbook</Link>
         </div>
       </DataCard>
 
       {loading ? <Loading message="Loading bounties..." /> : null}
-      {!loading && error ? <ErrorState message={error} onRetry={load} /> : null}
+      {!loading && error ? <ErrorState message={error} onRetry={() => fetchBounties({ projectId: projectIdFilter, status: statusFilter })} /> : null}
       {!loading && !error && items.length === 0 ? <EmptyState message="No bounties found." /> : null}
       {!loading && !error && items.length > 0
         ? items.map((bounty) => (
