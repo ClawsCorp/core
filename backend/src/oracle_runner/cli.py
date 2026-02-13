@@ -60,6 +60,24 @@ def _load_execute_payload(path: str) -> tuple[bytes, dict[str, Any]]:
     return raw, parsed
 
 
+def _load_json_payload(path: str) -> tuple[bytes, dict[str, Any]]:
+    payload_path = Path(path)
+    if not payload_path.exists():
+        raise OracleRunnerError(f"Payload file not found: {path}")
+    try:
+        raw = payload_path.read_bytes()
+    except OSError as exc:
+        raise OracleRunnerError(f"Failed to read payload file: {path}") from exc
+
+    try:
+        parsed = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise OracleRunnerError("Payload must be valid JSON.") from exc
+    if not isinstance(parsed, dict):
+        raise OracleRunnerError("Payload must be a JSON object.")
+    return raw, parsed
+
+
 def _validate_execute_payload(payload: Any) -> None:
     if not isinstance(payload, dict):
         raise OracleRunnerError("Execute payload must be a JSON object.")
@@ -122,6 +140,24 @@ def build_parser() -> argparse.ArgumentParser:
     )
     reconcile_project_capital.add_argument("--project-id", required=True)
     reconcile_project_capital.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
+
+    evaluate_bounty = subparsers.add_parser(
+        "evaluate-bounty-eligibility",
+        help="Evaluate a bounty submission for payout eligibility (oracle HMAC protected).",
+    )
+    evaluate_bounty.add_argument("--bounty-id", required=True)
+    evaluate_bounty.add_argument("--payload", required=True, help="Path to JSON payload for evaluate-eligibility.")
+    evaluate_bounty.add_argument("--idempotency-key")
+    evaluate_bounty.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
+
+    mark_bounty_paid = subparsers.add_parser(
+        "mark-bounty-paid",
+        help="Mark a bounty as paid (oracle HMAC protected).",
+    )
+    mark_bounty_paid.add_argument("--bounty-id", required=True)
+    mark_bounty_paid.add_argument("--paid-tx-hash", required=True)
+    mark_bounty_paid.add_argument("--idempotency-key")
+    mark_bounty_paid.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
 
     create = subparsers.add_parser("create-distribution")
     create.add_argument("--month", required=True)
@@ -189,6 +225,45 @@ def run(argv: list[str] | None = None) -> int:
                 _print_json(data)
             else:
                 _print_fields(data, ["ready", "blocked_reason", "delta_micro_usdc", "onchain_balance_micro_usdc", "ledger_balance_micro_usdc", "computed_at"])
+            return 0
+
+        if args.command == "evaluate-bounty-eligibility":
+            bounty_id = str(args.bounty_id).strip()
+            if not bounty_id:
+                raise OracleRunnerError("--bounty-id is required.")
+            body_bytes, _ = _load_json_payload(args.payload)
+            idempotency_key = getattr(args, "idempotency_key", None)
+            data = _post_action(
+                client,
+                f"/api/v1/bounties/{bounty_id}/evaluate-eligibility",
+                body_bytes,
+                idempotency_key=idempotency_key,
+            )
+            if json_mode:
+                _print_json(data)
+            else:
+                _print_fields(data, ["status", "reasons"])
+            return 0
+
+        if args.command == "mark-bounty-paid":
+            bounty_id = str(args.bounty_id).strip()
+            if not bounty_id:
+                raise OracleRunnerError("--bounty-id is required.")
+            paid_tx_hash = str(args.paid_tx_hash).strip()
+            if not paid_tx_hash:
+                raise OracleRunnerError("--paid-tx-hash is required.")
+            body_bytes = json.dumps({"paid_tx_hash": paid_tx_hash}, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+            idempotency_key = getattr(args, "idempotency_key", None)
+            data = _post_action(
+                client,
+                f"/api/v1/bounties/{bounty_id}/mark-paid",
+                body_bytes,
+                idempotency_key=idempotency_key,
+            )
+            if json_mode:
+                _print_json(data)
+            else:
+                _print_fields(data, ["status", "blocked_reason"])
             return 0
 
         if args.command == "create-distribution":
