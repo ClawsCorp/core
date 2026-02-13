@@ -8,6 +8,7 @@ import { DataCard, PageContainer } from "@/components/Cards";
 import { Loading } from "@/components/State";
 import { ErrorState } from "@/components/ErrorState";
 import { api, readErrorMessage } from "@/lib/api";
+import { getExplorerBaseUrl } from "@/lib/env";
 import { formatMicroUsdc } from "@/lib/format";
 import type { BountyFundingSource, BountyPublic, ProjectCapitalSummary, ProjectDetail } from "@/types";
 
@@ -58,6 +59,24 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
     return "If project capital is insufficient, payout transitions can be blocked with insufficient_project_capital.";
   }, [fundingSource]);
 
+  const treasuryLink = useMemo(() => {
+    if (!project?.treasury_address) {
+      return null;
+    }
+    const base = getExplorerBaseUrl().replace(/\/+$/, "");
+    const addressBase = base.endsWith("/tx") ? base.slice(0, -3) : base;
+    return `${addressBase}/address/${project.treasury_address}`;
+  }, [project?.treasury_address]);
+
+  const reconciliation = project?.capital_reconciliation;
+  const reconciliationStatus = reconciliation?.ready
+    ? "Ready"
+    : reconciliation?.blocked_reason === "balance_mismatch"
+      ? "Mismatch"
+      : reconciliation?.blocked_reason === "rpc_error" || reconciliation?.blocked_reason === "rpc_not_configured"
+        ? "RPC error"
+        : "Not configured";
+
   const onCreate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setCreateMessage("Agent create-bounty endpoint is not available in backend. Only oracle-signed create exists at /api/v1/bounties.");
@@ -77,6 +96,15 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
             <p>status: {project.status}</p>
             <p>description_md: {project.description_md ?? "—"}</p>
             <p>monthly_budget: {formatMicroUsdc(project.monthly_budget_micro_usdc)}</p>
+            <p>
+              treasury: {project.treasury_address ? `${project.treasury_address.slice(0, 8)}...${project.treasury_address.slice(-6)}` : "—"}
+              {treasuryLink ? (
+                <>
+                  {" "}
+                  <a href={treasuryLink} target="_blank" rel="noreferrer">View explorer</a>
+                </>
+              ) : null}
+            </p>
             <h3>Discussions</h3>
             <p>
               <Link href={`/discussions?scope=project&project_id=${project.project_id}`}>
@@ -97,6 +125,10 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
             <p>balance_micro_usdc: {formatMicroUsdc(capital?.balance_micro_usdc)}</p>
             <p>events_count: {capital?.events_count ?? "—"}</p>
             <p>last_event_at: {capital?.last_event_at ? new Date(capital.last_event_at).toLocaleString() : "—"}</p>
+            <h3>Reconciliation</h3>
+            <p>status: {reconciliationStatus}</p>
+            <p>onchain_balance: {formatMicroUsdc(reconciliation?.onchain_balance_micro_usdc)}</p>
+            <p>delta: {formatMicroUsdc(reconciliation?.delta_micro_usdc)}</p>
             <Link href="/projects/capital">Open Project Capital leaderboard</Link>
           </DataCard>
 
@@ -138,6 +170,9 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
               </div>
               <button type="submit">Create bounty</button>
               <p>{fundingHint}</p>
+              {reconciliation?.ready === false ? (
+                <p>Funding readiness is blocked by capital reconciliation ({reconciliation.blocked_reason ?? "not_ready"}).</p>
+              ) : null}
               {createMessage ? <p>{createMessage}</p> : null}
             </form>
           </DataCard>

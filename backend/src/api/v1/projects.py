@@ -15,10 +15,13 @@ from src.core.database import get_db
 from src.models.agent import Agent
 from src.models.project import Project, ProjectStatus
 from src.models.project_capital_event import ProjectCapitalEvent
+from src.models.project_capital_reconciliation_report import ProjectCapitalReconciliationReport
 from src.models.project_member import ProjectMember
 from src.schemas.project import (
     ProjectCapitalLeaderboardData,
     ProjectCapitalLeaderboardResponse,
+    ProjectCapitalReconciliationLatestResponse,
+    ProjectCapitalReconciliationReportPublic,
     ProjectCapitalSummary,
     ProjectCapitalSummaryResponse,
     ProjectCreateRequest,
@@ -134,6 +137,28 @@ def get_project_capital(project_id: str, db: Session = Depends(get_db)) -> Proje
             last_event_at=row[2],
         ),
     )
+
+
+@router.get(
+    "/{project_id}/capital/reconciliation/latest",
+    response_model=ProjectCapitalReconciliationLatestResponse,
+    summary="Get latest project capital reconciliation report",
+)
+def get_project_capital_reconciliation_latest(
+    project_id: str,
+    db: Session = Depends(get_db),
+) -> ProjectCapitalReconciliationLatestResponse:
+    project = db.query(Project).filter(Project.project_id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    report = (
+        db.query(ProjectCapitalReconciliationReport)
+        .filter(ProjectCapitalReconciliationReport.project_id == project.id)
+        .order_by(ProjectCapitalReconciliationReport.computed_at.desc())
+        .first()
+    )
+    return ProjectCapitalReconciliationLatestResponse(success=True, data=_reconciliation_public(project.project_id, report))
 
 
 @router.get(
@@ -307,6 +332,7 @@ def _project_summary(project: Project) -> ProjectSummary:
         origin_proposal_id=project.origin_proposal_id,
         originator_agent_id=project.originator_agent_id,
         treasury_wallet_address=project.treasury_wallet_address,
+        treasury_address=project.treasury_address,
         revenue_wallet_address=project.revenue_wallet_address,
         monthly_budget_micro_usdc=project.monthly_budget_micro_usdc,
         created_at=project.created_at,
@@ -317,9 +343,34 @@ def _project_summary(project: Project) -> ProjectSummary:
 
 def _project_detail(db: Session, project: Project) -> ProjectDetail:
     members = _load_project_members(db, project.id)
+    latest_report = (
+        db.query(ProjectCapitalReconciliationReport)
+        .filter(ProjectCapitalReconciliationReport.project_id == project.id)
+        .order_by(ProjectCapitalReconciliationReport.computed_at.desc())
+        .first()
+    )
     return ProjectDetail(
         **_project_summary(project).model_dump(),
         members=members,
+        capital_reconciliation=_reconciliation_public(project.project_id, latest_report),
+    )
+
+
+def _reconciliation_public(
+    project_id: str,
+    report: ProjectCapitalReconciliationReport | None,
+) -> ProjectCapitalReconciliationReportPublic | None:
+    if report is None:
+        return None
+    return ProjectCapitalReconciliationReportPublic(
+        project_id=project_id,
+        treasury_address=report.treasury_address,
+        ledger_balance_micro_usdc=report.ledger_balance_micro_usdc,
+        onchain_balance_micro_usdc=report.onchain_balance_micro_usdc,
+        delta_micro_usdc=report.delta_micro_usdc,
+        ready=report.ready,
+        blocked_reason=report.blocked_reason,
+        computed_at=report.computed_at,
     )
 
 

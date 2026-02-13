@@ -34,6 +34,7 @@ class Project(Base):
     treasury_wallet_address: Mapped[str | None] = mapped_column(
         String(255), nullable=True
     )
+    treasury_address: Mapped[str | None] = mapped_column(String(42), nullable=True, index=True)
     revenue_wallet_address: Mapped[str | None] = mapped_column(String(255), nullable=True)
     monthly_budget_micro_usdc: Mapped[int | None] = mapped_column(
         BigInteger, nullable=True

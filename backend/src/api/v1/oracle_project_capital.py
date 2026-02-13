@@ -5,6 +5,7 @@ import secrets
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from src.api.v1.dependencies import require_oracle_hmac
@@ -13,11 +14,21 @@ from src.core.database import get_db
 from src.core.db_utils import insert_or_get_by_unique
 from src.models.project import Project
 from src.models.project_capital_event import ProjectCapitalEvent
+from src.models.project_capital_reconciliation_report import ProjectCapitalReconciliationReport
+from src.schemas.oracle_projects import (
+    ProjectCapitalReconciliationRunResponse,
+    ProjectTreasurySetData,
+    ProjectTreasurySetRequest,
+    ProjectTreasurySetResponse,
+)
 from src.schemas.project import ProjectCapitalEventCreateRequest, ProjectCapitalEventDetailResponse, ProjectCapitalEventPublic
+from src.schemas.project import ProjectCapitalReconciliationReportPublic
+from src.services.blockchain import BlockchainConfigError, BlockchainReadError, get_usdc_balance_micro_usdc
 
 router = APIRouter(prefix="/api/v1/oracle", tags=["oracle-project-capital"])
 
 _MONTH_RE = re.compile(r"^\d{6}$")
+_ADDRESS_RE = re.compile(r"^0x[a-f0-9]{40}$")
 
 
 @router.post("/project-capital-events", response_model=ProjectCapitalEventDetailResponse)
@@ -59,6 +70,126 @@ async def create_project_capital_event(
     db.commit()
     db.refresh(event)
     return ProjectCapitalEventDetailResponse(success=True, data=_public(project.project_id, event))
+
+
+@router.post("/projects/{project_id}/treasury", response_model=ProjectTreasurySetResponse)
+async def set_project_treasury_address(
+    project_id: str,
+    payload: ProjectTreasurySetRequest,
+    request: Request,
+    _: str = Depends(require_oracle_hmac),
+    db: Session = Depends(get_db),
+) -> ProjectTreasurySetResponse:
+    project = db.query(Project).filter(Project.project_id == project_id).first()
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    normalized = payload.treasury_address.strip().lower()
+    idempotency_key = f"project_treasury:{project_id}:{normalized}"
+    request_id = request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID") or str(uuid4())
+    body_hash = request.state.body_hash
+
+    if not _ADDRESS_RE.fullmatch(normalized):
+        _record_oracle_audit(request, db, body_hash, request_id, idempotency_key, commit=False)
+        db.commit()
+        return ProjectTreasurySetResponse(
+            success=False,
+            data=ProjectTreasurySetData(
+                project_id=project_id,
+                treasury_address=normalized,
+                status="set",
+                blocked_reason="invalid_address",
+            ),
+        )
+
+    status = "unchanged" if project.treasury_address == normalized else "set"
+    project.treasury_address = normalized
+    _record_oracle_audit(request, db, body_hash, request_id, idempotency_key, commit=False)
+    db.commit()
+    return ProjectTreasurySetResponse(
+        success=True,
+        data=ProjectTreasurySetData(project_id=project_id, treasury_address=normalized, status=status),
+    )
+
+
+@router.post("/projects/{project_id}/capital/reconciliation", response_model=ProjectCapitalReconciliationRunResponse)
+async def reconcile_project_capital(
+    project_id: str,
+    request: Request,
+    _: str = Depends(require_oracle_hmac),
+    db: Session = Depends(get_db),
+) -> ProjectCapitalReconciliationRunResponse:
+    project = db.query(Project).filter(Project.project_id == project_id).first()
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    request_id = request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID") or str(uuid4())
+    body_hash = request.state.body_hash
+    idempotency_key = f"project_capital_reconciliation:{project_id}:{request_id}"
+
+    if not project.treasury_address:
+        report = ProjectCapitalReconciliationReport(
+            project_id=project.id,
+            treasury_address="",
+            ledger_balance_micro_usdc=None,
+            onchain_balance_micro_usdc=None,
+            delta_micro_usdc=None,
+            ready=False,
+            blocked_reason="treasury_not_configured",
+        )
+        db.add(report)
+        _record_oracle_audit(request, db, body_hash, request_id, idempotency_key, commit=False)
+        db.commit()
+        db.refresh(report)
+        return ProjectCapitalReconciliationRunResponse(success=True, data=_recon_public(project_id, report))
+
+    ledger_balance = int(
+        db.query(func.coalesce(func.sum(ProjectCapitalEvent.delta_micro_usdc), 0))
+        .filter(ProjectCapitalEvent.project_id == project.id)
+        .scalar()
+        or 0
+    )
+
+    try:
+        onchain = get_usdc_balance_micro_usdc(project.treasury_address)
+    except BlockchainConfigError:
+        report = ProjectCapitalReconciliationReport(
+            project_id=project.id,
+            treasury_address=project.treasury_address,
+            ledger_balance_micro_usdc=None,
+            onchain_balance_micro_usdc=None,
+            delta_micro_usdc=None,
+            ready=False,
+            blocked_reason="rpc_not_configured",
+        )
+    except BlockchainReadError:
+        report = ProjectCapitalReconciliationReport(
+            project_id=project.id,
+            treasury_address=project.treasury_address,
+            ledger_balance_micro_usdc=None,
+            onchain_balance_micro_usdc=None,
+            delta_micro_usdc=None,
+            ready=False,
+            blocked_reason="rpc_error",
+        )
+    else:
+        delta = onchain.balance_micro_usdc - ledger_balance
+        ready = delta == 0 and ledger_balance >= 0
+        report = ProjectCapitalReconciliationReport(
+            project_id=project.id,
+            treasury_address=project.treasury_address,
+            ledger_balance_micro_usdc=ledger_balance,
+            onchain_balance_micro_usdc=onchain.balance_micro_usdc,
+            delta_micro_usdc=delta,
+            ready=ready,
+            blocked_reason=None if ready else "balance_mismatch",
+        )
+
+    db.add(report)
+    _record_oracle_audit(request, db, body_hash, request_id, idempotency_key, commit=False)
+    db.commit()
+    db.refresh(report)
+    return ProjectCapitalReconciliationRunResponse(success=True, data=_recon_public(project_id, report))
 
 
 def _validate_month(profit_month_id: str) -> None:
@@ -111,4 +242,17 @@ def _public(project_id: str, event: ProjectCapitalEvent) -> ProjectCapitalEventP
         evidence_tx_hash=event.evidence_tx_hash,
         evidence_url=event.evidence_url,
         created_at=event.created_at,
+    )
+
+
+def _recon_public(project_id: str, report: ProjectCapitalReconciliationReport) -> ProjectCapitalReconciliationReportPublic:
+    return ProjectCapitalReconciliationReportPublic(
+        project_id=project_id,
+        treasury_address=report.treasury_address,
+        ledger_balance_micro_usdc=report.ledger_balance_micro_usdc,
+        onchain_balance_micro_usdc=report.onchain_balance_micro_usdc,
+        delta_micro_usdc=report.delta_micro_usdc,
+        ready=report.ready,
+        blocked_reason=report.blocked_reason,
+        computed_at=report.computed_at,
     )

@@ -26,6 +26,7 @@ The following GET endpoints are **public** and are intended for the read-first p
 - `GET /api/v1/projects`
 - `GET /api/v1/projects/{project_id}`
 - `GET /api/v1/projects/slug/{slug}`
+- `GET /api/v1/projects/{project_id}/capital/reconciliation/latest`
 - `GET /api/v1/bounties`
 - `GET /api/v1/bounties/{bounty_id}`
 - `GET /api/v1/agents`
@@ -1086,12 +1087,51 @@ Semantics:
 - `idempotency_key` is unique; duplicates return existing event
 - Every call is oracle-audited (`idempotency_key`, `signature_status`, `body_hash`)
 
+## Oracle project treasury and capital reconciliation
+
+`POST /api/v1/oracle/projects/{project_id}/treasury` sets the treasury anchor address (HMAC required).
+
+Request body:
+
+```json
+{
+  "treasury_address": "0x1234567890abcdef1234567890abcdef12345678"
+}
+```
+
+Semantics:
+
+- Address is normalized to lowercase and must match `0x` + 40 hex chars.
+- Deterministic idempotency key: `project_treasury:{project_id}:{treasury_address_lower}`.
+- Invalid address is fail-closed with `HTTP 200`, `success=false`, `blocked_reason="invalid_address"` (still audited).
+- Unchanged value returns `success=true`, `status="unchanged"`.
+
+`POST /api/v1/oracle/projects/{project_id}/capital/reconciliation` computes and appends a reconciliation report (HMAC required).
+
+Strict readiness definition:
+
+- `ready=true` **iff** `onchain_balance_micro_usdc - ledger_balance_micro_usdc == 0` and `ledger_balance_micro_usdc >= 0`.
+
+Blocked reasons:
+
+- `treasury_not_configured`
+- `rpc_not_configured`
+- `rpc_error`
+- `balance_mismatch`
+
+Every reconciliation call appends a new report (time-series, no idempotency) and is oracle-audited with `request_id` and `signature_status`.
+
 ## Public project capital reads
 
 - `GET /api/v1/projects/{project_id}/capital`
   - returns `project_id`, `balance_micro_usdc` (also `capital_sum_micro_usdc` for compatibility), `events_count`, `last_event_at`
 - `GET /api/v1/projects/capital/leaderboard?limit=&offset=`
   - ordered by `balance_micro_usdc DESC` (`capital_sum_micro_usdc` equivalent)
+- `GET /api/v1/projects/{project_id}/capital/reconciliation/latest`
+  - returns latest project capital reconciliation report or `null` when no report exists
+- `GET /api/v1/projects/{project_id}` and `GET /api/v1/projects/slug/{slug}` include:
+  - `treasury_address`
+  - `capital_reconciliation` (latest report or `null`)
 
 ## Bounty paid accounting semantics
 
