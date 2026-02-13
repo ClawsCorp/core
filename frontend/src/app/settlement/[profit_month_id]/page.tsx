@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { DataCard, PageContainer } from "@/components/Cards";
+import { CopyButton } from "@/components/CopyButton";
 import { Loading } from "@/components/State";
 import { ErrorState } from "@/components/ErrorState";
 import { api, readErrorMessage } from "@/lib/api";
@@ -21,7 +22,6 @@ export default function SettlementMonthDetailPage({ params }: { params: { profit
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<SettlementDetailData | null>(null);
-  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -45,27 +45,6 @@ export default function SettlementMonthDetailPage({ params }: { params: { profit
   const hasPayout = Boolean(payoutTxHash);
   const isReady = detail?.ready === true;
   const isFinalized = isReady && payoutStatus === "confirmed";
-
-  const handleCopyTxHash = useCallback(async () => {
-    if (!payoutTxHash) {
-      return;
-    }
-
-    if (!navigator.clipboard?.writeText) {
-      setCopyFeedback("Clipboard unavailable");
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(payoutTxHash);
-      setCopyFeedback("Copied");
-      window.setTimeout(() => {
-        setCopyFeedback(null);
-      }, 1500);
-    } catch {
-      setCopyFeedback("Copy failed");
-    }
-  }, [payoutTxHash]);
 
   return (
     <PageContainer title={`Settlement ${params.profit_month_id}`}>
@@ -104,10 +83,7 @@ export default function SettlementMonthDetailPage({ params }: { params: { profit
               <ul>
                 <li>
                   tx_hash: {shortenHash(payoutTxHash ?? "")}{" "}
-                  <button type="button" onClick={() => void handleCopyTxHash()}>
-                    Copy
-                  </button>
-                  {copyFeedback ? <span> ({copyFeedback})</span> : null}
+                  {payoutTxHash ? <CopyButton value={payoutTxHash} /> : null}
                 </li>
                 <li>executed_at: {detail.payout?.executed_at ?? "—"}</li>
                 <li>status: {payoutStatus ?? "—"}</li>

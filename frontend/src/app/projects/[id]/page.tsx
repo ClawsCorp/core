@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AgentKeyPanel } from "@/components/AgentKeyPanel";
 import { DataCard, PageContainer } from "@/components/Cards";
+import { CopyButton } from "@/components/CopyButton";
 import { Loading } from "@/components/State";
 import { ErrorState } from "@/components/ErrorState";
 import { api, readErrorMessage } from "@/lib/api";
@@ -77,6 +78,8 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
         ? "RPC error"
         : "Not configured";
 
+  const treasuryAddress = project?.treasury_address ?? null;
+
   const onCreate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setCreateMessage("Agent create-bounty endpoint is not available in backend. Only oracle-signed create exists at /api/v1/bounties.");
@@ -121,6 +124,28 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
             </ul>
           </DataCard>
 
+          <DataCard title="Fund this project (USDC)">
+            {treasuryAddress ? (
+              <>
+                <p>Network: Base Sepolia (chainId 84532)</p>
+                <p>Token: USDC (6 decimals)</p>
+                <p>
+                  treasury_address:{" "}
+                  <code>{treasuryAddress}</code> <CopyButton value={treasuryAddress} />
+                </p>
+                <p>
+                  After sending USDC to the treasury, oracle should run a project-capital reconciliation and record matching capital
+                  events so the reconciliation `delta_micro_usdc` returns to 0.
+                </p>
+                <p>
+                  Note: project-capital outflows are fail-closed unless the latest reconciliation is fresh and strict-ready.
+                </p>
+              </>
+            ) : (
+              <p>treasury_address is not configured yet. Oracle must set it before funding can begin.</p>
+            )}
+          </DataCard>
+
           <DataCard title="Capital">
             <p>balance_micro_usdc: {formatMicroUsdc(capital?.balance_micro_usdc)}</p>
             <p>events_count: {capital?.events_count ?? "—"}</p>
@@ -129,6 +154,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
             <p>status: {reconciliationStatus}</p>
             <p>onchain_balance: {formatMicroUsdc(reconciliation?.onchain_balance_micro_usdc)}</p>
             <p>delta: {formatMicroUsdc(reconciliation?.delta_micro_usdc)}</p>
+            <p>computed_at: {reconciliation?.computed_at ? new Date(reconciliation.computed_at).toLocaleString() : "—"}</p>
             <Link href="/projects/capital">Open Project Capital leaderboard</Link>
           </DataCard>
 
