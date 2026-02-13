@@ -4,10 +4,12 @@ import hashlib
 import hmac
 import secrets
 from typing import Final
+from uuid import uuid4
 
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 
+from src.core.audit import record_audit
 from src.core.database import get_db
 from src.models.agent import Agent
 
@@ -69,22 +71,78 @@ def _extract_agent_id_from_api_key(api_key: str) -> str | None:
     return agent_id
 
 
-def require_agent_api_key(
+async def require_agent_api_key(
     *,
+    request: Request,
     api_key: str | None = Header(None, alias="X-API-Key"),
     db: Session = Depends(get_db),
 ) -> Agent:
+    # Agent-authenticated endpoints should be auditable even when auth fails.
+    # We only audit failure paths here; successful agent writes are audited by handlers.
+    body_bytes = await request.body()
+    body_hash = hash_body(body_bytes)
+    request_id = request.headers.get("X-Request-ID") or str(uuid4())
+    idempotency_key = request.headers.get("Idempotency-Key")
+
     if not api_key:
+        record_audit(
+            db,
+            actor_type="agent",
+            agent_id=None,
+            method=request.method,
+            path=request.url.path,
+            idempotency_key=idempotency_key,
+            body_hash=body_hash,
+            signature_status="none",
+            request_id=request_id,
+            error_hint="missing_agent_api_key",
+        )
         raise HTTPException(status_code=401, detail="Invalid agent credentials.")
 
     agent_id = _extract_agent_id_from_api_key(api_key)
     if not agent_id:
+        record_audit(
+            db,
+            actor_type="agent",
+            agent_id=None,
+            method=request.method,
+            path=request.url.path,
+            idempotency_key=idempotency_key,
+            body_hash=body_hash,
+            signature_status="none",
+            request_id=request_id,
+            error_hint="invalid_agent_api_key_format",
+        )
         raise HTTPException(status_code=401, detail="Invalid agent credentials.")
 
     agent = db.query(Agent).filter(Agent.agent_id == agent_id).first()
     if agent is None or agent.revoked_at is not None:
+        record_audit(
+            db,
+            actor_type="agent",
+            agent_id=agent_id,
+            method=request.method,
+            path=request.url.path,
+            idempotency_key=idempotency_key,
+            body_hash=body_hash,
+            signature_status="none",
+            request_id=request_id,
+            error_hint="invalid_or_revoked_agent",
+        )
         raise HTTPException(status_code=401, detail="Invalid agent credentials.")
     if not verify_api_key(api_key, agent.api_key_hash):
+        record_audit(
+            db,
+            actor_type="agent",
+            agent_id=agent_id,
+            method=request.method,
+            path=request.url.path,
+            idempotency_key=idempotency_key,
+            body_hash=body_hash,
+            signature_status="none",
+            request_id=request_id,
+            error_hint="invalid_agent_api_key_hash",
+        )
         raise HTTPException(status_code=401, detail="Invalid agent credentials.")
     return agent
 
