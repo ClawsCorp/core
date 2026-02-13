@@ -42,6 +42,25 @@ def upgrade() -> None:
 
     op.execute("UPDATE votes SET value = CASE WHEN vote = 'approve' THEN 1 ELSE -1 END")
 
+    op.execute(
+        """
+        UPDATE proposals AS p
+        SET
+            yes_votes_count = COALESCE(v.yes_count, 0),
+            no_votes_count = COALESCE(v.no_count, 0)
+        FROM (
+            SELECT
+                p2.id AS proposal_pk,
+                COUNT(vt.id) FILTER (WHERE vt.value = 1) AS yes_count,
+                COUNT(vt.id) FILTER (WHERE vt.value = -1) AS no_count
+            FROM proposals AS p2
+            LEFT JOIN votes AS vt ON vt.proposal_id = p2.id
+            GROUP BY p2.id
+        ) AS v
+        WHERE p.id = v.proposal_pk
+        """
+    )
+
     op.alter_column("votes", "value", nullable=False)
     op.drop_column("votes", "vote")
     op.drop_column("votes", "reputation_stake")
