@@ -1,6 +1,6 @@
 """project activation and project capital events
 
-Revision ID: 0017_project_activation_and_capital
+Revision ID: 0017_project_activation_capital
 Revises: 0016_governance_lifecycle_fields
 Create Date: 2026-02-13 00:00:00.000000
 
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from alembic import op
 
 
-revision = "0017_project_activation_and_capital"
+revision = "0017_project_activation_capital"
 down_revision = "0016_governance_lifecycle_fields"
 branch_labels = None
 depends_on = None

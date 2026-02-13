@@ -23,6 +23,8 @@ Railway should auto-read `railway.json`.
 > Note: Alembic stores the current revision in `alembic_version.version_num` (VARCHAR(32) by default).
 > Keep revision identifiers <= 32 characters. On 2026-02-11, migration `0007_settlement_reconciliation_payouts`
 > was renamed to `0007_settlement_reports_payouts` to fit this limit (same migration, shorter id).
+> On 2026-02-13, migration `0017_project_activation_and_capital` was renamed to
+> `0017_project_activation_capital` for the same reason.
 - Start command (only if you need to override the Dockerfile `CMD`):
 
 ```bash
