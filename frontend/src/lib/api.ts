@@ -21,6 +21,7 @@ import type {
   DiscussionScope,
   DiscussionThreadDetail,
   DiscussionThreadSummary,
+  AccountingMonthsData,
 } from "@/types";
 
 export class ApiError extends Error {
@@ -118,6 +119,20 @@ export const api = {
       }
       throw error;
     }
+  },
+  getAccountingMonths: async (params?: { projectId?: string; profitMonthId?: string; limit?: number; offset?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.projectId) {
+      query.set("project_id", params.projectId);
+    }
+    if (params?.profitMonthId) {
+      query.set("profit_month_id", params.profitMonthId);
+    }
+    query.set("limit", String(params?.limit ?? 24));
+    query.set("offset", String(params?.offset ?? 0));
+
+    const payload = await fetchJSON<Envelope<AccountingMonthsData>>(`/api/v1/accounting/months?${query.toString()}`);
+    return payload.data;
   },
   getSettlementMonths: async (limit: number, offset: number) => {
     const payload = await fetchJSON<Envelope<ListData<SettlementMonthSummary>>>(

@@ -12,7 +12,7 @@ import { api, readErrorMessage } from "@/lib/api";
 import { getAgentApiKey } from "@/lib/agentKey";
 import { getExplorerBaseUrl } from "@/lib/env";
 import { formatMicroUsdc } from "@/lib/format";
-import type { BountyFundingSource, BountyPublic, ProjectCapitalSummary, ProjectDetail } from "@/types";
+import type { AccountingMonthSummary, BountyFundingSource, BountyPublic, ProjectCapitalSummary, ProjectDetail, StatsData } from "@/types";
 
 export default function ProjectDetailPage({ params }: { params: { id: string } }) {
   const [loading, setLoading] = useState(true);
@@ -20,6 +20,8 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [capital, setCapital] = useState<ProjectCapitalSummary | null>(null);
   const [bounties, setBounties] = useState<BountyPublic[]>([]);
+  const [stats, setStats] = useState<StatsData | null>(null);
+  const [accountingMonths, setAccountingMonths] = useState<AccountingMonthSummary[]>([]);
 
   const [createAmount, setCreateAmount] = useState("1000000");
   const [createTitle, setCreateTitle] = useState("");
@@ -32,14 +34,18 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
     setLoading(true);
     setError(null);
     try {
-      const [projectResult, capitalResult, bountiesResult] = await Promise.all([
+      const [projectResult, capitalResult, bountiesResult, statsResult, accountingResult] = await Promise.all([
         api.getProject(params.id),
         api.getProjectCapitalSummary(params.id),
         api.getBounties({ projectId: params.id }),
+        api.getStats().catch(() => null),
+        api.getAccountingMonths({ projectId: params.id, limit: 6, offset: 0 }).catch(() => null),
       ]);
       setProject(projectResult);
       setCapital(capitalResult);
       setBounties(bountiesResult.items);
+      setStats(statsResult);
+      setAccountingMonths(accountingResult?.items ?? []);
     } catch (err) {
       setError(readErrorMessage(err));
     } finally {
@@ -72,15 +78,28 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
   }, [project?.treasury_address]);
 
   const reconciliation = project?.capital_reconciliation;
-  const reconciliationStatus = reconciliation?.ready
-    ? "Ready"
-    : reconciliation?.blocked_reason === "balance_mismatch"
-      ? "Mismatch"
-      : reconciliation?.blocked_reason === "rpc_error" || reconciliation?.blocked_reason === "rpc_not_configured"
-        ? "RPC error"
-        : "Not configured";
+  const maxAgeSeconds = stats?.project_capital_reconciliation_max_age_seconds ?? null;
+  const reconciliationAgeSeconds = reconciliation?.computed_at
+    ? Math.floor((Date.now() - new Date(reconciliation.computed_at).getTime()) / 1000)
+    : null;
+  const isReconciliationStale =
+    reconciliationAgeSeconds !== null && maxAgeSeconds !== null ? reconciliationAgeSeconds > maxAgeSeconds : null;
+
+  const reconciliationBadge = !project?.treasury_address
+    ? "Missing (treasury_address not set)"
+    : !reconciliation
+      ? "Missing"
+      : reconciliation.ready && reconciliation.delta_micro_usdc === 0
+        ? isReconciliationStale
+          ? "Stale"
+          : "Fresh"
+        : reconciliation.blocked_reason === "rpc_error" || reconciliation.blocked_reason === "rpc_not_configured"
+          ? "RPC error"
+          : "Mismatch";
 
   const treasuryAddress = project?.treasury_address ?? null;
+  const projectReconcileCommand = `PYTHONPATH=src python -m oracle_runner project-reconcile --project-id ${params.id}`;
+  const projectMonthCommand = `PYTHONPATH=src python -m oracle_runner run-project-month --project-id ${params.id}`;
 
   const onCreate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -136,6 +155,14 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
                 </>
               ) : null}
             </p>
+            <p>
+              reconciliation: {reconciliationBadge}
+              {maxAgeSeconds !== null ? <> (max_age_seconds={maxAgeSeconds})</> : null}
+              {reconciliationAgeSeconds !== null ? <> (age={reconciliationAgeSeconds}s)</> : null}
+            </p>
+            <p>
+              app_surface: <Link href={`/apps/${project.slug}`}>/apps/{project.slug}</Link>
+            </p>
             <h3>Discussions</h3>
             <p>
               <Link href={`/discussions?scope=project&project_id=${project.project_id}`}>
@@ -153,6 +180,20 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
                 </li>
               ))}
             </ul>
+          </DataCard>
+
+          <DataCard title="Quick ops (Oracle runner)">
+            <p>
+              Reconcile project capital: <code>{projectReconcileCommand}</code>{" "}
+              <CopyButton value={projectReconcileCommand} label="Copy" />
+            </p>
+            <p>
+              Run project month (MVP): <code>{projectMonthCommand}</code>{" "}
+              <CopyButton value={projectMonthCommand} label="Copy" />
+            </p>
+            <p>
+              Runbook: <Link href="/runbook">/runbook</Link>
+            </p>
           </DataCard>
 
           <DataCard title="Fund this project (USDC)">
@@ -177,12 +218,30 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
             )}
           </DataCard>
 
+          <DataCard title="Project accounting (by month)">
+            {accountingMonths.length === 0 ? (
+              <p>No accounting months yet for this project.</p>
+            ) : (
+              <ul>
+                {accountingMonths.map((m) => (
+                  <li key={m.profit_month_id}>
+                    {m.profit_month_id}: revenue={formatMicroUsdc(m.revenue_sum_micro_usdc)} expense={formatMicroUsdc(m.expense_sum_micro_usdc)} profit={formatMicroUsdc(m.profit_sum_micro_usdc)}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p>
+              Full list:{" "}
+              <Link href={`/accounting?project_id=${params.id}`}>Open accounting</Link>
+            </p>
+          </DataCard>
+
           <DataCard title="Capital">
             <p>balance_micro_usdc: {formatMicroUsdc(capital?.balance_micro_usdc)}</p>
             <p>events_count: {capital?.events_count ?? "—"}</p>
             <p>last_event_at: {capital?.last_event_at ? new Date(capital.last_event_at).toLocaleString() : "—"}</p>
             <h3>Reconciliation</h3>
-            <p>status: {reconciliationStatus}</p>
+            <p>status: {reconciliationBadge}</p>
             <p>onchain_balance: {formatMicroUsdc(reconciliation?.onchain_balance_micro_usdc)}</p>
             <p>delta: {formatMicroUsdc(reconciliation?.delta_micro_usdc)}</p>
             <p>computed_at: {reconciliation?.computed_at ? new Date(reconciliation.computed_at).toLocaleString() : "—"}</p>
