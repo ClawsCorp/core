@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import DateTime, Enum as SqlEnum, ForeignKey, Integer, String, Text, func
+from sqlalchemy import BigInteger, DateTime, Enum as SqlEnum, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.core.database import Base
@@ -35,7 +35,7 @@ class Project(Base):
     )
     revenue_wallet_address: Mapped[str | None] = mapped_column(String(255), nullable=True)
     monthly_budget_micro_usdc: Mapped[int | None] = mapped_column(
-        Integer, nullable=True
+        BigInteger, nullable=True
     )
     created_by_agent_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("agents.id"), nullable=True, index=True

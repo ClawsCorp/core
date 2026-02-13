@@ -995,7 +995,7 @@ def _record_oracle_audit(
 ) -> None:
     body_hash = getattr(request.state, "body_hash", "")
     signature_status = getattr(request.state, "signature_status", "invalid")
-    request_id = request.headers.get("X-Request-ID") or str(uuid4())
+    request_id = request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID") or str(uuid4())
     record_audit(
         db,
         actor_type="oracle",

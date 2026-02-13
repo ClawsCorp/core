@@ -13,9 +13,9 @@ class ReconciliationReport(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     profit_month_id: Mapped[str] = mapped_column(String(6), index=True)
-    revenue_sum_micro_usdc: Mapped[int] = mapped_column(Integer)
-    expense_sum_micro_usdc: Mapped[int] = mapped_column(Integer)
-    profit_sum_micro_usdc: Mapped[int] = mapped_column(Integer)
+    revenue_sum_micro_usdc: Mapped[int] = mapped_column(BigInteger)
+    expense_sum_micro_usdc: Mapped[int] = mapped_column(BigInteger)
+    profit_sum_micro_usdc: Mapped[int] = mapped_column(BigInteger)
     distributor_balance_micro_usdc: Mapped[int | None] = mapped_column(
         BigInteger, nullable=True
     )

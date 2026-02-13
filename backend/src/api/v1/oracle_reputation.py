@@ -6,14 +6,14 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from src.core.audit import record_audit
-from src.core.config import get_settings
 from src.core.database import get_db
-from src.core.security import hash_body, verify_hmac_v1
+from src.models.reputation_event import ReputationEvent
 from src.schemas.reputation import (
     ReputationEventCreateRequest,
     ReputationEventDetailResponse,
     ReputationEventPublic,
 )
+from src.api.v1.dependencies import require_oracle_hmac
 from src.services.reputation_ingestion import ingest_reputation_event
 
 router = APIRouter(prefix="/api/v1/oracle", tags=["oracle-reputation"])
@@ -23,11 +23,12 @@ router = APIRouter(prefix="/api/v1/oracle", tags=["oracle-reputation"])
 async def create_reputation_event(
     payload: ReputationEventCreateRequest,
     request: Request,
+    _: str = Depends(require_oracle_hmac),
     db: Session = Depends(get_db),
 ) -> ReputationEventDetailResponse:
-    request_id = request.headers.get("X-Request-ID") or str(uuid4())
-    body_hash = hash_body(await request.body())
-    signature_status = _signature_status(request, body_hash)
+    request_id = request.headers.get("X-Request-Id") or str(uuid4())
+    body_hash = request.state.body_hash
+    signature_status = getattr(request.state, "signature_status", "invalid")
 
     _record_oracle_audit(
         request=request,
@@ -37,8 +38,6 @@ async def create_reputation_event(
         idempotency_key=payload.idempotency_key,
         signature_status=signature_status,
     )
-    if signature_status != "valid":
-        raise HTTPException(status_code=403, detail="Invalid signature.")
 
     try:
         event, public_agent_id = ingest_reputation_event(db, payload)
@@ -48,22 +47,6 @@ async def create_reputation_event(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     return ReputationEventDetailResponse(success=True, data=_public_event(public_agent_id, event))
-
-
-def _signature_status(request: Request, body_hash: str) -> str:
-    timestamp = request.headers.get("X-Request-Timestamp")
-    signature = request.headers.get("X-Signature")
-    if not timestamp or not signature:
-        return "none"
-
-    settings = get_settings()
-    if not settings.oracle_hmac_secret:
-        return "invalid"
-
-    if not verify_hmac_v1(settings.oracle_hmac_secret, timestamp, body_hash, signature):
-        return "invalid"
-
-    return "valid"
 
 
 def _record_oracle_audit(

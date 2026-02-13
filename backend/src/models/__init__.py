@@ -7,6 +7,7 @@ from src.models.dividend_payout import DividendPayout
 from src.models.distribution_creation import DistributionCreation
 from src.models.distribution_execution import DistributionExecution
 from src.models.discussions import DiscussionPost, DiscussionThread, DiscussionVote
+from src.models.oracle_nonce import OracleNonce
 from src.models.expense_event import ExpenseEvent
 from src.models.project import Project, ProjectStatus
 from src.models.project_capital_event import ProjectCapitalEvent
@@ -31,6 +32,7 @@ __all__ = [
     "DiscussionPost",
     "DiscussionThread",
     "DiscussionVote",
+    "OracleNonce",
     "ExpenseEvent",
     "Project",
     "ProjectCapitalEvent",

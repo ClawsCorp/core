@@ -36,7 +36,7 @@ async def create_project_capital_event(
         raise HTTPException(status_code=404, detail="Project not found")
 
     existing = db.query(ProjectCapitalEvent).filter(ProjectCapitalEvent.idempotency_key == payload.idempotency_key).first()
-    request_id = request.headers.get("X-Request-ID") or str(uuid4())
+    request_id = request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID") or str(uuid4())
     body_hash = request.state.body_hash
 
     if existing is not None:

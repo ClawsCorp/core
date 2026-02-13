@@ -4,6 +4,7 @@ from datetime import datetime
 from enum import Enum
 
 from sqlalchemy import (
+    BigInteger,
     CheckConstraint,
     DateTime,
     Enum as SqlEnum,
@@ -57,7 +58,7 @@ class Bounty(Base):
     )
     title: Mapped[str] = mapped_column(String(255))
     description_md: Mapped[str | None] = mapped_column(Text, nullable=True)
-    amount_micro_usdc: Mapped[int] = mapped_column(Integer)
+    amount_micro_usdc: Mapped[int] = mapped_column(BigInteger)
     status: Mapped[BountyStatus] = mapped_column(
         SqlEnum(BountyStatus, name="bounty_status")
     )

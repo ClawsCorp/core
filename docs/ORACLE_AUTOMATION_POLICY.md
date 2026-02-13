@@ -15,6 +15,17 @@ Define when the system may execute money-moving actions automatically and when i
 - ORACLE_SIGNER_PRIVATE_KEY: on-chain signer (Railway secrets).
 - Never reuse agent api keys as oracle credentials.
 
+## Oracle request authentication (required headers)
+- `X-Request-Timestamp`: unix seconds.
+- `X-Request-Id`: unique nonce per request (anti-replay).
+- `X-Signature`: HMAC-SHA256 over `{timestamp}.{body_hash}`.
+
+Behavior:
+- Fail-closed on missing headers/signature (`403`).
+- Timestamp freshness is enforced with TTL (default 300 seconds, plus small skew allowance); stale requests are rejected (`403`).
+- Reusing `X-Request-Id` is rejected as replay (`409`).
+- All oracle requests (accepted or rejected) must produce an `audit_logs` row with `signature_status` (`ok|invalid|stale|replay`).
+
 ## Default Mode (MVP)
 - Eligibility can be automated.
 - Transfers can be manual or limited automation.

@@ -86,8 +86,8 @@ Reputation v1 is **informational only** and does not move money. It is separate 
 
 Auth and audit semantics:
 
-- Requires oracle HMAC headers (`X-Request-Timestamp`, `X-Signature`).
-- Every request writes an `audit_logs` record with `actor_type=oracle`, `signature_status` (`none|valid|invalid`), `body_hash`, `idempotency_key`, and route.
+- Requires oracle HMAC headers (`X-Request-Timestamp`, `X-Request-Id`, `X-Signature`).
+- Every request writes an `audit_logs` record with `actor_type=oracle`, `signature_status` (`ok|invalid|stale|replay`), `body_hash`, `idempotency_key`, and route.
 - Invalid signatures are rejected (`403`) and still audited.
 
 Idempotency semantics:
@@ -688,8 +688,14 @@ Notes:
 
 Some admin/oracle endpoints will require HMAC v1 signatures:
 
-- `X-Request-Timestamp`: request timestamp string.
+- `X-Request-Timestamp`: unix timestamp in seconds.
+- `X-Request-Id`: unique request nonce (anti-replay; must be unique per oracle call).
 - `X-Signature`: HMAC-SHA256 signature of `{timestamp}.{body_hash}`.
+
+Fail-closed behavior:
+- Missing required headers are rejected with `403` and audited.
+- Timestamp must be fresh (default TTL: 300s, plus small clock skew allowance); stale/future requests are rejected with `403` and audited.
+- Reusing the same `X-Request-Id` is treated as replay and rejected with `409` and audited.
 
 ## Accounting
 
@@ -875,7 +881,7 @@ Audit:
 
 - Each request writes an append-only `audit_logs` row with:
   - `actor_type="oracle"`
-  - `signature_status` (`valid`/`invalid`/`none`)
+  - `signature_status` (`ok`/`invalid`/`stale`/`replay`)
   - `body_hash`
   - `idempotency_key`
   - `tx_hash` (when submitted)
@@ -936,7 +942,7 @@ Audit:
 
 - Each request writes append-only `audit_logs` row with oracle route metadata:
   - `actor_type="oracle"`
-  - `signature_status` (valid/invalid/none)
+  - `signature_status` (`ok`/`invalid`/`stale`/`replay`)
   - `body_hash`
   - `idempotency_key`
   - `tx_hash` (when submitted)
