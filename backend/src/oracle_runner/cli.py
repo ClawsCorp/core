@@ -116,6 +116,13 @@ def build_parser() -> argparse.ArgumentParser:
     reconcile.add_argument("--month", required=True)
     reconcile.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
 
+    reconcile_project_capital = subparsers.add_parser(
+        "reconcile-project-capital",
+        help="Run project capital on-chain vs ledger reconciliation for a project.",
+    )
+    reconcile_project_capital.add_argument("--project-id", required=True)
+    reconcile_project_capital.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
+
     create = subparsers.add_parser("create-distribution")
     create.add_argument("--month", required=True)
     create.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
@@ -171,6 +178,17 @@ def run(argv: list[str] | None = None) -> int:
                 _print_json(data)
             else:
                 _print_fields(data, ["ready", "blocked_reason", "delta_micro_usdc", "distributor_balance_micro_usdc", "computed_at"])
+            return 0
+
+        if args.command == "reconcile-project-capital":
+            project_id = str(args.project_id).strip()
+            if not project_id:
+                raise OracleRunnerError("--project-id is required.")
+            data = _post_action(client, f"/api/v1/oracle/projects/{project_id}/capital/reconciliation", b"")
+            if json_mode:
+                _print_json(data)
+            else:
+                _print_fields(data, ["ready", "blocked_reason", "delta_micro_usdc", "onchain_balance_micro_usdc", "ledger_balance_micro_usdc", "computed_at"])
             return 0
 
         if args.command == "create-distribution":
