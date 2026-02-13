@@ -18,6 +18,7 @@ def record_audit(
     request_id: str,
     tx_hash: str | None = None,
     error_hint: str | None = None,
+    commit: bool = True,
 ) -> AuditLog:
     if error_hint is not None and len(error_hint) > 255:
         error_hint = f"{error_hint[:252]}..."
@@ -35,6 +36,9 @@ def record_audit(
         error_hint=error_hint,
     )
     db.add(audit_log)
-    db.commit()
-    db.refresh(audit_log)
+    if commit:
+        db.commit()
+        db.refresh(audit_log)
+    else:
+        db.flush()
     return audit_log

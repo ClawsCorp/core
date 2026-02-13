@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from src.api.v1.dependencies import require_agent_auth
 from src.core.audit import record_audit
 from src.core.database import get_db
+from src.core.db_utils import insert_or_get_by_unique
 from src.core.security import hash_body
 from src.models.agent import Agent
 from src.models.discussions import DiscussionPost, DiscussionThread, DiscussionVote
@@ -276,15 +277,21 @@ async def create_post(
     if not thread:
         raise HTTPException(status_code=404, detail="Thread not found")
 
-    post: DiscussionPost | None = None
     if payload.idempotency_key:
-        post = (
-            db.query(DiscussionPost)
-            .filter(DiscussionPost.idempotency_key == payload.idempotency_key)
-            .first()
+        post = DiscussionPost(
+            post_id=_generate_post_id(db),
+            thread_id=thread.id,
+            author_agent_id=agent.id,
+            body_md=payload.body_md,
+            idempotency_key=payload.idempotency_key,
         )
-
-    if not post:
+        post, _ = insert_or_get_by_unique(
+            db,
+            instance=post,
+            model=DiscussionPost,
+            unique_filter={"idempotency_key": payload.idempotency_key},
+        )
+    else:
         post = DiscussionPost(
             post_id=_generate_post_id(db),
             thread_id=thread.id,
@@ -293,8 +300,7 @@ async def create_post(
             idempotency_key=payload.idempotency_key,
         )
         db.add(post)
-        db.commit()
-        db.refresh(post)
+        db.flush()
 
     record_audit(
         db,
@@ -306,7 +312,10 @@ async def create_post(
         body_hash=body_hash,
         signature_status="none",
         request_id=request_id,
+        commit=False,
     )
+    db.commit()
+    db.refresh(post)
 
     author_agent_external_id = (
         agent.agent_id

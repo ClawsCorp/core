@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from src.api.v1.dependencies import require_oracle_hmac
 from src.core.audit import record_audit
 from src.core.database import get_db
+from src.core.db_utils import insert_or_get_by_unique
 from src.models.expense_event import ExpenseEvent
 from src.models.project import Project
 from src.models.revenue_event import RevenueEvent
@@ -38,17 +39,8 @@ async def create_revenue_event(
     _validate_month(payload.profit_month_id)
     _validate_tx_hash(payload.tx_hash)
 
-    existing = (
-        db.query(RevenueEvent)
-        .filter(RevenueEvent.idempotency_key == payload.idempotency_key)
-        .first()
-    )
     request_id = request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID") or str(uuid4())
     body_hash = request.state.body_hash
-
-    if existing is not None:
-        _record_oracle_audit(request, db, body_hash, request_id, payload.idempotency_key)
-        return RevenueEventDetailResponse(success=True, data=_revenue_public(db, existing))
 
     project = _project_by_public_id(db, payload.project_id)
     event = RevenueEvent(
@@ -61,11 +53,15 @@ async def create_revenue_event(
         idempotency_key=payload.idempotency_key,
         evidence_url=payload.evidence_url,
     )
-    db.add(event)
+    event, _ = insert_or_get_by_unique(
+        db,
+        instance=event,
+        model=RevenueEvent,
+        unique_filter={"idempotency_key": payload.idempotency_key},
+    )
+    _record_oracle_audit(request, db, body_hash, request_id, payload.idempotency_key, commit=False)
     db.commit()
     db.refresh(event)
-
-    _record_oracle_audit(request, db, body_hash, request_id, payload.idempotency_key)
 
     return RevenueEventDetailResponse(success=True, data=_revenue_public(db, event))
 
@@ -80,17 +76,8 @@ async def create_expense_event(
     _validate_month(payload.profit_month_id)
     _validate_tx_hash(payload.tx_hash)
 
-    existing = (
-        db.query(ExpenseEvent)
-        .filter(ExpenseEvent.idempotency_key == payload.idempotency_key)
-        .first()
-    )
     request_id = request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID") or str(uuid4())
     body_hash = request.state.body_hash
-
-    if existing is not None:
-        _record_oracle_audit(request, db, body_hash, request_id, payload.idempotency_key)
-        return ExpenseEventDetailResponse(success=True, data=_expense_public(db, existing))
 
     project = _project_by_public_id(db, payload.project_id)
     event = ExpenseEvent(
@@ -103,11 +90,15 @@ async def create_expense_event(
         idempotency_key=payload.idempotency_key,
         evidence_url=payload.evidence_url,
     )
-    db.add(event)
+    event, _ = insert_or_get_by_unique(
+        db,
+        instance=event,
+        model=ExpenseEvent,
+        unique_filter={"idempotency_key": payload.idempotency_key},
+    )
+    _record_oracle_audit(request, db, body_hash, request_id, payload.idempotency_key, commit=False)
     db.commit()
     db.refresh(event)
-
-    _record_oracle_audit(request, db, body_hash, request_id, payload.idempotency_key)
 
     return ExpenseEventDetailResponse(success=True, data=_expense_public(db, event))
 
@@ -150,6 +141,7 @@ def _record_oracle_audit(
     body_hash: str,
     request_id: str,
     idempotency_key: str,
+    commit: bool = True,
 ) -> None:
     signature_status = getattr(request.state, "signature_status", "invalid")
     record_audit(
@@ -162,6 +154,7 @@ def _record_oracle_audit(
         body_hash=body_hash,
         signature_status=signature_status,
         request_id=request_id,
+        commit=commit,
     )
 
 

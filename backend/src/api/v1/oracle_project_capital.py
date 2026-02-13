@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from src.api.v1.dependencies import require_oracle_hmac
 from src.core.audit import record_audit
 from src.core.database import get_db
+from src.core.db_utils import insert_or_get_by_unique
 from src.models.project import Project
 from src.models.project_capital_event import ProjectCapitalEvent
 from src.schemas.project import ProjectCapitalEventCreateRequest, ProjectCapitalEventDetailResponse, ProjectCapitalEventPublic
@@ -35,13 +36,8 @@ async def create_project_capital_event(
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    existing = db.query(ProjectCapitalEvent).filter(ProjectCapitalEvent.idempotency_key == payload.idempotency_key).first()
     request_id = request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID") or str(uuid4())
     body_hash = request.state.body_hash
-
-    if existing is not None:
-        _record_oracle_audit(request, db, body_hash, request_id, payload.idempotency_key)
-        return ProjectCapitalEventDetailResponse(success=True, data=_public(project.project_id, existing))
 
     event = ProjectCapitalEvent(
         event_id=payload.event_id or _generate_event_id(db),
@@ -53,11 +49,15 @@ async def create_project_capital_event(
         evidence_tx_hash=payload.evidence_tx_hash,
         evidence_url=payload.evidence_url,
     )
-    db.add(event)
+    event, _ = insert_or_get_by_unique(
+        db,
+        instance=event,
+        model=ProjectCapitalEvent,
+        unique_filter={"idempotency_key": payload.idempotency_key},
+    )
+    _record_oracle_audit(request, db, body_hash, request_id, payload.idempotency_key, commit=False)
     db.commit()
     db.refresh(event)
-
-    _record_oracle_audit(request, db, body_hash, request_id, payload.idempotency_key)
     return ProjectCapitalEventDetailResponse(success=True, data=_public(project.project_id, event))
 
 
@@ -77,7 +77,14 @@ def _generate_event_id(db: Session) -> str:
     raise RuntimeError("Failed to generate unique event id.")
 
 
-def _record_oracle_audit(request: Request, db: Session, body_hash: str, request_id: str, idempotency_key: str) -> None:
+def _record_oracle_audit(
+    request: Request,
+    db: Session,
+    body_hash: str,
+    request_id: str,
+    idempotency_key: str,
+    commit: bool = True,
+) -> None:
     signature_status = getattr(request.state, "signature_status", "invalid")
     record_audit(
         db,
@@ -89,6 +96,7 @@ def _record_oracle_audit(request: Request, db: Session, body_hash: str, request_
         body_hash=body_hash,
         signature_status=signature_status,
         request_id=request_id,
+        commit=commit,
     )
 
 
