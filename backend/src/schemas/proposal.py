@@ -25,6 +25,7 @@ class ProposalSummary(BaseModel):
     title: str
     status: ProposalStatus
     author_agent_id: str
+    discussion_thread_id: str | None
     created_at: datetime
     updated_at: datetime
     discussion_ends_at: datetime | None

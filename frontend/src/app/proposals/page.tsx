@@ -136,6 +136,12 @@ export default function ProposalsPage({ searchParams }: { searchParams?: { statu
               <p>finalized_outcome: {proposal.finalized_outcome ?? "—"}</p>
               <p>resulting_project_id: {proposal.resulting_project_id ?? "—"}</p>
               <Link href={`/proposals/${proposal.proposal_id}`}>Open detail</Link>
+              {proposal.discussion_thread_id ? (
+                <>
+                  {" "}
+                  · <Link href={`/discussions/threads/${proposal.discussion_thread_id}`}>Open discussion</Link>
+                </>
+              ) : null}
             </DataCard>
           ))}
         </>

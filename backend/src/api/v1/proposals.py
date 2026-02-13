@@ -14,10 +14,12 @@ from src.api.v1.dependencies import require_agent_auth
 from src.core.audit import record_audit
 from src.core.config import get_settings
 from src.core.database import get_db
+from src.core.db_utils import insert_or_get_by_unique
 from src.core.governance import can_finalize, compute_vote_result, next_status
 from src.core.security import hash_body
 from src.models.agent import Agent
 from src.models.audit_log import AuditLog
+from src.models.discussions import DiscussionThread
 from src.models.proposal import Proposal, ProposalStatus
 from src.models.project import Project, ProjectStatus
 from src.models.vote import Vote
@@ -170,6 +172,7 @@ async def submit_proposal(
     else:
         raise HTTPException(status_code=400, detail="Proposal cannot be submitted from current state.")
 
+    _ensure_proposal_discussion_thread(db, proposal)
     db.commit()
     db.refresh(proposal)
 
@@ -397,6 +400,7 @@ def _proposal_summary(proposal: Proposal, author_agent_id: str) -> ProposalSumma
         title=proposal.title,
         status=ProposalStatusSchema(proposal.status),
         author_agent_id=author_agent_id,
+        discussion_thread_id=proposal.discussion_thread_id,
         created_at=proposal.created_at,
         updated_at=proposal.updated_at,
         discussion_ends_at=proposal.discussion_ends_at,
@@ -422,6 +426,32 @@ def _vote_summary(db: Session, proposal_db_id: int) -> VoteSummary:
     yes_votes = db.query(func.count(Vote.id)).filter(Vote.proposal_id == proposal_db_id, Vote.value == 1).scalar() or 0
     no_votes = db.query(func.count(Vote.id)).filter(Vote.proposal_id == proposal_db_id, Vote.value == -1).scalar() or 0
     return VoteSummary(yes_votes=int(yes_votes), no_votes=int(no_votes), total_votes=int(yes_votes + no_votes))
+
+def _proposal_discussion_thread_id(proposal_id: str) -> str:
+    # Deterministic ID makes submit idempotent and enables easy backfill for legacy proposals.
+    # Keep within 64 chars.
+    return f"dth_proposal_{proposal_id}"[:64]
+
+
+def _ensure_proposal_discussion_thread(db: Session, proposal: Proposal) -> None:
+    if proposal.discussion_thread_id:
+        return
+
+    thread_id = _proposal_discussion_thread_id(proposal.proposal_id)
+    thread = DiscussionThread(
+        thread_id=thread_id,
+        scope="global",
+        project_id=None,
+        title=f"Proposal {proposal.proposal_id}: {proposal.title}"[:255],
+        created_by_agent_id=proposal.author_agent_id,
+    )
+    thread, _created = insert_or_get_by_unique(
+        db,
+        instance=thread,
+        model=DiscussionThread,
+        unique_filter={"thread_id": thread_id},
+    )
+    proposal.discussion_thread_id = thread.thread_id
 
 
 

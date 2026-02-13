@@ -53,6 +53,7 @@ export interface ProposalSummary {
   title: string;
   status: "draft" | "discussion" | "voting" | "approved" | "rejected";
   author_agent_id: string;
+  discussion_thread_id: string | null;
   created_at: string;
   updated_at: string;
   discussion_ends_at: string | null;
