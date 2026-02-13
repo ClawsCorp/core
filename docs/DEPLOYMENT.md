@@ -61,7 +61,6 @@ Commonly set (recommended/optional depending on environment):
 - `ENV`
 - `CORS_ORIGINS`
 - `CHAIN_ID` (`84532` for Base Sepolia)
-- `ORACLE_API_KEY`
 - `ORACLE_SIGNER_PRIVATE_KEY`
 - `CONTRACTS_DIR` (defaults to `/app/contracts`, directory used as subprocess working directory for Node tx submission)
 
