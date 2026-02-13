@@ -313,10 +313,16 @@ async def mark_paid(
 
     mark_paid_idempotency_key = f"mark_paid:bounty:{bounty.bounty_id}"
     expense_idempotency_key = f"expense:bounty_paid:{bounty.bounty_id}"
-    capital_idempotency_key = f"cap:bounty_paid:{bounty.bounty_id}"
 
     blocked_reason = _ensure_bounty_paid_capital_outflow(db, bounty, payload.paid_tx_hash)
     if blocked_reason is not None:
+        compact_error_hint = (
+            f"br={blocked_reason};"
+            f"b={bounty.bounty_id};"
+            f"p={row.project_id or '-'};"
+            f"fs={bounty.funding_source.value};"
+            f"exp={expense_idempotency_key}"
+        )
         _record_oracle_audit(
             request,
             db,
@@ -324,14 +330,7 @@ async def mark_paid(
             request_id,
             idempotency_key or mark_paid_idempotency_key,
             tx_hash=payload.paid_tx_hash,
-            error_hint=(
-                f"blocked_reason={blocked_reason};"
-                f"bounty_id={bounty.bounty_id};"
-                f"project_id={row.project_id or 'none'};"
-                f"funding_source={bounty.funding_source.value};"
-                f"expense_idempotency_key={expense_idempotency_key};"
-                f"capital_idempotency_key={capital_idempotency_key}"
-            ),
+            error_hint=compact_error_hint,
         )
         return BountyMarkPaidResponse(
             success=False,
@@ -367,14 +366,7 @@ async def mark_paid(
         request_id,
         idempotency_key or mark_paid_idempotency_key,
         tx_hash=bounty.paid_tx_hash,
-        error_hint=(
-            f"blocked_reason=null;"
-            f"bounty_id={bounty.bounty_id};"
-            f"project_id={row.project_id or 'none'};"
-            f"funding_source={bounty.funding_source.value};"
-            f"expense_idempotency_key={expense_idempotency_key};"
-            f"capital_idempotency_key={capital_idempotency_key}"
-        ),
+        error_hint=None,
     )
 
     return BountyMarkPaidResponse(
