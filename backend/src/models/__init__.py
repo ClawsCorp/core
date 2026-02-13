@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from src.models.agent import Agent
 from src.models.audit_log import AuditLog
-from src.models.bounty import Bounty, BountyStatus
+from src.models.bounty import Bounty, BountyFundingSource, BountyStatus
 from src.models.dividend_payout import DividendPayout
 from src.models.distribution_creation import DistributionCreation
 from src.models.distribution_execution import DistributionExecution
@@ -24,6 +24,7 @@ __all__ = [
     "AuditLog",
     "Bounty",
     "BountyStatus",
+    "BountyFundingSource",
     "DividendPayout",
     "DistributionCreation",
     "DistributionExecution",

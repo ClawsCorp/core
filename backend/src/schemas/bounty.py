@@ -14,6 +14,12 @@ class BountyStatus(str, Enum):
     paid = "paid"
 
 
+class BountyFundingSource(str, Enum):
+    project_capital = "project_capital"
+    project_revenue = "project_revenue"
+    platform_treasury = "platform_treasury"
+
+
 class BountyCreateRequest(BaseModel):
     project_id: str = Field(..., min_length=1)
     title: str = Field(..., min_length=1)
@@ -46,6 +52,7 @@ class BountyMarkPaidRequest(BaseModel):
 class BountyPublic(BaseModel):
     bounty_id: str
     project_id: str | None
+    funding_source: BountyFundingSource
     title: str
     description_md: str | None
     amount_micro_usdc: int
@@ -75,6 +82,12 @@ class BountyListResponse(BaseModel):
 class BountyDetailResponse(BaseModel):
     success: bool
     data: BountyPublic
+
+
+class BountyMarkPaidResponse(BaseModel):
+    success: bool
+    data: BountyPublic
+    blocked_reason: str | None = None
 
 
 class BountyEligibilityResponse(BaseModel):

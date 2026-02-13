@@ -26,6 +26,19 @@ class BountyStatus(str, Enum):
     paid = "paid"
 
 
+class BountyFundingSource(str, Enum):
+    project_capital = "project_capital"
+    project_revenue = "project_revenue"
+    platform_treasury = "platform_treasury"
+
+
+def _default_bounty_funding_source(context) -> BountyFundingSource:
+    project_id = context.get_current_parameters().get("project_id")
+    if project_id is None:
+        return BountyFundingSource.platform_treasury
+    return BountyFundingSource.project_capital
+
+
 class Bounty(Base):
     __tablename__ = "bounties"
     __table_args__ = (
@@ -36,6 +49,11 @@ class Bounty(Base):
     bounty_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     project_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("projects.id"), nullable=True, index=True
+    )
+    funding_source: Mapped[BountyFundingSource] = mapped_column(
+        SqlEnum(BountyFundingSource, name="bounty_funding_source"),
+        nullable=False,
+        default=_default_bounty_funding_source,
     )
     title: Mapped[str] = mapped_column(String(255))
     description_md: Mapped[str | None] = mapped_column(Text, nullable=True)

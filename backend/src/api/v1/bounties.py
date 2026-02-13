@@ -12,9 +12,11 @@ from src.core.audit import record_audit
 from src.core.database import get_db
 from src.core.security import hash_body
 from src.models.agent import Agent
-from src.models.bounty import Bounty, BountyStatus
+from src.models.bounty import Bounty, BountyFundingSource, BountyStatus
 from src.models.expense_event import ExpenseEvent
+from src.models.project_capital_event import ProjectCapitalEvent
 from src.models.project import Project
+from src.services.project_capital import get_project_capital_balance_micro_usdc
 from src.services.reputation_hooks import emit_reputation_event
 
 from src.schemas.bounty import (
@@ -25,6 +27,7 @@ from src.schemas.bounty import (
     BountyListData,
     BountyListResponse,
     BountyMarkPaidRequest,
+    BountyMarkPaidResponse,
     BountyPublic,
     BountyStatus as BountyStatusSchema,
     BountySubmitRequest,
@@ -128,6 +131,7 @@ async def create_bounty(
         title=payload.title,
         description_md=payload.description_md,
         amount_micro_usdc=payload.amount_micro_usdc,
+        funding_source=BountyFundingSource.project_capital,
         status=BountyStatus.open,
     )
     db.add(bounty)
@@ -280,14 +284,14 @@ async def evaluate_eligibility(
     )
 
 
-@router.post("/{bounty_id}/mark-paid", response_model=BountyDetailResponse)
+@router.post("/{bounty_id}/mark-paid", response_model=BountyMarkPaidResponse)
 async def mark_paid(
     bounty_id: str,
     payload: BountyMarkPaidRequest,
     request: Request,
     _: str = Depends(require_oracle_hmac),
     db: Session = Depends(get_db),
-) -> BountyDetailResponse:
+) -> BountyMarkPaidResponse:
     request_id = request.headers.get("X-Request-ID") or str(uuid4())
     idempotency_key = request.headers.get("Idempotency-Key")
     body_hash = request.state.body_hash
@@ -305,6 +309,22 @@ async def mark_paid(
     if bounty.status not in {BountyStatus.eligible_for_payout, BountyStatus.paid}:
         raise HTTPException(
             status_code=400, detail="Bounty is not eligible for payout."
+        )
+
+    blocked_reason = _ensure_bounty_paid_capital_outflow(db, bounty, payload.paid_tx_hash)
+    if blocked_reason is not None:
+        _record_oracle_audit(
+            request,
+            db,
+            body_hash,
+            request_id,
+            idempotency_key,
+            error_hint=blocked_reason,
+        )
+        return BountyMarkPaidResponse(
+            success=False,
+            data=_bounty_public(bounty, row.project_id, row.agent_id),
+            blocked_reason=blocked_reason,
         )
 
     if bounty.status != BountyStatus.paid:
@@ -330,9 +350,10 @@ async def mark_paid(
 
     _record_oracle_audit(request, db, body_hash, request_id, idempotency_key)
 
-    return BountyDetailResponse(
+    return BountyMarkPaidResponse(
         success=True,
         data=_bounty_public(bounty, row.project_id, row.agent_id),
+        blocked_reason=None,
     )
 
 
@@ -366,6 +387,7 @@ def _record_oracle_audit(
     body_hash: str,
     request_id: str,
     idempotency_key: str | None,
+    error_hint: str | None = None,
 ) -> None:
     signature_status = getattr(request.state, "signature_status", "invalid")
     record_audit(
@@ -378,6 +400,7 @@ def _record_oracle_audit(
         body_hash=body_hash,
         signature_status=signature_status,
         request_id=request_id,
+        error_hint=error_hint,
     )
 
 
@@ -420,6 +443,7 @@ def _bounty_public(
     return BountyPublic(
         bounty_id=bounty.bounty_id,
         project_id=project_id,
+        funding_source=bounty.funding_source,
         title=bounty.title,
         description_md=bounty.description_md,
         amount_micro_usdc=bounty.amount_micro_usdc,
@@ -434,6 +458,36 @@ def _bounty_public(
         updated_at=bounty.updated_at,
     )
 
+
+
+def _ensure_bounty_paid_capital_outflow(db: Session, bounty: Bounty, paid_tx_hash: str | None) -> str | None:
+    if bounty.project_id is None:
+        return None
+    if bounty.funding_source != BountyFundingSource.project_capital:
+        return None
+
+    idempotency_key = f"cap:bounty_paid:{bounty.bounty_id}"
+    existing = db.query(ProjectCapitalEvent).filter(ProjectCapitalEvent.idempotency_key == idempotency_key).first()
+    if existing is not None:
+        return None
+
+    balance_micro_usdc = get_project_capital_balance_micro_usdc(db, bounty.project_id)
+    if balance_micro_usdc < bounty.amount_micro_usdc:
+        return "insufficient_project_capital"
+
+    event = ProjectCapitalEvent(
+        event_id=_generate_project_capital_event_id(db),
+        idempotency_key=idempotency_key,
+        profit_month_id=datetime.now(timezone.utc).strftime("%Y%m"),
+        project_id=bounty.project_id,
+        delta_micro_usdc=-bounty.amount_micro_usdc,
+        source="bounty_paid",
+        evidence_tx_hash=paid_tx_hash,
+        evidence_url=f"bounty:{bounty.bounty_id}",
+    )
+    db.add(event)
+    db.flush()
+    return None
 
 def _ensure_bounty_paid_expense(db: Session, bounty: Bounty) -> ExpenseEvent:
     idempotency_key = f"expense:bounty_paid:{bounty.bounty_id}"
@@ -456,6 +510,15 @@ def _ensure_bounty_paid_expense(db: Session, bounty: Bounty) -> ExpenseEvent:
     db.add(event)
     db.flush()
     return event
+
+
+def _generate_project_capital_event_id(db: Session) -> str:
+    for _ in range(5):
+        candidate = f"pcap_{secrets.token_hex(8)}"
+        exists = db.query(ProjectCapitalEvent).filter(ProjectCapitalEvent.event_id == candidate).first()
+        if not exists:
+            return candidate
+    raise RuntimeError("Failed to generate unique project capital event id.")
 
 
 def _generate_expense_event_id(db: Session) -> str:
