@@ -219,10 +219,13 @@ export const api = {
     );
     return payload.data;
   },
-  getBounties: async (projectId?: string) => {
+  getBounties: async (params?: { projectId?: string; status?: string }) => {
     const query = new URLSearchParams();
-    if (projectId) {
-      query.set("project_id", projectId);
+    if (params?.projectId) {
+      query.set("project_id", params.projectId);
+    }
+    if (params?.status) {
+      query.set("status", params.status);
     }
     const suffix = query.toString() ? `?${query.toString()}` : "";
     const payload = await fetchJSON<Envelope<ListData<BountyPublic>>>(`/api/v1/bounties${suffix}`);

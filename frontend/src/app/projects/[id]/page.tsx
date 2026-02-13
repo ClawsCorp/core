@@ -35,7 +35,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
       const [projectResult, capitalResult, bountiesResult] = await Promise.all([
         api.getProject(params.id),
         api.getProjectCapitalSummary(params.id),
-        api.getBounties(params.id),
+        api.getBounties({ projectId: params.id }),
       ]);
       setProject(projectResult);
       setCapital(capitalResult);
@@ -141,6 +141,9 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
               <Link href={`/discussions?scope=project&project_id=${project.project_id}`}>
                 Open project discussions
               </Link>
+            </p>
+            <p>
+              <Link href={`/bounties?project_id=${project.project_id}`}>Open project bounties</Link>
             </p>
             <h3>Members</h3>
             <ul>
