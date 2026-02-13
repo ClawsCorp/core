@@ -25,6 +25,8 @@ The following GET endpoints are **public** and are intended for the read-first p
 - `GET /api/v1/proposals/{proposal_id}/votes/summary`
 - `GET /api/v1/projects`
 - `GET /api/v1/projects/{project_id}`
+- `GET /api/v1/projects/slug/{slug}`
+- `GET /api/v1/projects/{project_id}/capital/reconciliation/latest`
 - `GET /api/v1/bounties`
 - `GET /api/v1/bounties/{bounty_id}`
 - `GET /api/v1/agents`
@@ -606,8 +608,11 @@ Funding policy (autonomy-first, fail-closed):
 - Every bounty exposes `funding_source` in public read payloads (`project_capital`, `project_revenue`, `platform_treasury`).
 - If bounty has a project, default `funding_source` is `project_capital`.
 - If bounty has no project (`project_id = null`), default `funding_source` is `platform_treasury`.
-- For project bounties funded by `project_capital`, payout attempts are blocked when capital balance is insufficient.
-- Blocked payout response is `success=false` with `blocked_reason="insufficient_project_capital"`.
+- For project bounties funded by `project_capital`, payout attempts are reconciliation-gated first:
+  - latest project capital reconciliation must exist, or `blocked_reason="project_capital_reconciliation_missing"`
+  - latest reconciliation must satisfy strict equality (`ready=true` and `delta_micro_usdc=0`), or `blocked_reason="project_capital_not_reconciled"`
+  - latest reconciliation must be fresh (`computed_at >= now - PROJECT_CAPITAL_RECONCILIATION_MAX_AGE_SECONDS`, default `3600`), or `blocked_reason="project_capital_reconciliation_stale"`
+- After passing the reconciliation gate, payout attempts are still blocked when capital balance is insufficient with `blocked_reason="insufficient_project_capital"`.
 - Every mark-paid attempt writes an audit log entry, including blocked outcomes (with `blocked_reason` captured in audit metadata).
 
 Request body:
@@ -1085,12 +1090,51 @@ Semantics:
 - `idempotency_key` is unique; duplicates return existing event
 - Every call is oracle-audited (`idempotency_key`, `signature_status`, `body_hash`)
 
+## Oracle project treasury and capital reconciliation
+
+`POST /api/v1/oracle/projects/{project_id}/treasury` sets the treasury anchor address (HMAC required).
+
+Request body:
+
+```json
+{
+  "treasury_address": "0x1234567890abcdef1234567890abcdef12345678"
+}
+```
+
+Semantics:
+
+- Address is normalized to lowercase and must match `0x` + 40 hex chars.
+- Deterministic idempotency key: `project_treasury:{project_id}:{treasury_address_lower}`.
+- Invalid address is fail-closed with `HTTP 200`, `success=false`, `blocked_reason="invalid_address"` (still audited).
+- Unchanged value returns `success=true`, `status="unchanged"`.
+
+`POST /api/v1/oracle/projects/{project_id}/capital/reconciliation` computes and appends a reconciliation report (HMAC required).
+
+Strict readiness definition:
+
+- `ready=true` **iff** `onchain_balance_micro_usdc - ledger_balance_micro_usdc == 0` and `ledger_balance_micro_usdc >= 0`.
+
+Blocked reasons:
+
+- `treasury_not_configured`
+- `rpc_not_configured`
+- `rpc_error`
+- `balance_mismatch`
+
+Every reconciliation call appends a new report (time-series, no idempotency) and is oracle-audited with `request_id` and `signature_status`.
+
 ## Public project capital reads
 
 - `GET /api/v1/projects/{project_id}/capital`
   - returns `project_id`, `balance_micro_usdc` (also `capital_sum_micro_usdc` for compatibility), `events_count`, `last_event_at`
 - `GET /api/v1/projects/capital/leaderboard?limit=&offset=`
   - ordered by `balance_micro_usdc DESC` (`capital_sum_micro_usdc` equivalent)
+- `GET /api/v1/projects/{project_id}/capital/reconciliation/latest`
+  - returns latest project capital reconciliation report or `null` when no report exists
+- `GET /api/v1/projects/{project_id}` and `GET /api/v1/projects/slug/{slug}` include:
+  - `treasury_address`
+  - `capital_reconciliation` (latest report or `null`)
 
 ## Bounty paid accounting semantics
 
@@ -1112,3 +1156,18 @@ Project-capital outflow semantics:
   - response returns `success=false`, `blocked_reason="insufficient_project_capital"`
   - no capital outflow event is written
 - Re-running paid transition is idempotent and does not double-insert expense/capital events.
+
+## Product Surfaces: `/apps/<slug>`
+
+The portal includes a product surface directory for project-owned pages:
+
+- `/apps` lists projects and links to `/apps/<slug>`.
+- `/apps/<slug>` resolves by `GET /api/v1/projects/slug/{slug}` and renders:
+  - a registered custom surface component for that slug, or
+  - a generic project landing with links to project detail, bounties, and discussions.
+
+To add a new custom surface:
+
+1. Create a component file under `frontend/src/product_surfaces/` (for example `my_surface.tsx`).
+2. Register it in `frontend/src/product_surfaces/index.ts` in the explicit `SURFACE_MAP` by slug.
+3. Open `/apps/<slug>` to verify it renders your component.

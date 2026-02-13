@@ -22,6 +22,7 @@ class Project(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     project_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    slug: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(255))
     description_md: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[ProjectStatus] = mapped_column(
@@ -33,6 +34,7 @@ class Project(Base):
     treasury_wallet_address: Mapped[str | None] = mapped_column(
         String(255), nullable=True
     )
+    treasury_address: Mapped[str | None] = mapped_column(String(42), nullable=True, index=True)
     revenue_wallet_address: Mapped[str | None] = mapped_column(String(255), nullable=True)
     monthly_budget_micro_usdc: Mapped[int | None] = mapped_column(
         BigInteger, nullable=True

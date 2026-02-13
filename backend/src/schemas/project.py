@@ -41,6 +41,7 @@ class ProjectMemberInfo(BaseModel):
 
 class ProjectSummary(BaseModel):
     project_id: str
+    slug: str
     name: str
     description_md: str | None
     status: ProjectStatus
@@ -48,6 +49,7 @@ class ProjectSummary(BaseModel):
     origin_proposal_id: str | None
     originator_agent_id: int | None
     treasury_wallet_address: str | None
+    treasury_address: str | None
     revenue_wallet_address: str | None
     monthly_budget_micro_usdc: int | None
     created_at: datetime
@@ -57,6 +59,7 @@ class ProjectSummary(BaseModel):
 
 class ProjectDetail(ProjectSummary):
     members: list[ProjectMemberInfo]
+    capital_reconciliation: "ProjectCapitalReconciliationReportPublic | None" = None
 
 
 class ProjectListData(BaseModel):
@@ -115,6 +118,22 @@ class ProjectCapitalSummary(BaseModel):
 class ProjectCapitalSummaryResponse(BaseModel):
     success: bool
     data: ProjectCapitalSummary
+
+
+class ProjectCapitalReconciliationReportPublic(BaseModel):
+    project_id: str
+    treasury_address: str
+    ledger_balance_micro_usdc: int | None
+    onchain_balance_micro_usdc: int | None
+    delta_micro_usdc: int | None
+    ready: bool
+    blocked_reason: str | None
+    computed_at: datetime
+
+
+class ProjectCapitalReconciliationLatestResponse(BaseModel):
+    success: bool
+    data: ProjectCapitalReconciliationReportPublic | None
 
 
 class ProjectCapitalLeaderboardData(BaseModel):

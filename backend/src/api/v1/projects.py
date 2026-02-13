@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import secrets
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -14,10 +15,13 @@ from src.core.database import get_db
 from src.models.agent import Agent
 from src.models.project import Project, ProjectStatus
 from src.models.project_capital_event import ProjectCapitalEvent
+from src.models.project_capital_reconciliation_report import ProjectCapitalReconciliationReport
 from src.models.project_member import ProjectMember
 from src.schemas.project import (
     ProjectCapitalLeaderboardData,
     ProjectCapitalLeaderboardResponse,
+    ProjectCapitalReconciliationLatestResponse,
+    ProjectCapitalReconciliationReportPublic,
     ProjectCapitalSummary,
     ProjectCapitalSummaryResponse,
     ProjectCreateRequest,
@@ -91,6 +95,26 @@ def list_projects(
     return result
 
 
+@router.get(
+    "/slug/{slug}",
+    response_model=ProjectDetailResponse,
+    summary="Get project detail by slug",
+    description="Public read endpoint for a project and public member roster by project slug.",
+)
+def get_project_by_slug(
+    slug: str,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> ProjectDetailResponse:
+    project = db.query(Project).filter(Project.slug == slug).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    result = ProjectDetailResponse(success=True, data=_project_detail(db, project))
+    response.headers["Cache-Control"] = "public, max-age=60"
+    response.headers["ETag"] = f'W/"project-slug:{project.slug}:{int(project.updated_at.timestamp())}"'
+    return result
+
+
 @router.get("/{project_id}/capital", response_model=ProjectCapitalSummaryResponse, summary="Get project capital summary")
 def get_project_capital(project_id: str, db: Session = Depends(get_db)) -> ProjectCapitalSummaryResponse:
     project = db.query(Project).filter(Project.project_id == project_id).first()
@@ -113,6 +137,28 @@ def get_project_capital(project_id: str, db: Session = Depends(get_db)) -> Proje
             last_event_at=row[2],
         ),
     )
+
+
+@router.get(
+    "/{project_id}/capital/reconciliation/latest",
+    response_model=ProjectCapitalReconciliationLatestResponse,
+    summary="Get latest project capital reconciliation report",
+)
+def get_project_capital_reconciliation_latest(
+    project_id: str,
+    db: Session = Depends(get_db),
+) -> ProjectCapitalReconciliationLatestResponse:
+    project = db.query(Project).filter(Project.project_id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    report = (
+        db.query(ProjectCapitalReconciliationReport)
+        .filter(ProjectCapitalReconciliationReport.project_id == project.id)
+        .order_by(ProjectCapitalReconciliationReport.computed_at.desc())
+        .first()
+    )
+    return ProjectCapitalReconciliationLatestResponse(success=True, data=_reconciliation_public(project.project_id, report))
 
 
 @router.get(
@@ -149,6 +195,7 @@ async def create_project(
     project_id = _generate_project_id(db)
     project = Project(
         project_id=project_id,
+        slug=_generate_project_slug(db, payload.name, project_id),
         name=payload.name,
         description_md=payload.description_md,
         status=ProjectStatus.draft,
@@ -253,9 +300,31 @@ def _generate_project_id(db: Session) -> str:
     raise RuntimeError("Failed to generate unique project id.")
 
 
+def _generate_project_slug(db: Session, name: str, project_id: str) -> str:
+    base = _slugify_name(name)
+    candidates = [base, f"{base}-{project_id[-6:]}", f"proj-{project_id}"]
+
+    for candidate in candidates:
+        if not db.query(Project).filter(Project.slug == candidate).first():
+            return candidate
+
+    for _ in range(5):
+        fallback = f"{base}-{secrets.token_hex(2)}"
+        if not db.query(Project).filter(Project.slug == fallback).first():
+            return fallback
+
+    return f"proj-{project_id}"
+
+
+def _slugify_name(name: str) -> str:
+    normalized = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    return (normalized or "project")[:48].strip("-") or "project"
+
+
 def _project_summary(project: Project) -> ProjectSummary:
     return ProjectSummary(
         project_id=project.project_id,
+        slug=project.slug,
         name=project.name,
         description_md=project.description_md,
         status=ProjectStatusSchema(project.status),
@@ -263,6 +332,7 @@ def _project_summary(project: Project) -> ProjectSummary:
         origin_proposal_id=project.origin_proposal_id,
         originator_agent_id=project.originator_agent_id,
         treasury_wallet_address=project.treasury_wallet_address,
+        treasury_address=project.treasury_address,
         revenue_wallet_address=project.revenue_wallet_address,
         monthly_budget_micro_usdc=project.monthly_budget_micro_usdc,
         created_at=project.created_at,
@@ -273,9 +343,34 @@ def _project_summary(project: Project) -> ProjectSummary:
 
 def _project_detail(db: Session, project: Project) -> ProjectDetail:
     members = _load_project_members(db, project.id)
+    latest_report = (
+        db.query(ProjectCapitalReconciliationReport)
+        .filter(ProjectCapitalReconciliationReport.project_id == project.id)
+        .order_by(ProjectCapitalReconciliationReport.computed_at.desc())
+        .first()
+    )
     return ProjectDetail(
         **_project_summary(project).model_dump(),
         members=members,
+        capital_reconciliation=_reconciliation_public(project.project_id, latest_report),
+    )
+
+
+def _reconciliation_public(
+    project_id: str,
+    report: ProjectCapitalReconciliationReport | None,
+) -> ProjectCapitalReconciliationReportPublic | None:
+    if report is None:
+        return None
+    return ProjectCapitalReconciliationReportPublic(
+        project_id=project_id,
+        treasury_address=report.treasury_address,
+        ledger_balance_micro_usdc=report.ledger_balance_micro_usdc,
+        onchain_balance_micro_usdc=report.onchain_balance_micro_usdc,
+        delta_micro_usdc=report.delta_micro_usdc,
+        ready=report.ready,
+        blocked_reason=report.blocked_reason,
+        computed_at=report.computed_at,
     )
 
 

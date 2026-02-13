@@ -97,6 +97,48 @@ def read_usdc_balance_of_distributor() -> BalanceReadResult:
     )
 
 
+def get_usdc_balance_micro_usdc(address: str) -> BalanceReadResult:
+    settings = get_settings()
+    rpc_url = settings.base_sepolia_rpc_url
+    usdc_address = settings.usdc_address
+    if _is_invalid_rpc_config(rpc_url, usdc_address, address):
+        raise BlockchainConfigError("Missing BASE_SEPOLIA_RPC_URL or USDC_ADDRESS")
+
+    call_data = f"0x{_BALANCE_OF_SELECTOR}{_encode_address_arg(address)}"
+    balance_hex = _rpc_call(
+        rpc_url,
+        "eth_call",
+        [
+            {
+                "to": usdc_address,
+                "data": call_data,
+            },
+            "latest",
+        ],
+    )
+    if not isinstance(balance_hex, str) or not balance_hex.startswith("0x"):
+        raise BlockchainReadError("Invalid eth_call response for balanceOf")
+
+    try:
+        balance = int(balance_hex, 16)
+    except ValueError as exc:
+        raise BlockchainReadError("Unable to parse eth_call balance response") from exc
+
+    chain_id: int | None = None
+    chain_hex = _rpc_call(rpc_url, "eth_chainId", [])
+    if isinstance(chain_hex, str) and chain_hex.startswith("0x"):
+        try:
+            chain_id = int(chain_hex, 16)
+        except ValueError:
+            chain_id = None
+
+    return BalanceReadResult(
+        balance_micro_usdc=balance,
+        rpc_chain_id=chain_id,
+        rpc_url_name="base_sepolia",
+    )
+
+
 def read_distribution_state(profit_month_value: int) -> DistributionState:
     settings = get_settings()
     rpc_url = settings.base_sepolia_rpc_url

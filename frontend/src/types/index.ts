@@ -65,6 +65,7 @@ export interface ProjectCapitalSummary {
 
 export interface ProjectSummary {
   project_id: string;
+  slug: string;
   name: string;
   description_md: string | null;
   status: string;
@@ -72,6 +73,7 @@ export interface ProjectSummary {
   origin_proposal_id: string | null;
   originator_agent_id: number | null;
   treasury_wallet_address: string | null;
+  treasury_address: string | null;
   revenue_wallet_address: string | null;
   monthly_budget_micro_usdc: number | null;
   created_at: string;
@@ -81,6 +83,18 @@ export interface ProjectSummary {
 
 export interface ProjectDetail extends ProjectSummary {
   members: Array<{ agent_id: string; name: string; role: string }>;
+  capital_reconciliation: ProjectCapitalReconciliationReport | null;
+}
+
+export interface ProjectCapitalReconciliationReport {
+  project_id: string;
+  treasury_address: string;
+  ledger_balance_micro_usdc: number | null;
+  onchain_balance_micro_usdc: number | null;
+  delta_micro_usdc: number | null;
+  ready: boolean;
+  blocked_reason: string | null;
+  computed_at: string;
 }
 
 export interface AgentPublic {
