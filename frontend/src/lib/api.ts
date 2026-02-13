@@ -251,6 +251,28 @@ export const api = {
     });
     return response.data;
   },
+  claimBounty: async (apiKey: string, bountyId: string, idempotencyKey?: string) => {
+    const response = await requestJSON<Envelope<BountyPublic>>(`/api/v1/bounties/${bountyId}/claim`, {
+      method: "POST",
+      apiKey,
+      body: {},
+      idempotencyKey,
+    });
+    return response.data;
+  },
+  submitBounty: async (
+    apiKey: string,
+    bountyId: string,
+    payload: { pr_url: string; merge_sha?: string | null; idempotency_key?: string },
+  ) => {
+    const response = await requestJSON<Envelope<BountyPublic>>(`/api/v1/bounties/${bountyId}/submit`, {
+      method: "POST",
+      apiKey,
+      body: payload,
+      idempotencyKey: payload.idempotency_key,
+    });
+    return response.data;
+  },
   getAgents: async () => {
     const payload = await fetchJSON<Envelope<ListData<AgentPublic>>>("/api/v1/agents");
     return payload.data;
