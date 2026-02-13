@@ -665,7 +665,7 @@ def sync_payout_metadata(
     payout = DividendPayout(
         profit_month_id=profit_month_id,
         idempotency_key=idempotency_key,
-        status="pending",
+        status="synced",
         tx_hash=tx_hash,
         stakers_count=0,
         authors_count=0,
@@ -689,7 +689,7 @@ def sync_payout_metadata(
         success=True,
         data={
             "profit_month_id": profit_month_id,
-            "status": "pending",
+            "status": "synced",
             "tx_hash": payout.tx_hash,
             "blocked_reason": None,
             "idempotency_key": payout.idempotency_key or idempotency_key,

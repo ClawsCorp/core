@@ -979,7 +979,7 @@ Idempotency and persistence:
 
 - Deterministic key: `sync_payout:{profit_month_id}:{tx_hash}`.
 - Existing row by `(profit_month_id, tx_hash)` or same idempotency key returns `success=true`, `status="already_synced"`.
-- First successful sync appends a `dividend_payouts` row and returns `status="pending"` (receipt confirmation happens separately).
+- First successful sync appends a `dividend_payouts` row and returns `status="synced"` (receipt confirmation happens separately).
 
 Example response:
 
@@ -988,7 +988,7 @@ Example response:
   "success": true,
   "data": {
     "profit_month_id": "202602",
-    "status": "pending",
+    "status": "synced",
     "tx_hash": "0x...",
     "blocked_reason": null,
     "idempotency_key": "sync_payout:202602:0x...",
