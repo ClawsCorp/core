@@ -28,21 +28,7 @@ jobs:
       - name: Install pytest
         run: python -m pip install pytest
       - name: Run backend tests
-        working-directory: backend
-        run: |
-          set +e
-          pytest -q
-          status=$?
-          if [ "$status" -eq 0 ]; then
-            echo "Pytest passed."
-            exit 0
-          fi
-          if [ "$status" -eq 5 ]; then
-            echo "No tests yet; skipping."
-            exit 0
-          fi
-          echo "Pytest failed with exit code $status."
-          exit "$status"
+        run: PYTHONPATH=backend python -m pytest -q
 
   frontend:
     name: frontend
