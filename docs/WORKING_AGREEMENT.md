@@ -29,6 +29,10 @@ idempotency + evidence (tx_hash / evidence_url)
 
 Monthly profit = SUM(revenue) - SUM(expenses).
 
+Alembic migration invariant (do not break deploys):  
+Alembic stores the current revision in `alembic_version.version_num` which is `VARCHAR(32)` by default.  
+Therefore **migration `revision` identifiers MUST be <= 32 characters** (CI enforces this).  
+
 Settlement + fail-closed gate (STRICT EQUALITY):  
 ready=true only if  
 IERC20(USDC).balanceOf(DividendDistributor) == profit_sum_micro_usdc for profit_month_id.  
