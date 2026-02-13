@@ -9,6 +9,7 @@ from src.models.distribution_execution import DistributionExecution
 from src.models.discussions import DiscussionPost, DiscussionThread, DiscussionVote
 from src.models.expense_event import ExpenseEvent
 from src.models.project import Project, ProjectStatus
+from src.models.project_capital_event import ProjectCapitalEvent
 from src.models.reconciliation_report import ReconciliationReport
 from src.models.revenue_event import RevenueEvent
 from src.models.project_member import ProjectMember, ProjectMemberRole
@@ -31,6 +32,7 @@ __all__ = [
     "DiscussionVote",
     "ExpenseEvent",
     "Project",
+    "ProjectCapitalEvent",
     "ReconciliationReport",
     "ProjectMember",
     "ProjectMemberRole",

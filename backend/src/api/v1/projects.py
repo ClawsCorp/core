@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
 from src.api.v1.dependencies import require_oracle_hmac
@@ -12,8 +13,13 @@ from src.core.audit import record_audit
 from src.core.database import get_db
 from src.models.agent import Agent
 from src.models.project import Project, ProjectStatus
+from src.models.project_capital_event import ProjectCapitalEvent
 from src.models.project_member import ProjectMember
 from src.schemas.project import (
+    ProjectCapitalLeaderboardData,
+    ProjectCapitalLeaderboardResponse,
+    ProjectCapitalSummary,
+    ProjectCapitalSummaryResponse,
     ProjectCreateRequest,
     ProjectDetail,
     ProjectDetailResponse,
@@ -27,6 +33,33 @@ from src.schemas.project import (
 )
 
 router = APIRouter(prefix="/api/v1/projects", tags=["public-projects", "projects"])
+
+
+@router.get("/capital/leaderboard", response_model=ProjectCapitalLeaderboardResponse, summary="Project capital leaderboard")
+def project_capital_leaderboard(
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+) -> ProjectCapitalLeaderboardResponse:
+    base = db.query(
+        Project.project_id.label("project_id"),
+        func.coalesce(func.sum(ProjectCapitalEvent.delta_micro_usdc), 0).label("capital_sum_micro_usdc"),
+        func.count(ProjectCapitalEvent.id).label("events_count"),
+        func.max(ProjectCapitalEvent.created_at).label("last_event_at"),
+    ).join(ProjectCapitalEvent, ProjectCapitalEvent.project_id == Project.id).group_by(Project.id)
+
+    total = base.count()
+    rows = base.order_by(desc("capital_sum_micro_usdc"), Project.project_id.asc()).offset(offset).limit(limit).all()
+    items = [
+        ProjectCapitalSummary(
+            project_id=row.project_id,
+            capital_sum_micro_usdc=int(row.capital_sum_micro_usdc or 0),
+            events_count=int(row.events_count or 0),
+            last_event_at=row.last_event_at,
+        )
+        for row in rows
+    ]
+    return ProjectCapitalLeaderboardResponse(success=True, data=ProjectCapitalLeaderboardData(items=items, limit=limit, offset=offset, total=total))
 
 
 @router.get(
@@ -55,6 +88,29 @@ def list_projects(
     response.headers["Cache-Control"] = "public, max-age=60"
     response.headers["ETag"] = f'W/"projects:{status or "all"}:{offset}:{limit}:{total}"'
     return result
+
+
+@router.get("/{project_id}/capital", response_model=ProjectCapitalSummaryResponse, summary="Get project capital summary")
+def get_project_capital(project_id: str, db: Session = Depends(get_db)) -> ProjectCapitalSummaryResponse:
+    project = db.query(Project).filter(Project.project_id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    row = db.query(
+        func.coalesce(func.sum(ProjectCapitalEvent.delta_micro_usdc), 0),
+        func.count(ProjectCapitalEvent.id),
+        func.max(ProjectCapitalEvent.created_at),
+    ).filter(ProjectCapitalEvent.project_id == project.id).one()
+
+    return ProjectCapitalSummaryResponse(
+        success=True,
+        data=ProjectCapitalSummary(
+            project_id=project.project_id,
+            capital_sum_micro_usdc=int(row[0] or 0),
+            events_count=int(row[1] or 0),
+            last_event_at=row[2],
+        ),
+    )
 
 
 @router.get(
@@ -202,6 +258,8 @@ def _project_summary(project: Project) -> ProjectSummary:
         description_md=project.description_md,
         status=ProjectStatusSchema(project.status),
         proposal_id=project.proposal_id,
+        origin_proposal_id=project.origin_proposal_id,
+        originator_agent_id=project.originator_agent_id,
         treasury_wallet_address=project.treasury_wallet_address,
         revenue_wallet_address=project.revenue_wallet_address,
         monthly_budget_micro_usdc=project.monthly_budget_micro_usdc,

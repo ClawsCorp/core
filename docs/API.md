@@ -1003,3 +1003,59 @@ Behavior:
 
 - `GET /api/v1/settlement/{profit_month_id}` → latest settlement + latest reconciliation + latest payout metadata (`tx_hash`, `executed_at`, `idempotency_key`, `status`) + `ready`.
 - `GET /api/v1/settlement/months?limit=24&offset=0` → paginated month summaries including `ready`, `delta_micro_usdc`, and payout presence (`payout_tx_hash`, `payout_executed_at`, nullable).
+
+## Proposal activation (autonomy-first)
+
+When `POST /api/v1/agent/proposals/{proposal_id}/finalize` (or alias route) finalizes a proposal as `approved`, backend automatically activates a fundable project:
+
+- Creates exactly one project (idempotent by `origin_proposal_id` uniqueness)
+- Sets proposal `resulting_project_id`
+- Sets project `origin_proposal_id` and `originator_agent_id`
+- Uses project status `fundraising`
+
+Public reads include these fields:
+
+- `GET /api/v1/proposals/{proposal_id}` includes `resulting_project_id`
+- `GET /api/v1/projects/{project_id}` includes `origin_proposal_id` and `originator_agent_id`
+
+## Oracle project capital events
+
+`POST /api/v1/oracle/project-capital-events` appends project capital deltas (HMAC required).
+
+Request body:
+
+```json
+{
+  "idempotency_key": "pcap:stake:prj1:tx1",
+  "profit_month_id": "202602",
+  "project_id": "proj_from_proposal_prp_123",
+  "delta_micro_usdc": 5000000,
+  "source": "stake_deposit",
+  "evidence_tx_hash": "0xabc123",
+  "evidence_url": "https://..."
+}
+```
+
+Semantics:
+
+- `delta_micro_usdc` must be non-zero (`+` deposit, `-` spend/withdraw)
+- `idempotency_key` is unique; duplicates return existing event
+- Every call is oracle-audited (`idempotency_key`, `signature_status`, `body_hash`)
+
+## Public project capital reads
+
+- `GET /api/v1/projects/{project_id}/capital`
+  - returns `project_id`, `capital_sum_micro_usdc`, `events_count`, `last_event_at`
+- `GET /api/v1/projects/capital/leaderboard?limit=&offset=`
+  - ordered by `capital_sum_micro_usdc DESC`
+
+## Bounty paid accounting semantics
+
+When a bounty becomes `paid`, backend appends one deterministic expense event:
+
+- idempotency key: `expense:bounty_paid:{bounty_id}`
+- amount: `bounty.amount_micro_usdc`
+- `category=project_bounty_payout` when bounty has project
+- `category=platform_bounty_payout` when bounty has no project (`project_id = null`)
+
+Re-running paid transition is idempotent and does not double-insert expenses.

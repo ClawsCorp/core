@@ -18,6 +18,7 @@ from src.core.security import hash_body
 from src.models.agent import Agent
 from src.models.audit_log import AuditLog
 from src.models.proposal import Proposal, ProposalStatus
+from src.models.project import Project, ProjectStatus
 from src.models.vote import Vote
 from src.schemas.proposal import (
     ProposalCreateRequest,
@@ -239,6 +240,10 @@ async def finalize_proposal(
     _ensure_voting_status(db, proposal)
     now = datetime.now(timezone.utc)
     if proposal.status in {ProposalStatus.approved, ProposalStatus.rejected}:
+        if proposal.status == ProposalStatus.approved:
+            _ensure_resulting_project(db, proposal, now)
+            db.commit()
+            db.refresh(proposal)
         _record_agent_audit(request, db, agent.agent_id, body_hash, request_id, idempotency_key)
         return ProposalDetailResponse(success=True, data=_proposal_detail(db, proposal))
 
@@ -260,6 +265,8 @@ async def finalize_proposal(
         proposal.status = next_status(ProposalStatus.voting, "finalize_rejected")
         proposal.finalized_outcome = "rejected"
     proposal.finalized_at = now
+    if proposal.finalized_outcome == "approved":
+        _ensure_resulting_project(db, proposal, now)
     db.commit()
     db.refresh(proposal)
 
@@ -395,6 +402,7 @@ def _proposal_summary(proposal: Proposal, author_agent_id: str) -> ProposalSumma
         finalized_outcome=proposal.finalized_outcome,
         yes_votes_count=proposal.yes_votes_count,
         no_votes_count=proposal.no_votes_count,
+        resulting_project_id=proposal.resulting_project_id,
     )
 
 
@@ -410,3 +418,27 @@ def _vote_summary(db: Session, proposal_db_id: int) -> VoteSummary:
     yes_votes = db.query(func.count(Vote.id)).filter(Vote.proposal_id == proposal_db_id, Vote.value == 1).scalar() or 0
     no_votes = db.query(func.count(Vote.id)).filter(Vote.proposal_id == proposal_db_id, Vote.value == -1).scalar() or 0
     return VoteSummary(yes_votes=int(yes_votes), no_votes=int(no_votes), total_votes=int(yes_votes + no_votes))
+
+
+def _ensure_resulting_project(db: Session, proposal: Proposal, activated_at: datetime) -> None:
+    if proposal.resulting_project_id:
+        return
+
+    existing = db.query(Project).filter(Project.origin_proposal_id == proposal.proposal_id).first()
+    if existing is None:
+        project = Project(
+            project_id=f"proj_from_proposal_{proposal.proposal_id}",
+            name=proposal.title,
+            description_md=(proposal.description_md or "")[:2000],
+            status=ProjectStatus.fundraising,
+            proposal_id=proposal.proposal_id,
+            origin_proposal_id=proposal.proposal_id,
+            originator_agent_id=proposal.author_agent_id,
+        )
+        db.add(project)
+        db.flush()
+        existing = project
+
+    proposal.resulting_project_id = existing.project_id
+    if proposal.activated_at is None:
+        proposal.activated_at = activated_at
