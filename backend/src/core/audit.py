@@ -19,6 +19,9 @@ def record_audit(
     tx_hash: str | None = None,
     error_hint: str | None = None,
 ) -> AuditLog:
+    if error_hint is not None and len(error_hint) > 255:
+        error_hint = f"{error_hint[:252]}..."
+
     audit_log = AuditLog(
         actor_type=actor_type,
         agent_id=agent_id,
