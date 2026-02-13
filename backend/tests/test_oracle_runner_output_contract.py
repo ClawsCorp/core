@@ -26,6 +26,13 @@ class _FakeClient:
             },
             "/api/v1/bounties/bty_123/evaluate-eligibility": {"status": "eligible_for_payout", "reasons": None},
             "/api/v1/bounties/bty_123/mark-paid": {"status": "paid", "blocked_reason": None},
+            "/api/v1/oracle/project-capital-events": {
+                "event_id": "pcap_1",
+                "project_id": "proj_123",
+                "delta_micro_usdc": 123,
+                "source": "stake",
+                "profit_month_id": None,
+            },
         }
 
     def post(self, path: str, *, body_bytes: bytes, idempotency_key: str | None = None):
@@ -145,3 +152,56 @@ def test_mark_bounty_paid_without_json_writes_human_summary_to_stderr(monkeypatc
     assert exit_code == 0
     assert captured.out.strip() == ""
     assert "status=paid" in captured.err
+
+
+def test_project_reconcile_alias(monkeypatch, capsys) -> None:
+    _setup_fake_runner(monkeypatch)
+
+    exit_code = cli.run(["project-reconcile", "--project-id", "proj_123"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.out.strip() == ""
+    assert "ready=True" in captured.err
+
+
+def test_project_capital_event_derived_idempotency_key_json(monkeypatch, capsys) -> None:
+    _setup_fake_runner(monkeypatch)
+
+    exit_code = cli.run(
+        [
+            "project-capital-event",
+            "--project-id",
+            "proj_123",
+            "--delta-micro-usdc",
+            "123",
+            "--source",
+            "stake",
+            "--json",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    data = json.loads(captured.out.strip())
+    assert data["event_id"] == "pcap_1"
+    assert captured.err.strip() == ""
+
+
+def test_run_project_month_stdout_json_and_stderr_progress(monkeypatch, capsys) -> None:
+    _setup_fake_runner(monkeypatch)
+
+    exit_code = cli.run(["run-project-month", "--project-id", "proj_123"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    stdout_lines = [line for line in captured.out.splitlines() if line.strip()]
+    assert len(stdout_lines) == 1
+    summary = json.loads(stdout_lines[0])
+    assert summary["success"] is True
+    assert summary["project_id"] == "proj_123"
+    assert "reconciliation" in summary
+
+    stderr = captured.err
+    assert "stage=reconcile_project_capital status=start" in stderr
+    assert "stage=reconcile_project_capital status=ok" in stderr
