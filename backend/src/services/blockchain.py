@@ -45,6 +45,13 @@ class DistributionState:
     distributed: bool
 
 
+@dataclass(frozen=True)
+class TransactionReceiptResult:
+    found: bool
+    status: int | None
+    block_number: int | None
+
+
 def read_usdc_balance_of_distributor() -> BalanceReadResult:
     settings = get_settings()
     rpc_url = settings.base_sepolia_rpc_url
@@ -117,6 +124,38 @@ def read_distribution_state(profit_month_value: int) -> DistributionState:
         distributed=bool(words[1]),
         exists=bool(words[2]),
     )
+
+
+def read_transaction_receipt(tx_hash: str) -> TransactionReceiptResult:
+    settings = get_settings()
+    rpc_url = settings.base_sepolia_rpc_url
+    if rpc_url is None or _is_placeholder(rpc_url):
+        raise BlockchainConfigError("Missing BASE_SEPOLIA_RPC_URL")
+
+    receipt = _rpc_call(rpc_url, "eth_getTransactionReceipt", [tx_hash])
+    if receipt is None:
+        return TransactionReceiptResult(found=False, status=None, block_number=None)
+    if not isinstance(receipt, dict):
+        raise BlockchainReadError("Invalid eth_getTransactionReceipt response")
+
+    status_hex = receipt.get("status")
+    block_number_hex = receipt.get("blockNumber")
+    if not isinstance(status_hex, str) or not status_hex.startswith("0x"):
+        raise BlockchainReadError("Invalid receipt status")
+
+    try:
+        status = int(status_hex, 16)
+    except ValueError as exc:
+        raise BlockchainReadError("Unable to parse receipt status") from exc
+
+    block_number: int | None = None
+    if isinstance(block_number_hex, str) and block_number_hex.startswith("0x"):
+        try:
+            block_number = int(block_number_hex, 16)
+        except ValueError:
+            block_number = None
+
+    return TransactionReceiptResult(found=True, status=status, block_number=block_number)
 
 
 def submit_create_distribution_tx(profit_month_value: int, total_profit_micro_usdc: int) -> str:

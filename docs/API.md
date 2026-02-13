@@ -979,7 +979,7 @@ Idempotency and persistence:
 
 - Deterministic key: `sync_payout:{profit_month_id}:{tx_hash}`.
 - Existing row by `(profit_month_id, tx_hash)` or same idempotency key returns `success=true`, `status="already_synced"`.
-- First successful sync appends a `dividend_payouts` row and returns `status="synced"`.
+- First successful sync appends a `dividend_payouts` row and returns `status="pending"` (receipt confirmation happens separately).
 
 Example response:
 
@@ -988,7 +988,7 @@ Example response:
   "success": true,
   "data": {
     "profit_month_id": "202602",
-    "status": "synced",
+    "status": "pending",
     "tx_hash": "0x...",
     "blocked_reason": null,
     "idempotency_key": "sync_payout:202602:0x...",
@@ -996,6 +996,30 @@ Example response:
   }
 }
 ```
+
+
+### Confirm payout tx on-chain (oracle/admin, HMAC required)
+
+`POST /api/v1/oracle/payouts/{profit_month_id}/confirm`
+
+Request body (optional):
+
+```json
+{
+  "tx_hash": "0x..."
+}
+```
+
+Behavior:
+
+- Oracle-only, fail-closed, audited.
+- If `tx_hash` omitted: discover from latest `dividend_payouts` row for month, fallback to latest `distribution_executions` tx.
+- Idempotency key is deterministic: `confirm_payout:{profit_month_id}:{tx_hash_lower}`.
+- Reads `eth_getTransactionReceipt`:
+  - receipt missing -> payout remains `pending` (not confirmed paid).
+  - receipt status `0x1` -> payout `status="confirmed"`, sets `confirmed_at` (+ optional `block_number`).
+  - receipt status `0x0` -> payout `status="failed"`, sets `failed_at` (+ optional `block_number`).
+- RPC failures map to blocked reasons: `rpc_not_configured`, `rpc_error`; tx lookup/association failures map to `tx_error`.
 
 ### Trigger payout (oracle/admin, HMAC required)
 
@@ -1020,8 +1044,8 @@ Behavior:
 
 ### Public settlement visibility
 
-- `GET /api/v1/settlement/{profit_month_id}` → latest settlement + latest reconciliation + latest payout metadata (`tx_hash`, `executed_at`, `idempotency_key`, `status`) + `ready`.
-- `GET /api/v1/settlement/months?limit=24&offset=0` → paginated month summaries including `ready`, `delta_micro_usdc`, and payout presence (`payout_tx_hash`, `payout_executed_at`, nullable).
+- `GET /api/v1/settlement/{profit_month_id}` → latest settlement + latest reconciliation + latest payout metadata (`tx_hash`, `executed_at`, `status`, `confirmed_at`, `failed_at`, `block_number`) + `ready`.
+- `GET /api/v1/settlement/months?limit=24&offset=0` → paginated month summaries including `ready`, `delta_micro_usdc`, and payout fields (`payout_tx_hash`, `payout_executed_at`, `payout_status`, nullable).
 
 ## Proposal activation (autonomy-first)
 

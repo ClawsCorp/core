@@ -24,6 +24,9 @@ class DividendPayout(Base):
     total_founder_micro_usdc: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     total_payout_micro_usdc: Mapped[int] = mapped_column(BigInteger, nullable=False)
     payout_executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    block_number: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
