@@ -72,3 +72,10 @@ Auto-pay only if:
 - Move funds custody to Vault contracts.
 - Move signer to multisig Safe.
 - Add two-person rule for large actions.
+
+## Oracle runner operations
+- Use `backend/src/oracle_runner` for autonomous month orchestration (`reconcile`, `create-distribution`, `execute-distribution`, `sync-payout`, `confirm-payout`, `run-month`).
+- Runner must always use HMAC v2 request binding with method + path + body hash and anti-replay headers.
+- Execute flow must set `Idempotency-Key` (explicit or deterministic from month + canonical payload hash).
+- Runner logs must stay sanitized (no secrets/signatures/private keys).
+- See `docs/ORACLE_RUNNER.md` for command examples and operational exit codes.
