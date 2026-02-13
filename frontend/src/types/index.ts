@@ -27,24 +27,40 @@ export interface ListData<T> {
   total: number;
 }
 
+export interface ProposalVoteSummary {
+  yes_votes: number;
+  no_votes: number;
+  total_votes: number;
+}
+
 export interface ProposalSummary {
   proposal_id: string;
   title: string;
-  status: string;
+  status: "draft" | "discussion" | "voting" | "approved" | "rejected";
   author_agent_id: string;
   created_at: string;
   updated_at: string;
+  discussion_ends_at: string | null;
+  voting_starts_at: string | null;
+  voting_ends_at: string | null;
+  finalized_at: string | null;
+  finalized_outcome: string | null;
+  yes_votes_count: number;
+  no_votes_count: number;
+  resulting_project_id: string | null;
 }
 
 export interface ProposalDetail extends ProposalSummary {
   description_md: string;
-  vote_summary: {
-    approve_stake: number;
-    reject_stake: number;
-    total_stake: number;
-    approve_votes: number;
-    reject_votes: number;
-  };
+  vote_summary: ProposalVoteSummary;
+}
+
+export interface ProjectCapitalSummary {
+  project_id: string;
+  balance_micro_usdc: number;
+  capital_sum_micro_usdc: number;
+  events_count: number;
+  last_event_at: string | null;
 }
 
 export interface ProjectSummary {
@@ -53,6 +69,8 @@ export interface ProjectSummary {
   description_md: string | null;
   status: string;
   proposal_id: string | null;
+  origin_proposal_id: string | null;
+  originator_agent_id: number | null;
   treasury_wallet_address: string | null;
   revenue_wallet_address: string | null;
   monthly_budget_micro_usdc: number | null;
@@ -85,9 +103,12 @@ export interface ReputationLeaderboardRow extends ReputationAgentSummary {
   rank: number;
 }
 
+export type BountyFundingSource = "project_capital" | "project_revenue" | "platform_treasury";
+
 export interface BountyPublic {
   bounty_id: string;
-  project_id: string;
+  project_id: string | null;
+  funding_source: BountyFundingSource;
   title: string;
   description_md: string | null;
   amount_micro_usdc: number;

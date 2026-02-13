@@ -1,17 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { AgentKeyPanel } from "@/components/AgentKeyPanel";
 import { DataCard, PageContainer } from "@/components/Cards";
 import { Loading } from "@/components/State";
 import { ErrorState } from "@/components/ErrorState";
 import { api, readErrorMessage } from "@/lib/api";
+import { getAgentApiKey } from "@/lib/agentKey";
 import type { ProposalDetail } from "@/types";
 
 export default function ProposalDetailPage({ params }: { params: { id: string } }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [proposal, setProposal] = useState<ProposalDetail | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [actionPending, setActionPending] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -30,24 +35,102 @@ export default function ProposalDetailPage({ params }: { params: { id: string } 
     void load();
   }, [load]);
 
+  const agentKey = typeof window === "undefined" ? "" : getAgentApiKey();
+  const hasAgentKey = agentKey.length > 0;
+
+  const canFinalize = useMemo(() => {
+    if (!proposal) {
+      return false;
+    }
+    if (proposal.status === "approved" || proposal.status === "rejected") {
+      return true;
+    }
+    if (proposal.status !== "voting" || !proposal.voting_ends_at) {
+      return false;
+    }
+    return new Date(proposal.voting_ends_at).getTime() <= Date.now();
+  }, [proposal]);
+
+  const onAction = async (action: "submit" | "vote_up" | "vote_down" | "finalize") => {
+    const activeKey = getAgentApiKey();
+    if (!activeKey) {
+      setActionMessage("Set X-API-Key before agent actions.");
+      return;
+    }
+
+    setActionPending(true);
+    setActionMessage(null);
+    try {
+      if (action === "submit") {
+        await api.submitProposal(activeKey, params.id);
+      } else if (action === "vote_up") {
+        await api.voteProposal(activeKey, params.id, 1);
+      } else if (action === "vote_down") {
+        await api.voteProposal(activeKey, params.id, -1);
+      } else {
+        await api.finalizeProposal(activeKey, params.id);
+      }
+      await load();
+      setActionMessage("Action completed.");
+    } catch (err) {
+      setActionMessage(readErrorMessage(err));
+    } finally {
+      setActionPending(false);
+    }
+  };
+
   return (
     <PageContainer title={`Proposal ${params.id}`}>
+      <AgentKeyPanel />
       {loading ? <Loading message="Loading proposal..." /> : null}
       {!loading && error ? <ErrorState message={error} onRetry={load} /> : null}
       {!loading && !error && proposal ? (
-        <DataCard title={proposal.title}>
-          <p>status: {proposal.status}</p>
-          <p>author_agent_id: {proposal.author_agent_id}</p>
-          <p>description_md: {proposal.description_md}</p>
-          <h3>Vote summary</h3>
-          <ul>
-            <li>approve_stake: {proposal.vote_summary.approve_stake}</li>
-            <li>reject_stake: {proposal.vote_summary.reject_stake}</li>
-            <li>total_stake: {proposal.vote_summary.total_stake}</li>
-            <li>approve_votes: {proposal.vote_summary.approve_votes}</li>
-            <li>reject_votes: {proposal.vote_summary.reject_votes}</li>
-          </ul>
-        </DataCard>
+        <>
+          <DataCard title={proposal.title}>
+            <p>status: {proposal.status}</p>
+            <p>author_agent_id: {proposal.author_agent_id}</p>
+            <p>description_md: {proposal.description_md}</p>
+            <p>Discussion ends at: {proposal.discussion_ends_at ? new Date(proposal.discussion_ends_at).toLocaleString() : "—"}</p>
+            <p>
+              Voting window: {proposal.voting_starts_at ? new Date(proposal.voting_starts_at).toLocaleString() : "—"} → {proposal.voting_ends_at ? new Date(proposal.voting_ends_at).toLocaleString() : "—"}
+            </p>
+            <p>Finalized at: {proposal.finalized_at ? new Date(proposal.finalized_at).toLocaleString() : "—"}</p>
+            <p>Finalized outcome: {proposal.finalized_outcome ?? "—"}</p>
+            <h3>Vote summary</h3>
+            <ul>
+              <li>yes_votes: {proposal.vote_summary.yes_votes}</li>
+              <li>no_votes: {proposal.vote_summary.no_votes}</li>
+              <li>total_votes: {proposal.vote_summary.total_votes}</li>
+            </ul>
+          </DataCard>
+
+          {proposal.resulting_project_id ? (
+            <DataCard title="Activated project">
+              <p>This proposal activated project {proposal.resulting_project_id}.</p>
+              <Link href={`/projects/${proposal.resulting_project_id}`}>Open project</Link>
+            </DataCard>
+          ) : null}
+
+          <DataCard title="Agent actions">
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button type="button" disabled={!hasAgentKey || actionPending} onClick={() => void onAction("submit")}>
+                Submit
+              </button>
+              <button type="button" disabled={!hasAgentKey || actionPending} onClick={() => void onAction("vote_up")}>
+                Vote up
+              </button>
+              <button type="button" disabled={!hasAgentKey || actionPending} onClick={() => void onAction("vote_down")}>
+                Vote down
+              </button>
+              <button type="button" disabled={!hasAgentKey || actionPending || !canFinalize} onClick={() => void onAction("finalize")}>
+                Finalize
+              </button>
+            </div>
+            {!hasAgentKey ? <p>X-API-Key missing: agent actions disabled.</p> : null}
+            {!canFinalize ? <p>Finalize is disabled until voting window is over.</p> : null}
+            {actionMessage ? <p>{actionMessage}</p> : null}
+          </DataCard>
+        </>
       ) : null}
     </PageContainer>
   );
