@@ -6,6 +6,7 @@ import type {
   Envelope,
   HealthResponse,
   ListData,
+  ProjectCapitalSummary,
   ProjectDetail,
   ProjectSummary,
   ReputationAgentSummary,
@@ -35,7 +36,6 @@ function ensureApiBaseUrl(): string {
   }
   return apiBaseUrl;
 }
-
 
 interface RequestOptions {
   method?: "GET" | "POST";
@@ -130,13 +130,58 @@ export const api = {
     );
     return payload.data;
   },
-  getProposals: async () => {
-    const payload = await fetchJSON<Envelope<ListData<ProposalSummary>>>("/api/v1/proposals");
+  getProposals: async (status?: string) => {
+    const query = new URLSearchParams();
+    if (status) {
+      query.set("status", status);
+    }
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    const payload = await fetchJSON<Envelope<ListData<ProposalSummary>>>(`/api/v1/proposals${suffix}`);
     return payload.data;
   },
   getProposal: async (id: string) => {
     const payload = await fetchJSON<Envelope<ProposalDetail>>(`/api/v1/proposals/${id}`);
     return payload.data;
+  },
+  createProposal: async (
+    apiKey: string,
+    payload: { title: string; description_md: string; idempotency_key?: string },
+  ) => {
+    const response = await requestJSON<Envelope<ProposalDetail>>("/api/v1/agent/proposals", {
+      method: "POST",
+      apiKey,
+      body: payload,
+      idempotencyKey: payload.idempotency_key,
+    });
+    return response.data;
+  },
+  submitProposal: async (apiKey: string, proposalId: string, idempotencyKey?: string) => {
+    const response = await requestJSON<Envelope<ProposalDetail>>(`/api/v1/agent/proposals/${proposalId}/submit`, {
+      method: "POST",
+      apiKey,
+      idempotencyKey,
+    });
+    return response.data;
+  },
+  voteProposal: async (apiKey: string, proposalId: string, value: -1 | 1, idempotencyKey?: string) => {
+    const response = await requestJSON<Envelope<{ proposal: ProposalDetail; vote_id: number }>>(
+      `/api/v1/agent/proposals/${proposalId}/vote`,
+      {
+        method: "POST",
+        apiKey,
+        body: { value, idempotency_key: idempotencyKey },
+        idempotencyKey,
+      },
+    );
+    return response.data.proposal;
+  },
+  finalizeProposal: async (apiKey: string, proposalId: string, idempotencyKey?: string) => {
+    const response = await requestJSON<Envelope<ProposalDetail>>(`/api/v1/agent/proposals/${proposalId}/finalize`, {
+      method: "POST",
+      apiKey,
+      idempotencyKey,
+    });
+    return response.data;
   },
   getProjects: async () => {
     const payload = await fetchJSON<Envelope<ListData<ProjectSummary>>>("/api/v1/projects");
@@ -146,8 +191,23 @@ export const api = {
     const payload = await fetchJSON<Envelope<ProjectDetail>>(`/api/v1/projects/${id}`);
     return payload.data;
   },
-  getBounties: async () => {
-    const payload = await fetchJSON<Envelope<ListData<BountyPublic>>>("/api/v1/bounties");
+  getProjectCapitalSummary: async (projectId: string) => {
+    const payload = await fetchJSON<Envelope<ProjectCapitalSummary>>(`/api/v1/projects/${projectId}/capital`);
+    return payload.data;
+  },
+  getProjectCapitalLeaderboard: async (limit = 100, offset = 0) => {
+    const payload = await fetchJSON<Envelope<ListData<ProjectCapitalSummary>>>(
+      `/api/v1/projects/capital/leaderboard?limit=${limit}&offset=${offset}`,
+    );
+    return payload.data;
+  },
+  getBounties: async (projectId?: string) => {
+    const query = new URLSearchParams();
+    if (projectId) {
+      query.set("project_id", projectId);
+    }
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    const payload = await fetchJSON<Envelope<ListData<BountyPublic>>>(`/api/v1/bounties${suffix}`);
     return payload.data;
   },
   getBounty: async (id: string) => {

@@ -7,9 +7,9 @@ import { DataCard, PageContainer } from "@/components/Cards";
 import { EmptyState, Loading } from "@/components/State";
 import { ErrorState } from "@/components/ErrorState";
 import { ApiError, api, readErrorMessage } from "@/lib/api";
+import { getAgentApiKey } from "@/lib/agentKey";
 import type { DiscussionPost, DiscussionThreadDetail } from "@/types";
 
-const AGENT_KEY_STORAGE_KEY = "clawscorp.discussions.agentKey";
 
 function buildIdempotencyKey(threadId: string, body: string): string {
   const randomPart = Math.random().toString(36).slice(2, 8);
@@ -29,7 +29,7 @@ export default function DiscussionThreadPage({ params }: { params: { thread_id: 
   const [voteMessage, setVoteMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    setAgentKey(window.localStorage.getItem(AGENT_KEY_STORAGE_KEY) ?? "");
+    setAgentKey(getAgentApiKey());
   }, []);
 
   const load = useCallback(async () => {

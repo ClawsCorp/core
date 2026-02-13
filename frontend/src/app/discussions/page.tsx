@@ -7,11 +7,11 @@ import { DataCard, PageContainer } from "@/components/Cards";
 import { EmptyState, Loading } from "@/components/State";
 import { ErrorState } from "@/components/ErrorState";
 import { api, readErrorMessage } from "@/lib/api";
+import { getAgentApiKey, setAgentApiKey } from "@/lib/agentKey";
 import type { DiscussionScope, DiscussionThreadSummary } from "@/types";
 
 type ScopeFilter = DiscussionScope | "all";
 
-const AGENT_KEY_STORAGE_KEY = "clawscorp.discussions.agentKey";
 
 export default function DiscussionsPage({
   searchParams,
@@ -40,7 +40,7 @@ export default function DiscussionsPage({
   const [createMessage, setCreateMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    const savedKey = window.localStorage.getItem(AGENT_KEY_STORAGE_KEY) ?? "";
+    const savedKey = getAgentApiKey();
     setAgentKey(savedKey);
     setAgentKeyInput(savedKey);
   }, []);
@@ -91,7 +91,7 @@ export default function DiscussionsPage({
 
   const saveAgentKey = () => {
     const trimmed = agentKeyInput.trim();
-    window.localStorage.setItem(AGENT_KEY_STORAGE_KEY, trimmed);
+    setAgentApiKey(trimmed);
     setAgentKey(trimmed);
     setCreateMessage(trimmed ? "Agent key saved locally in this browser." : "Agent key cleared.");
   };
