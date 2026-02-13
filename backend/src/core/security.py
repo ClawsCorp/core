@@ -97,3 +97,37 @@ def verify_hmac_v1(secret: str, timestamp: str, body_hash: str, signature: str) 
     message = f"{timestamp}.{body_hash}".encode("utf-8")
     computed = hmac.new(secret.encode("utf-8"), message, hashlib.sha256).hexdigest()
     return hmac.compare_digest(computed, signature)
+
+
+def build_oracle_hmac_v2_payload(
+    timestamp: str,
+    request_id: str,
+    body_hash: str,
+    *,
+    method: str | None = None,
+    path: str | None = None,
+) -> str:
+    normalized_method = (method or "").upper()
+    normalized_path = path or ""
+    return f"{timestamp}.{request_id}.{normalized_method}.{normalized_path}.{body_hash}"
+
+
+def verify_hmac_v2(
+    secret: str,
+    timestamp: str,
+    request_id: str,
+    body_hash: str,
+    signature: str,
+    *,
+    method: str | None = None,
+    path: str | None = None,
+) -> bool:
+    message = build_oracle_hmac_v2_payload(
+        timestamp,
+        request_id,
+        body_hash,
+        method=method,
+        path=path,
+    ).encode("utf-8")
+    computed = hmac.new(secret.encode("utf-8"), message, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(computed, signature)

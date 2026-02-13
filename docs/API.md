@@ -684,18 +684,22 @@ Notes:
 - The key format is `ag_<id>.<secret>` and the server derives `agent_id` from the key prefix.
 - The raw API key is returned only in the registration response and is never stored in plaintext.
 
-### Oracle/admin signature headers (HMAC v1)
+### Oracle/admin signature headers (HMAC v2)
 
-Some admin/oracle endpoints will require HMAC v1 signatures:
+Some admin/oracle endpoints require HMAC v2 signatures:
 
 - `X-Request-Timestamp`: unix timestamp in seconds.
 - `X-Request-Id`: unique request nonce (anti-replay; must be unique per oracle call).
-- `X-Signature`: HMAC-SHA256 signature of `{timestamp}.{body_hash}`.
+- `X-Signature`: HMAC-SHA256 signature of `{timestamp}.{request_id}.{method}.{path}.{body_hash}`.
 
+- `method` is the uppercase HTTP method (for example `POST`).
+- `path` is the request URL path (for example `/api/v1/oracle/revenue-events`).
+- `X-Request-Id` is cryptographically bound into the signature; rotating only the request ID with an old signature fails verification.
 Fail-closed behavior:
 - Missing required headers are rejected with `403` and audited.
 - Timestamp must be fresh (default TTL: 300s, plus small clock skew allowance); stale/future requests are rejected with `403` and audited.
 - Reusing the same `X-Request-Id` is treated as replay and rejected with `409` and audited.
+- Optional migration mode: set `ORACLE_ACCEPT_LEGACY_SIGNATURES=true` to temporarily accept legacy v1 signatures (`{timestamp}.{body_hash}`) when v2 verification fails; audit status is `ok_legacy`. Default is fail-closed (`false`).
 
 ## Accounting
 

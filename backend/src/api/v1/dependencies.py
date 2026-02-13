@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from src.core.audit import record_audit
 from src.core.config import get_settings
 from src.core.database import get_db
-from src.core.security import hash_body, require_agent_api_key, verify_hmac_v1
+from src.core.security import hash_body, require_agent_api_key, verify_hmac_v1, verify_hmac_v2
 from src.models.agent import Agent
 from src.models.oracle_nonce import OracleNonce
 
@@ -74,7 +74,23 @@ async def require_oracle_hmac(
         )
         raise HTTPException(status_code=403, detail="Stale oracle request timestamp.")
 
-    if not verify_hmac_v1(settings.oracle_hmac_secret, timestamp, body_hash, signature):
+    is_valid_v2 = verify_hmac_v2(
+        settings.oracle_hmac_secret,
+        timestamp,
+        request_id,
+        body_hash,
+        signature,
+        method=request.method,
+        path=request.url.path,
+    )
+
+    signature_status = "ok" if is_valid_v2 else "invalid"
+    if not is_valid_v2 and settings.oracle_accept_legacy_signatures:
+        is_valid_legacy = verify_hmac_v1(settings.oracle_hmac_secret, timestamp, body_hash, signature)
+        if is_valid_legacy:
+            signature_status = "ok_legacy"
+
+    if signature_status == "invalid":
         request.state.signature_status = "invalid"
         _record_oracle_auth_audit(
             request,
@@ -104,7 +120,7 @@ async def require_oracle_hmac(
         )
         raise HTTPException(status_code=409, detail="Replay detected.")
 
-    request.state.signature_status = "ok"
+    request.state.signature_status = signature_status
     return body_hash
 
 
