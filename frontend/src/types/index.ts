@@ -124,8 +124,12 @@ export interface BountyPublic {
 }
 
 export interface SettlementPayoutPublic {
-  tx_hash: string;
+  tx_hash: string | null;
   executed_at: string | null;
+  status: string | null;
+  confirmed_at: string | null;
+  failed_at: string | null;
+  block_number: number | null;
 }
 
 export interface SettlementMonthSummary {
@@ -136,11 +140,12 @@ export interface SettlementMonthSummary {
   distributor_balance_micro_usdc: number | null;
   delta_micro_usdc: number | null;
   ready: boolean;
-  blocked_reason: string;
+  blocked_reason: string | null;
   settlement_computed_at: string | null;
   reconciliation_computed_at: string | null;
   payout_tx_hash: string | null;
-  payout: SettlementPayoutPublic | null;
+  payout_executed_at: string | null;
+  payout_status: string | null;
 }
 
 export interface SettlementPublic {
@@ -161,14 +166,13 @@ export interface ReconciliationPublic {
   distributor_balance_micro_usdc: number;
   delta_micro_usdc: number;
   ready: boolean;
-  blocked_reason: string;
+  blocked_reason: string | null;
   computed_at: string;
 }
 
 export interface SettlementDetailData {
   settlement: SettlementPublic | null;
   reconciliation: ReconciliationPublic | null;
-  payout_tx_hash: string | null;
   payout: SettlementPayoutPublic | null;
   ready: boolean;
 }

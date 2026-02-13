@@ -22,6 +22,9 @@ class SettlementPayoutPublic(BaseModel):
     executed_at: datetime | None
     idempotency_key: str | None
     status: str | None
+    confirmed_at: datetime | None
+    failed_at: datetime | None
+    block_number: int | None
 
 
 class SettlementDetailData(BaseModel):
@@ -49,6 +52,7 @@ class SettlementMonthSummary(BaseModel):
     reconciliation_computed_at: datetime | None
     payout_tx_hash: str | None
     payout_executed_at: datetime | None
+    payout_status: str | None
 
 
 class SettlementMonthsData(BaseModel):

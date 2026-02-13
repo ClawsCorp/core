@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -20,7 +21,12 @@ from src.models.expense_event import ExpenseEvent
 from src.models.reconciliation_report import ReconciliationReport
 from src.models.revenue_event import RevenueEvent
 from src.models.settlement import Settlement
-from src.schemas.oracle import PayoutSyncRequest, PayoutSyncResponse
+from src.schemas.oracle import (
+    PayoutConfirmRequest,
+    PayoutConfirmResponse,
+    PayoutSyncRequest,
+    PayoutSyncResponse,
+)
 from src.schemas.reconciliation import ReconciliationReportPublic
 from src.schemas.settlement import (
     DistributionCreateResponse,
@@ -35,6 +41,7 @@ from src.services.blockchain import (
     BlockchainReadError,
     BlockchainTxError,
     read_distribution_state,
+    read_transaction_receipt,
     read_usdc_balance_of_distributor,
     submit_create_distribution_tx,
     submit_execute_distribution_tx,
@@ -555,6 +562,7 @@ def sync_payout_metadata(
     tx_hash = payload.tx_hash
     if tx_hash is not None:
         _validate_tx_hash_32(tx_hash)
+        tx_hash = tx_hash_lower(tx_hash)
     else:
         tx_hash = _discover_execution_tx_hash(db, profit_month_id)
         if tx_hash is None:
@@ -566,6 +574,7 @@ def sync_payout_metadata(
                 tx_hash=None,
             )
         _validate_tx_hash_32(tx_hash)
+        tx_hash = tx_hash_lower(tx_hash)
 
     idempotency_key = _sync_payout_idempotency_key(profit_month_id, tx_hash)
 
@@ -689,6 +698,136 @@ def sync_payout_metadata(
     )
 
 
+@router.post("/payouts/{profit_month_id}/confirm", response_model=PayoutConfirmResponse)
+def confirm_payout_status(
+    profit_month_id: str,
+    payload: PayoutConfirmRequest,
+    request: Request,
+    _: str = Depends(require_oracle_hmac),
+    db: Session = Depends(get_db),
+) -> PayoutConfirmResponse:
+    _validate_month(profit_month_id)
+
+    tx_hash = payload.tx_hash
+    if tx_hash is None:
+        tx_hash = _discover_payout_tx_hash(db, profit_month_id)
+    if tx_hash is None:
+        return _blocked_confirm_response(
+            request,
+            db,
+            profit_month_id=profit_month_id,
+            blocked_reason="tx_error",
+            idempotency_key=f"confirm_payout:{profit_month_id}:missing",
+            tx_hash=None,
+            status="pending",
+        )
+
+    _validate_tx_hash_32(tx_hash)
+    tx_hash = tx_hash_lower(tx_hash)
+    idempotency_key = f"confirm_payout:{profit_month_id}:{tx_hash}"
+
+    payout = _latest_payout_for_tx(db, profit_month_id, tx_hash)
+    if payout is None:
+        return _blocked_confirm_response(
+            request,
+            db,
+            profit_month_id=profit_month_id,
+            blocked_reason="tx_error",
+            idempotency_key=idempotency_key,
+            tx_hash=tx_hash,
+            status="pending",
+        )
+
+    try:
+        receipt = read_transaction_receipt(tx_hash)
+    except BlockchainConfigError:
+        return _blocked_confirm_response(
+            request,
+            db,
+            profit_month_id=profit_month_id,
+            blocked_reason="rpc_not_configured",
+            idempotency_key=idempotency_key,
+            tx_hash=tx_hash,
+            status=payout.status,
+            error_hint="rpc_not_configured",
+        )
+    except BlockchainReadError:
+        return _blocked_confirm_response(
+            request,
+            db,
+            profit_month_id=profit_month_id,
+            blocked_reason="rpc_error",
+            idempotency_key=idempotency_key,
+            tx_hash=tx_hash,
+            status=payout.status,
+            error_hint="rpc_error",
+        )
+
+    if not receipt.found:
+        if payout.status == "synced":
+            payout.status = "pending"
+            db.commit()
+            db.refresh(payout)
+        _record_oracle_audit(request, db, idempotency_key=idempotency_key, tx_hash=tx_hash)
+        return PayoutConfirmResponse(
+            success=True,
+            data={
+                "profit_month_id": profit_month_id,
+                "status": payout.status,
+                "tx_hash": tx_hash,
+                "blocked_reason": None,
+                "idempotency_key": idempotency_key,
+                "confirmed_at": payout.confirmed_at,
+                "failed_at": payout.failed_at,
+                "block_number": payout.block_number,
+            },
+        )
+
+    if payout.status in {"confirmed", "failed"}:
+        _record_oracle_audit(request, db, idempotency_key=idempotency_key, tx_hash=tx_hash)
+        return PayoutConfirmResponse(
+            success=True,
+            data={
+                "profit_month_id": profit_month_id,
+                "status": payout.status,
+                "tx_hash": tx_hash,
+                "blocked_reason": None,
+                "idempotency_key": idempotency_key,
+                "confirmed_at": payout.confirmed_at,
+                "failed_at": payout.failed_at,
+                "block_number": payout.block_number,
+            },
+        )
+
+    now = datetime.now(timezone.utc)
+    payout.block_number = receipt.block_number
+    if receipt.status == 1:
+        payout.status = "confirmed"
+        payout.confirmed_at = payout.confirmed_at or now
+        payout.failed_at = None
+    else:
+        payout.status = "failed"
+        payout.failed_at = payout.failed_at or now
+        payout.confirmed_at = None
+
+    db.commit()
+    db.refresh(payout)
+    _record_oracle_audit(request, db, idempotency_key=idempotency_key, tx_hash=tx_hash)
+    return PayoutConfirmResponse(
+        success=True,
+        data={
+            "profit_month_id": profit_month_id,
+            "status": payout.status,
+            "tx_hash": tx_hash,
+            "blocked_reason": None,
+            "idempotency_key": idempotency_key,
+            "confirmed_at": payout.confirmed_at,
+            "failed_at": payout.failed_at,
+            "block_number": payout.block_number,
+        },
+    )
+
+
 @router.post("/payouts/{profit_month_id}/trigger", response_model=PayoutTriggerResponse)
 def trigger_payout(
     profit_month_id: str,
@@ -760,12 +899,44 @@ def _resolve_execute_idempotency_key(
 
 
 def _sync_payout_idempotency_key(profit_month_id: str, tx_hash: str) -> str:
-    return f"sync_payout:{profit_month_id}:{tx_hash}"
+    return f"sync_payout:{profit_month_id}:{tx_hash_lower(tx_hash)}"
 
 
 def _validate_tx_hash_32(tx_hash: str) -> None:
     if not _TX_HASH_32_RE.fullmatch(tx_hash):
         raise HTTPException(status_code=400, detail="tx_hash must be a 0x-prefixed 32-byte hex string")
+
+
+def tx_hash_lower(tx_hash: str) -> str:
+    return tx_hash.lower()
+
+
+def _latest_payout_for_tx(db: Session, profit_month_id: str, tx_hash: str) -> DividendPayout | None:
+    return (
+        db.query(DividendPayout)
+        .filter(
+            DividendPayout.profit_month_id == profit_month_id,
+            func.lower(DividendPayout.tx_hash) == tx_hash_lower(tx_hash),
+        )
+        .order_by(DividendPayout.created_at.desc(), DividendPayout.id.desc())
+        .first()
+    )
+
+
+def _latest_payout(db: Session, profit_month_id: str) -> DividendPayout | None:
+    return (
+        db.query(DividendPayout)
+        .filter(DividendPayout.profit_month_id == profit_month_id)
+        .order_by(DividendPayout.created_at.desc(), DividendPayout.id.desc())
+        .first()
+    )
+
+
+def _discover_payout_tx_hash(db: Session, profit_month_id: str) -> str | None:
+    payout = _latest_payout(db, profit_month_id)
+    if payout is not None and payout.tx_hash:
+        return payout.tx_hash
+    return _discover_execution_tx_hash(db, profit_month_id)
 
 
 def _discover_execution_tx_hash(db: Session, profit_month_id: str) -> str | None:
@@ -780,6 +951,39 @@ def _discover_execution_tx_hash(db: Session, profit_month_id: str) -> str | None
         .first()
     )
     return execution.tx_hash if execution is not None else None
+
+
+def _blocked_confirm_response(
+    request: Request,
+    db: Session,
+    *,
+    profit_month_id: str,
+    blocked_reason: str,
+    idempotency_key: str,
+    tx_hash: str | None,
+    status: str,
+    error_hint: str | None = None,
+) -> PayoutConfirmResponse:
+    _record_oracle_audit(
+        request,
+        db,
+        idempotency_key=idempotency_key,
+        tx_hash=tx_hash,
+        error_hint=error_hint or blocked_reason,
+    )
+    return PayoutConfirmResponse(
+        success=False,
+        data={
+            "profit_month_id": profit_month_id,
+            "status": status,
+            "tx_hash": tx_hash,
+            "blocked_reason": blocked_reason,
+            "idempotency_key": idempotency_key,
+            "confirmed_at": None,
+            "failed_at": None,
+            "block_number": None,
+        },
+    )
 
 
 def _blocked_sync_response(
@@ -844,7 +1048,7 @@ def _upsert_dividend_payout(
     payout = DividendPayout(
         profit_month_id=profit_month_id,
         idempotency_key=idempotency_key,
-        status="submitted",
+        status="pending",
         tx_hash=tx_hash,
         stakers_count=stakers_count,
         authors_count=authors_count,

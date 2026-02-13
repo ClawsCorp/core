@@ -40,9 +40,11 @@ export default function SettlementMonthDetailPage({ params }: { params: { profit
     void load();
   }, [load]);
 
-  const payoutTxHash = detail?.payout_tx_hash ?? detail?.payout?.tx_hash ?? null;
+  const payoutTxHash = detail?.payout?.tx_hash ?? null;
+  const payoutStatus = detail?.payout?.status ?? null;
   const hasPayout = Boolean(payoutTxHash);
   const isReady = detail?.ready === true;
+  const isFinalized = isReady && payoutStatus === "confirmed";
 
   const handleCopyTxHash = useCallback(async () => {
     if (!payoutTxHash) {
@@ -108,6 +110,10 @@ export default function SettlementMonthDetailPage({ params }: { params: { profit
                   {copyFeedback ? <span> ({copyFeedback})</span> : null}
                 </li>
                 <li>executed_at: {detail.payout?.executed_at ?? "—"}</li>
+                <li>status: {payoutStatus ?? "—"}</li>
+                <li>confirmed_at: {detail.payout?.confirmed_at ?? "—"}</li>
+                <li>failed_at: {detail.payout?.failed_at ?? "—"}</li>
+                <li>block_number: {detail.payout?.block_number ?? "—"}</li>
                 <li>
                   explorer:{" "}
                   <a
@@ -127,12 +133,11 @@ export default function SettlementMonthDetailPage({ params }: { params: { profit
             <p>ready: {formatBoolean(detail.ready)}</p>
             <p>
               status:{" "}
-              {isReady && hasPayout ? (
-                <span>Finalized ✅</span>
-              ) : null}
-              {isReady && !hasPayout ? <span>Ready (not paid)</span> : null}
-              {!isReady && hasPayout ? <span>Paid (check ready)</span> : null}
-              {!isReady && !hasPayout ? <span>Pending</span> : null}
+              {isFinalized ? <span>Finalized ✅</span> : null}
+              {!isFinalized && payoutStatus === "failed" ? <span>Failed</span> : null}
+              {!isFinalized && payoutStatus !== "failed" && hasPayout ? <span>Pending</span> : null}
+              {!isFinalized && !hasPayout && isReady ? <span>Ready (not paid)</span> : null}
+              {!isFinalized && !hasPayout && !isReady ? <span>Pending</span> : null}
             </p>
           </DataCard>
         </>

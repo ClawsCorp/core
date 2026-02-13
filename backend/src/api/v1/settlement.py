@@ -80,6 +80,7 @@ def list_settlement_months(
                 reconciliation_computed_at=reconciliation.computed_at if reconciliation else None,
                 payout_tx_hash=payout.tx_hash if payout else None,
                 payout_executed_at=payout.payout_executed_at if payout else None,
+                payout_status=payout.status if payout else None,
             )
         )
 
@@ -168,6 +169,9 @@ def _payout_public(payout: DividendPayout) -> SettlementPayoutPublic:
         executed_at=payout.payout_executed_at,
         idempotency_key=payout.idempotency_key,
         status=payout.status,
+        confirmed_at=payout.confirmed_at,
+        failed_at=payout.failed_at,
+        block_number=payout.block_number,
     )
 
 
