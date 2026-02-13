@@ -2,13 +2,21 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import sys
 import time
+from pathlib import Path
 
+import pytest
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
+
+# Make `src` importable whether pytest runs from repo root or backend/.
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
 
 from src.api.v1.dependencies import require_oracle_hmac
 from src.core.config import get_settings
@@ -20,13 +28,11 @@ from src.models.audit_log import AuditLog  # noqa: F401
 from src.models.oracle_nonce import OracleNonce  # noqa: F401
 
 
-
 def _sign(secret: str, payload: str) -> str:
     return hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
-
-def _make_test_app(db_session_factory: sessionmaker[Session], secret: str) -> FastAPI:
+def _make_test_app(db_session_factory: sessionmaker[Session]) -> FastAPI:
     app = FastAPI()
 
     def _override_get_db():
@@ -42,29 +48,32 @@ def _make_test_app(db_session_factory: sessionmaker[Session], secret: str) -> Fa
     async def oracle_test(_: str = Depends(require_oracle_hmac)) -> dict[str, bool]:
         return {"ok": True}
 
-    get_settings.cache_clear()
-    import os
-
-    os.environ["ORACLE_HMAC_SECRET"] = secret
-    os.environ["ORACLE_REQUEST_TTL_SECONDS"] = "300"
-    os.environ["ORACLE_CLOCK_SKEW_SECONDS"] = "5"
-    os.environ["ORACLE_ACCEPT_LEGACY_SIGNATURES"] = "false"
-
     return app
 
 
+@pytest.fixture(autouse=True)
+def _isolate_settings_cache() -> None:
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
-def test_oracle_hmac_v2_replay_and_request_id_binding() -> None:
+
+def test_oracle_hmac_v2_replay_and_request_id_binding(monkeypatch: pytest.MonkeyPatch) -> None:
     engine = create_engine(
         "sqlite+pysqlite:///:memory:",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     Base.metadata.create_all(bind=engine)
 
     secret = "test-secret"
-    app = _make_test_app(SessionLocal, secret)
+    monkeypatch.setenv("ORACLE_HMAC_SECRET", secret)
+    monkeypatch.setenv("ORACLE_REQUEST_TTL_SECONDS", "300")
+    monkeypatch.setenv("ORACLE_CLOCK_SKEW_SECONDS", "5")
+    monkeypatch.setenv("ORACLE_ACCEPT_LEGACY_SIGNATURES", "false")
+
+    app = _make_test_app(session_local)
     client = TestClient(app)
 
     body = b'{"hello":"world"}'
@@ -93,7 +102,6 @@ def test_oracle_hmac_v2_replay_and_request_id_binding() -> None:
     )
     assert resp_ok.status_code == 200
 
-    # Same body + new request_id but old signature must fail.
     resp_invalid = client.post(
         "/oracle-test",
         content=body,
@@ -107,7 +115,6 @@ def test_oracle_hmac_v2_replay_and_request_id_binding() -> None:
     assert resp_invalid.status_code == 403
     assert resp_invalid.json()["detail"] == "Invalid signature."
 
-    # Same request_id + same signature again must be replay.
     resp_replay = client.post(
         "/oracle-test",
         content=body,
