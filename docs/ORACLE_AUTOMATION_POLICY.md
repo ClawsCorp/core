@@ -79,3 +79,4 @@ Auto-pay only if:
 - Execute flow must set `Idempotency-Key` (explicit or deterministic from month + canonical payload hash).
 - Runner logs must stay sanitized (no secrets/signatures/private keys).
 - See `docs/ORACLE_RUNNER.md` for command examples and operational exit codes.
+- See `docs/ORACLE_RUNNER_OUTPUT_CONTRACT.md` for strict stdout/stderr behavior and pipeline-safe usage.
