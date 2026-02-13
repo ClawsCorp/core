@@ -510,3 +510,189 @@ def test_distribution_execute_blocked_validation_failure_has_audit_idempotency_k
         expected_idempotency_key=data["data"]["idempotency_key"],
     )
 
+
+def test_distribution_execute_blocked_distribution_missing_has_audit_idempotency_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+
+    secret = "test-secret"
+    monkeypatch.setenv("ORACLE_HMAC_SECRET", secret)
+    monkeypatch.setenv("ORACLE_REQUEST_TTL_SECONDS", "300")
+    monkeypatch.setenv("ORACLE_CLOCK_SKEW_SECONDS", "5")
+    monkeypatch.setenv("ORACLE_ACCEPT_LEGACY_SIGNATURES", "false")
+
+    profit_month_id = "202602"
+    profit_sum = 20_000_000
+    with session_local() as db:
+        _insert_settlement(db, profit_month_id=profit_month_id, profit_sum=profit_sum)
+        _insert_reconciliation(
+            db,
+            profit_month_id=profit_month_id,
+            profit_sum=profit_sum,
+            ready=True,
+            delta_micro_usdc=0,
+        )
+
+    monkeypatch.setattr(
+        oracle_mod,
+        "read_distribution_state",
+        lambda _: DistributionState(exists=False, total_profit_micro_usdc=0, distributed=False),
+    )
+
+    app = _make_test_app(session_local)
+    client = TestClient(app)
+
+    path = f"/api/v1/oracle/distributions/{profit_month_id}/execute"
+    payload = {
+        "stakers": ["0xf965d65a9E0197B6900ba350964fBC545ec490ed"],
+        "staker_shares": [1],
+        "authors": ["0xd061ccf208B8382B800dB8534a638705079A693e"],
+        "author_shares": [1],
+    }
+    body = json.dumps(payload, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    request_id = "req-exec-dist-missing-1"
+
+    status, data = _post_signed(client, secret=secret, request_id=request_id, path=path, body=body)
+    assert status == 200
+    assert data["success"] is False
+    assert data["data"]["blocked_reason"] == "distribution_missing"
+    assert data["data"]["idempotency_key"]
+
+    _assert_audit_has_idempotency_key(
+        session_local,
+        request_id=request_id,
+        path=path,
+        expected_idempotency_key=data["data"]["idempotency_key"],
+    )
+
+
+def test_distribution_execute_already_distributed_has_audit_idempotency_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+
+    secret = "test-secret"
+    monkeypatch.setenv("ORACLE_HMAC_SECRET", secret)
+    monkeypatch.setenv("ORACLE_REQUEST_TTL_SECONDS", "300")
+    monkeypatch.setenv("ORACLE_CLOCK_SKEW_SECONDS", "5")
+    monkeypatch.setenv("ORACLE_ACCEPT_LEGACY_SIGNATURES", "false")
+
+    profit_month_id = "202602"
+    profit_sum = 20_000_000
+    with session_local() as db:
+        _insert_settlement(db, profit_month_id=profit_month_id, profit_sum=profit_sum)
+        _insert_reconciliation(
+            db,
+            profit_month_id=profit_month_id,
+            profit_sum=profit_sum,
+            ready=True,
+            delta_micro_usdc=0,
+        )
+
+    monkeypatch.setattr(
+        oracle_mod,
+        "read_distribution_state",
+        lambda _: DistributionState(exists=True, total_profit_micro_usdc=profit_sum, distributed=True),
+    )
+
+    app = _make_test_app(session_local)
+    client = TestClient(app)
+
+    path = f"/api/v1/oracle/distributions/{profit_month_id}/execute"
+    payload = {
+        "stakers": ["0xf965d65a9E0197B6900ba350964fBC545ec490ed"],
+        "staker_shares": [1],
+        "authors": ["0xd061ccf208B8382B800dB8534a638705079A693e"],
+        "author_shares": [1],
+    }
+    body = json.dumps(payload, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    request_id = "req-exec-already-distributed-1"
+
+    status, data = _post_signed(client, secret=secret, request_id=request_id, path=path, body=body)
+    assert status == 200
+    assert data["success"] is True
+    assert data["data"]["status"] == "already_distributed"
+    assert data["data"]["blocked_reason"] is None
+    assert data["data"]["idempotency_key"]
+
+    _assert_audit_has_idempotency_key(
+        session_local,
+        request_id=request_id,
+        path=path,
+        expected_idempotency_key=data["data"]["idempotency_key"],
+    )
+
+
+def test_distribution_execute_blocked_total_profit_mismatch_has_audit_idempotency_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+
+    secret = "test-secret"
+    monkeypatch.setenv("ORACLE_HMAC_SECRET", secret)
+    monkeypatch.setenv("ORACLE_REQUEST_TTL_SECONDS", "300")
+    monkeypatch.setenv("ORACLE_CLOCK_SKEW_SECONDS", "5")
+    monkeypatch.setenv("ORACLE_ACCEPT_LEGACY_SIGNATURES", "false")
+
+    profit_month_id = "202602"
+    profit_sum = 20_000_000
+    with session_local() as db:
+        _insert_settlement(db, profit_month_id=profit_month_id, profit_sum=profit_sum)
+        _insert_reconciliation(
+            db,
+            profit_month_id=profit_month_id,
+            profit_sum=profit_sum,
+            ready=True,
+            delta_micro_usdc=0,
+        )
+
+    monkeypatch.setattr(
+        oracle_mod,
+        "read_distribution_state",
+        lambda _: DistributionState(exists=True, total_profit_micro_usdc=profit_sum + 1, distributed=False),
+    )
+
+    app = _make_test_app(session_local)
+    client = TestClient(app)
+
+    path = f"/api/v1/oracle/distributions/{profit_month_id}/execute"
+    payload = {
+        "stakers": ["0xf965d65a9E0197B6900ba350964fBC545ec490ed"],
+        "staker_shares": [1],
+        "authors": ["0xd061ccf208B8382B800dB8534a638705079A693e"],
+        "author_shares": [1],
+    }
+    body = json.dumps(payload, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    request_id = "req-exec-profit-mismatch-1"
+
+    status, data = _post_signed(client, secret=secret, request_id=request_id, path=path, body=body)
+    assert status == 200
+    assert data["success"] is False
+    assert data["data"]["blocked_reason"] == "distribution_total_mismatch"
+    assert data["data"]["idempotency_key"]
+
+    _assert_audit_has_idempotency_key(
+        session_local,
+        request_id=request_id,
+        path=path,
+        expected_idempotency_key=data["data"]["idempotency_key"],
+    )
