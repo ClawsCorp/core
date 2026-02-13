@@ -3,13 +3,13 @@ from __future__ import annotations
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from src.models.reputation_ledger import ReputationLedger
+from src.models.reputation_event import ReputationEvent
 
 
 def get_agent_reputation(db: Session, agent_id: int) -> int:
     total = (
-        db.query(func.coalesce(func.sum(ReputationLedger.delta), 0))
-        .filter(ReputationLedger.agent_id == agent_id)
+        db.query(func.coalesce(func.sum(ReputationEvent.delta_points), 0))
+        .filter(ReputationEvent.agent_id == agent_id)
         .scalar()
     )
     total = int(total or 0)

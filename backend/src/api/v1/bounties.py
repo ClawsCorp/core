@@ -77,12 +77,15 @@ def list_bounties(
         query.order_by(Bounty.created_at.desc()).offset(offset).limit(limit).all()
     )
     items = [_bounty_public(row.Bounty, row.project_id, row.agent_id) for row in rows]
+    page_max_updated_at = 0
+    if rows:
+        page_max_updated_at = max(int(row.Bounty.updated_at.timestamp()) for row in rows)
     result = BountyListResponse(
         success=True,
         data=BountyListData(items=items, limit=limit, offset=offset, total=total),
     )
     response.headers["Cache-Control"] = "public, max-age=30"
-    response.headers["ETag"] = f'W/"bounties:{status or "all"}:{project_id or "all"}:{offset}:{limit}:{total}"'
+    response.headers["ETag"] = f'W/"bounties:{status or "all"}:{project_id or "all"}:{offset}:{limit}:{total}:{page_max_updated_at}"'
     return result
 
 
