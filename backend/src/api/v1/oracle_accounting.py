@@ -43,7 +43,7 @@ async def create_revenue_event(
         .filter(RevenueEvent.idempotency_key == payload.idempotency_key)
         .first()
     )
-    request_id = request.headers.get("X-Request-ID") or str(uuid4())
+    request_id = request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID") or str(uuid4())
     body_hash = request.state.body_hash
 
     if existing is not None:
@@ -85,7 +85,7 @@ async def create_expense_event(
         .filter(ExpenseEvent.idempotency_key == payload.idempotency_key)
         .first()
     )
-    request_id = request.headers.get("X-Request-ID") or str(uuid4())
+    request_id = request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID") or str(uuid4())
     body_hash = request.state.body_hash
 
     if existing is not None:

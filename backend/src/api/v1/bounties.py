@@ -116,7 +116,7 @@ async def create_bounty(
     _: str = Depends(require_oracle_hmac),
     db: Session = Depends(get_db),
 ) -> BountyDetailResponse:
-    request_id = request.headers.get("X-Request-ID") or str(uuid4())
+    request_id = request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID") or str(uuid4())
     idempotency_key = request.headers.get("Idempotency-Key")
     body_hash = request.state.body_hash
 
@@ -155,7 +155,7 @@ async def claim_bounty(
 ) -> BountyDetailResponse:
     body_bytes = await request.body()
     body_hash = hash_body(body_bytes)
-    request_id = request.headers.get("X-Request-ID") or str(uuid4())
+    request_id = request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID") or str(uuid4())
     idempotency_key = request.headers.get("Idempotency-Key")
 
     row = (
@@ -195,7 +195,7 @@ async def submit_bounty(
 ) -> BountyDetailResponse:
     body_bytes = await request.body()
     body_hash = hash_body(body_bytes)
-    request_id = request.headers.get("X-Request-ID") or str(uuid4())
+    request_id = request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID") or str(uuid4())
     idempotency_key = request.headers.get("Idempotency-Key")
 
     row = (
@@ -238,7 +238,7 @@ async def evaluate_eligibility(
     _: str = Depends(require_oracle_hmac),
     db: Session = Depends(get_db),
 ) -> BountyEligibilityResponse:
-    request_id = request.headers.get("X-Request-ID") or str(uuid4())
+    request_id = request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID") or str(uuid4())
     idempotency_key = request.headers.get("Idempotency-Key")
     body_hash = request.state.body_hash
 
@@ -292,7 +292,7 @@ async def mark_paid(
     _: str = Depends(require_oracle_hmac),
     db: Session = Depends(get_db),
 ) -> BountyMarkPaidResponse:
-    request_id = request.headers.get("X-Request-ID") or str(uuid4())
+    request_id = request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID") or str(uuid4())
     idempotency_key = request.headers.get("Idempotency-Key")
     body_hash = request.state.body_hash
 

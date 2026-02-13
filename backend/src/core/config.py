@@ -45,6 +45,8 @@ class Settings:
     dividend_distributor_contract_address: str | None
     oracle_signer_private_key: str | None
     contracts_dir: str
+    oracle_request_ttl_seconds: int
+    oracle_clock_skew_seconds: int
     governance_quorum_min_votes: int
     governance_approval_bps: int
     governance_discussion_hours: int
@@ -75,6 +77,8 @@ def get_settings() -> Settings:
         oracle_signer_private_key_value if oracle_signer_private_key_value else None
     )
     contracts_dir = os.getenv("CONTRACTS_DIR", "/app/contracts").strip() or "/app/contracts"
+    oracle_request_ttl_seconds = int(os.getenv("ORACLE_REQUEST_TTL_SECONDS", "300"))
+    oracle_clock_skew_seconds = int(os.getenv("ORACLE_CLOCK_SKEW_SECONDS", "5"))
     governance_quorum_min_votes = int(os.getenv("GOVERNANCE_QUORUM_MIN_VOTES", "1"))
     governance_approval_bps = int(os.getenv("GOVERNANCE_APPROVAL_BPS", "5000"))
     governance_discussion_hours = int(os.getenv("GOVERNANCE_DISCUSSION_HOURS", "24"))
@@ -91,6 +95,8 @@ def get_settings() -> Settings:
         dividend_distributor_contract_address=dividend_distributor_contract_address,
         oracle_signer_private_key=oracle_signer_private_key,
         contracts_dir=contracts_dir,
+        oracle_request_ttl_seconds=oracle_request_ttl_seconds,
+        oracle_clock_skew_seconds=oracle_clock_skew_seconds,
         governance_quorum_min_votes=governance_quorum_min_votes,
         governance_approval_bps=governance_approval_bps,
         governance_discussion_hours=governance_discussion_hours,

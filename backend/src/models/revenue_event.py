@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import BigInteger, CheckConstraint, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.core.database import Base
@@ -20,7 +20,7 @@ class RevenueEvent(Base):
     project_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("projects.id"), nullable=True, index=True
     )
-    amount_micro_usdc: Mapped[int] = mapped_column(Integer)
+    amount_micro_usdc: Mapped[int] = mapped_column(BigInteger)
     tx_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     source: Mapped[str] = mapped_column(String(64))
     idempotency_key: Mapped[str] = mapped_column(String(255), unique=True)

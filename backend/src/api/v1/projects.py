@@ -142,7 +142,7 @@ async def create_project(
     _: str = Depends(require_oracle_hmac),
     db: Session = Depends(get_db),
 ) -> ProjectDetailResponse:
-    request_id = request.headers.get("X-Request-ID") or str(uuid4())
+    request_id = request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID") or str(uuid4())
     idempotency_key = request.headers.get("Idempotency-Key")
     body_hash = request.state.body_hash
 
@@ -173,7 +173,7 @@ async def approve_project(
     _: str = Depends(require_oracle_hmac),
     db: Session = Depends(get_db),
 ) -> ProjectDetailResponse:
-    request_id = request.headers.get("X-Request-ID") or str(uuid4())
+    request_id = request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID") or str(uuid4())
     idempotency_key = request.headers.get("Idempotency-Key")
     body_hash = request.state.body_hash
 
@@ -202,7 +202,7 @@ async def update_project_status(
     _: str = Depends(require_oracle_hmac),
     db: Session = Depends(get_db),
 ) -> ProjectDetailResponse:
-    request_id = request.headers.get("X-Request-ID") or str(uuid4())
+    request_id = request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID") or str(uuid4())
     idempotency_key = request.headers.get("Idempotency-Key")
     body_hash = request.state.body_hash
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import BigInteger, CheckConstraint, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.core.database import Base
@@ -19,7 +19,7 @@ class ProjectCapitalEvent(Base):
     idempotency_key: Mapped[str] = mapped_column(String(255), unique=True)
     profit_month_id: Mapped[str | None] = mapped_column(String(6), nullable=True, index=True)
     project_id: Mapped[int] = mapped_column(Integer, ForeignKey("projects.id"), index=True)
-    delta_micro_usdc: Mapped[int] = mapped_column(Integer)
+    delta_micro_usdc: Mapped[int] = mapped_column(BigInteger)
     source: Mapped[str] = mapped_column(String(64), index=True)
     evidence_tx_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     evidence_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
