@@ -29,9 +29,10 @@ idempotency + evidence (tx_hash / evidence_url)
 
 Monthly profit = SUM(revenue) - SUM(expenses).
 
-Alembic migration invariant (do not break deploys):  
-Alembic stores the current revision in `alembic_version.version_num` which is `VARCHAR(32)` by default.  
-Therefore **migration `revision` identifiers MUST be <= 32 characters** (CI enforces this).  
+Alembic migration policy (do not break deploys):  
+Historically, Alembic stored the current revision in `alembic_version.version_num` as `VARCHAR(32)`, and long revision IDs caused Railway deploy outages.  
+As of migration `0019_bigint_money_oracle_nonce`, `alembic_version.version_num` is expanded to `VARCHAR(255)`.  
+We still prefer concise revision IDs for readability (rule of thumb: keep them reasonably short).  
 
 Settlement + fail-closed gate (STRICT EQUALITY):  
 ready=true only if  
