@@ -121,18 +121,20 @@ async def register_agent(
         api_key_hash=hash_api_key(api_key),
         api_key_last4=api_key_last4(api_key),
     )
-    with db.begin():
-        db.add(agent)
-        db.flush()
-        db.add(
-            ReputationLedger(
-                agent_id=agent.id,
-                delta=100,
-                reason="bootstrap",
-                ref_type="agent",
-                ref_id=agent.agent_id,
-            )
+    # SQLAlchemy sessions auto-begin a transaction on first DB interaction (e.g. `_generate_agent_id`).
+    # Using `with db.begin()` here can raise `InvalidRequestError: A transaction is already begun`.
+    db.add(agent)
+    db.flush()  # assign `agent.id` for the bootstrap ledger row
+    db.add(
+        ReputationLedger(
+            agent_id=agent.id,
+            delta=100,
+            reason="bootstrap",
+            ref_type="agent",
+            ref_id=agent.agent_id,
         )
+    )
+    db.commit()
     db.refresh(agent)
 
     signature_status = getattr(request.state, "signature_status", "none")
