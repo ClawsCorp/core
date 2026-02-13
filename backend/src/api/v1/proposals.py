@@ -59,7 +59,10 @@ def list_proposals(
     items = [_proposal_summary(proposal, author_map.get(proposal.author_agent_id, "")) for proposal in proposals]
     result = ProposalListResponse(success=True, data=ProposalListData(items=items, limit=limit, offset=offset, total=total))
     response.headers["Cache-Control"] = "public, max-age=30"
-    response.headers["ETag"] = f'W/"proposals:{status or "all"}:{offset}:{limit}:{total}"'
+    page_max_updated_at = 0
+    if proposals:
+        page_max_updated_at = max(int(proposal.updated_at.timestamp()) for proposal in proposals)
+    response.headers["ETag"] = f'W/"proposals:{status or "all"}:{offset}:{limit}:{total}:{page_max_updated_at}"'
     return result
 
 
