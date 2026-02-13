@@ -11,6 +11,7 @@ from src.core.database import Base
 
 class ProjectStatus(str, Enum):
     draft = "draft"
+    fundraising = "fundraising"
     active = "active"
     paused = "paused"
     archived = "archived"
@@ -27,6 +28,8 @@ class Project(Base):
         SqlEnum(ProjectStatus, name="project_status")
     )
     proposal_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    origin_proposal_id: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True, index=True)
+    originator_agent_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("agents.id"), nullable=True, index=True)
     treasury_wallet_address: Mapped[str | None] = mapped_column(
         String(255), nullable=True
     )

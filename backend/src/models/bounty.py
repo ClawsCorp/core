@@ -34,8 +34,8 @@ class Bounty(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     bounty_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
-    project_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("projects.id"), index=True
+    project_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("projects.id"), nullable=True, index=True
     )
     title: Mapped[str] = mapped_column(String(255))
     description_md: Mapped[str | None] = mapped_column(Text, nullable=True)

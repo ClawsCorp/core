@@ -13,6 +13,7 @@ from src.core.database import get_db
 from src.core.security import hash_body
 from src.models.agent import Agent
 from src.models.bounty import Bounty, BountyStatus
+from src.models.expense_event import ExpenseEvent
 from src.models.project import Project
 from src.services.reputation_hooks import emit_reputation_event
 
@@ -55,7 +56,7 @@ def list_bounties(
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ) -> BountyListResponse:
-    query = db.query(Bounty, Project.project_id, Agent.agent_id).join(
+    query = db.query(Bounty, Project.project_id, Agent.agent_id).outerjoin(
         Project, Bounty.project_id == Project.id
     ).outerjoin(Agent, Bounty.claimant_agent_id == Agent.id)
     if status is not None:
@@ -89,7 +90,7 @@ def get_bounty(
 ) -> BountyDetailResponse:
     row = (
         db.query(Bounty, Project.project_id, Agent.agent_id)
-        .join(Project, Bounty.project_id == Project.id)
+        .outerjoin(Project, Bounty.project_id == Project.id)
         .outerjoin(Agent, Bounty.claimant_agent_id == Agent.id)
         .filter(Bounty.bounty_id == bounty_id)
         .first()
@@ -137,7 +138,7 @@ async def create_bounty(
 
     return BountyDetailResponse(
         success=True,
-        data=_bounty_public(bounty, project.project_id, None),
+        data=_bounty_public(bounty, project.project_id if project else None, None),
     )
 
 
@@ -155,7 +156,7 @@ async def claim_bounty(
 
     row = (
         db.query(Bounty, Project.project_id)
-        .join(Project, Bounty.project_id == Project.id)
+        .outerjoin(Project, Bounty.project_id == Project.id)
         .filter(Bounty.bounty_id == bounty_id)
         .first()
     )
@@ -195,7 +196,7 @@ async def submit_bounty(
 
     row = (
         db.query(Bounty, Project.project_id, Agent.agent_id)
-        .join(Project, Bounty.project_id == Project.id)
+        .outerjoin(Project, Bounty.project_id == Project.id)
         .outerjoin(Agent, Bounty.claimant_agent_id == Agent.id)
         .filter(Bounty.bounty_id == bounty_id)
         .first()
@@ -239,7 +240,7 @@ async def evaluate_eligibility(
 
     row = (
         db.query(Bounty, Project.project_id, Agent.agent_id)
-        .join(Project, Bounty.project_id == Project.id)
+        .outerjoin(Project, Bounty.project_id == Project.id)
         .outerjoin(Agent, Bounty.claimant_agent_id == Agent.id)
         .filter(Bounty.bounty_id == bounty_id)
         .first()
@@ -293,7 +294,7 @@ async def mark_paid(
 
     row = (
         db.query(Bounty, Project.project_id, Agent.agent_id)
-        .join(Project, Bounty.project_id == Project.id)
+        .outerjoin(Project, Bounty.project_id == Project.id)
         .outerjoin(Agent, Bounty.claimant_agent_id == Agent.id)
         .filter(Bounty.bounty_id == bounty_id)
         .first()
@@ -301,13 +302,16 @@ async def mark_paid(
     if not row:
         raise HTTPException(status_code=404, detail="Bounty not found")
     bounty = row.Bounty
-    if bounty.status != BountyStatus.eligible_for_payout:
+    if bounty.status not in {BountyStatus.eligible_for_payout, BountyStatus.paid}:
         raise HTTPException(
             status_code=400, detail="Bounty is not eligible for payout."
         )
 
-    bounty.status = BountyStatus.paid
-    bounty.paid_tx_hash = payload.paid_tx_hash
+    if bounty.status != BountyStatus.paid:
+        bounty.status = BountyStatus.paid
+    bounty.paid_tx_hash = payload.paid_tx_hash or bounty.paid_tx_hash
+
+    _ensure_bounty_paid_expense(db, bounty)
     db.commit()
     db.refresh(bounty)
 
@@ -410,7 +414,7 @@ def _generate_bounty_id(db: Session) -> str:
 
 def _bounty_public(
     bounty: Bounty,
-    project_id: str,
+    project_id: str | None,
     claimant_agent_id: str | None,
 ) -> BountyPublic:
     return BountyPublic(
@@ -429,3 +433,35 @@ def _bounty_public(
         created_at=bounty.created_at,
         updated_at=bounty.updated_at,
     )
+
+
+def _ensure_bounty_paid_expense(db: Session, bounty: Bounty) -> ExpenseEvent:
+    idempotency_key = f"expense:bounty_paid:{bounty.bounty_id}"
+    existing = db.query(ExpenseEvent).filter(ExpenseEvent.idempotency_key == idempotency_key).first()
+    if existing is not None:
+        return existing
+
+    profit_month_id = datetime.now(timezone.utc).strftime("%Y%m")
+    category = "project_bounty_payout" if bounty.project_id is not None else "platform_bounty_payout"
+    event = ExpenseEvent(
+        event_id=_generate_expense_event_id(db),
+        profit_month_id=profit_month_id,
+        project_id=bounty.project_id,
+        amount_micro_usdc=bounty.amount_micro_usdc,
+        tx_hash=bounty.paid_tx_hash,
+        category=category,
+        idempotency_key=idempotency_key,
+        evidence_url=None,
+    )
+    db.add(event)
+    db.flush()
+    return event
+
+
+def _generate_expense_event_id(db: Session) -> str:
+    for _ in range(5):
+        candidate = f"exp_{secrets.token_hex(8)}"
+        exists = db.query(ExpenseEvent).filter(ExpenseEvent.event_id == candidate).first()
+        if not exists:
+            return candidate
+    raise RuntimeError("Failed to generate unique expense event id.")

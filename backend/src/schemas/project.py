@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 class ProjectStatus(str, Enum):
     draft = "draft"
+    fundraising = "fundraising"
     active = "active"
     paused = "paused"
     archived = "archived"
@@ -44,6 +45,8 @@ class ProjectSummary(BaseModel):
     description_md: str | None
     status: ProjectStatus
     proposal_id: str | None
+    origin_proposal_id: str | None
+    originator_agent_id: int | None
     treasury_wallet_address: str | None
     revenue_wallet_address: str | None
     monthly_budget_micro_usdc: int | None
@@ -71,3 +74,55 @@ class ProjectListResponse(BaseModel):
 class ProjectDetailResponse(BaseModel):
     success: bool
     data: ProjectDetail
+
+
+class ProjectCapitalEventCreateRequest(BaseModel):
+    event_id: str | None = None
+    idempotency_key: str = Field(..., min_length=1)
+    profit_month_id: str | None = Field(default=None, min_length=6, max_length=6)
+    project_id: str
+    delta_micro_usdc: int
+    source: str = Field(..., min_length=1)
+    evidence_tx_hash: str | None = None
+    evidence_url: str | None = None
+
+
+class ProjectCapitalEventPublic(BaseModel):
+    event_id: str
+    idempotency_key: str
+    profit_month_id: str | None
+    project_id: str
+    delta_micro_usdc: int
+    source: str
+    evidence_tx_hash: str | None
+    evidence_url: str | None
+    created_at: datetime
+
+
+class ProjectCapitalEventDetailResponse(BaseModel):
+    success: bool
+    data: ProjectCapitalEventPublic
+
+
+class ProjectCapitalSummary(BaseModel):
+    project_id: str
+    capital_sum_micro_usdc: int
+    events_count: int
+    last_event_at: datetime | None
+
+
+class ProjectCapitalSummaryResponse(BaseModel):
+    success: bool
+    data: ProjectCapitalSummary
+
+
+class ProjectCapitalLeaderboardData(BaseModel):
+    items: list[ProjectCapitalSummary]
+    limit: int
+    offset: int
+    total: int
+
+
+class ProjectCapitalLeaderboardResponse(BaseModel):
+    success: bool
+    data: ProjectCapitalLeaderboardData

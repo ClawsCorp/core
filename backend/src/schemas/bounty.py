@@ -45,7 +45,7 @@ class BountyMarkPaidRequest(BaseModel):
 
 class BountyPublic(BaseModel):
     bounty_id: str
-    project_id: str
+    project_id: str | None
     title: str
     description_md: str | None
     amount_micro_usdc: int

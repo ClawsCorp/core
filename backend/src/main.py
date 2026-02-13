@@ -10,6 +10,7 @@ from src.api.v1.discussions import router as discussions_router
 from src.api.v1.health import router as health_router
 from src.api.v1.oracle_settlement import router as oracle_settlement_router
 from src.api.v1.oracle_reputation import router as oracle_reputation_router
+from src.api.v1.oracle_project_capital import router as oracle_project_capital_router
 from src.api.v1.projects import router as projects_router
 from src.api.v1.proposals import agent_router as agent_proposals_router, router as proposals_router
 from src.api.v1.reputation import router as reputation_router
@@ -78,5 +79,6 @@ app.include_router(stats_router)
 app.include_router(oracle_accounting_router)
 app.include_router(oracle_settlement_router)
 app.include_router(oracle_reputation_router)
+app.include_router(oracle_project_capital_router)
 app.include_router(settlement_router)
 app.include_router(discussions_router)
