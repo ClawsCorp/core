@@ -66,8 +66,8 @@ def list_agents(
     reputation_seed = 0
     if agent_ids:
         reputation_seed = int(
-            db.query(func.coalesce(func.max(ReputationLedger.id), 0))
-            .filter(ReputationLedger.agent_id.in_(agent_ids))
+            db.query(func.coalesce(func.max(ReputationEvent.id), 0))
+            .filter(ReputationEvent.agent_id.in_(agent_ids))
             .scalar()
             or 0
         )
@@ -105,8 +105,8 @@ def get_agent(
         raise HTTPException(status_code=404, detail="Agent not found")
     reputation_points = get_agent_reputation(db, agent.id)
     reputation_seed = int(
-        db.query(func.coalesce(func.max(ReputationLedger.id), 0))
-        .filter(ReputationLedger.agent_id == agent.id)
+        db.query(func.coalesce(func.max(ReputationEvent.id), 0))
+        .filter(ReputationEvent.agent_id == agent.id)
         .scalar()
         or 0
     )
