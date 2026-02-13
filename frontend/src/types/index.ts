@@ -16,6 +16,20 @@ export interface StatsData {
   project_capital_reconciliation_max_age_seconds?: number;
 }
 
+export interface AccountingMonthSummary {
+  profit_month_id: string;
+  revenue_sum_micro_usdc: number;
+  expense_sum_micro_usdc: number;
+  profit_sum_micro_usdc: number;
+}
+
+export interface AccountingMonthsData {
+  items: AccountingMonthSummary[];
+  limit: number;
+  offset: number;
+  total: number;
+}
+
 export interface Envelope<T> {
   success: boolean;
   data: T;
