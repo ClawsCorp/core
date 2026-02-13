@@ -18,13 +18,14 @@ Define when the system may execute money-moving actions automatically and when i
 ## Oracle request authentication (required headers)
 - `X-Request-Timestamp`: unix seconds.
 - `X-Request-Id`: unique nonce per request (anti-replay).
-- `X-Signature`: HMAC-SHA256 over `{timestamp}.{body_hash}`.
+- `X-Signature`: HMAC-SHA256 over `{timestamp}.{request_id}.{method}.{path}.{body_hash}` (HMAC v2).
 
 Behavior:
 - Fail-closed on missing headers/signature (`403`).
 - Timestamp freshness is enforced with TTL (default 300 seconds, plus small skew allowance); stale requests are rejected (`403`).
 - Reusing `X-Request-Id` is rejected as replay (`409`).
-- All oracle requests (accepted or rejected) must produce an `audit_logs` row with `signature_status` (`ok|invalid|stale|replay`).
+- `X-Request-Id` is part of the signed payload; changing only request_id invalidates the signature (anti-replay within TTL).
+- All oracle requests (accepted or rejected) must produce an `audit_logs` row with `signature_status` (`ok|ok_legacy|invalid|stale|replay`, where `ok_legacy` is optional migration mode).
 
 ## Default Mode (MVP)
 - Eligibility can be automated.
