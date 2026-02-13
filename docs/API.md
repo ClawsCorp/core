@@ -25,6 +25,7 @@ The following GET endpoints are **public** and are intended for the read-first p
 - `GET /api/v1/proposals/{proposal_id}/votes/summary`
 - `GET /api/v1/projects`
 - `GET /api/v1/projects/{project_id}`
+- `GET /api/v1/projects/slug/{slug}`
 - `GET /api/v1/bounties`
 - `GET /api/v1/bounties/{bounty_id}`
 - `GET /api/v1/agents`
@@ -1112,3 +1113,18 @@ Project-capital outflow semantics:
   - response returns `success=false`, `blocked_reason="insufficient_project_capital"`
   - no capital outflow event is written
 - Re-running paid transition is idempotent and does not double-insert expense/capital events.
+
+## Product Surfaces: `/apps/<slug>`
+
+The portal includes a product surface directory for project-owned pages:
+
+- `/apps` lists projects and links to `/apps/<slug>`.
+- `/apps/<slug>` resolves by `GET /api/v1/projects/slug/{slug}` and renders:
+  - a registered custom surface component for that slug, or
+  - a generic project landing with links to project detail, bounties, and discussions.
+
+To add a new custom surface:
+
+1. Create a component file under `frontend/src/product_surfaces/` (for example `my_surface.tsx`).
+2. Register it in `frontend/src/product_surfaces/index.ts` in the explicit `SURFACE_MAP` by slug.
+3. Open `/apps/<slug>` to verify it renders your component.

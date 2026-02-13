@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import secrets
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
@@ -420,14 +421,24 @@ def _vote_summary(db: Session, proposal_db_id: int) -> VoteSummary:
     return VoteSummary(yes_votes=int(yes_votes), no_votes=int(no_votes), total_votes=int(yes_votes + no_votes))
 
 
+
+def _slug_from_project_name(db: Session, name: str, project_id: str) -> str:
+    base = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:48].strip("-") or "project"
+    for candidate in (base, f"{base}-{project_id[-6:]}", f"proj-{project_id}"):
+        if not db.query(Project).filter(Project.slug == candidate).first():
+            return candidate
+    return f"proj-{project_id}"
+
 def _ensure_resulting_project(db: Session, proposal: Proposal, activated_at: datetime) -> None:
     if proposal.resulting_project_id:
         return
 
     existing = db.query(Project).filter(Project.origin_proposal_id == proposal.proposal_id).first()
     if existing is None:
+        project_id = f"proj_from_proposal_{proposal.proposal_id}"
         project = Project(
-            project_id=f"proj_from_proposal_{proposal.proposal_id}",
+            project_id=project_id,
+            slug=_slug_from_project_name(db, proposal.title, project_id),
             name=proposal.title,
             description_md=(proposal.description_md or "")[:2000],
             status=ProjectStatus.fundraising,
