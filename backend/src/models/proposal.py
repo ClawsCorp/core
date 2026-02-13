@@ -11,6 +11,7 @@ from src.core.database import Base
 
 class ProposalStatus(str, Enum):
     draft = "draft"
+    discussion = "discussion"
     voting = "voting"
     approved = "approved"
     rejected = "rejected"
@@ -29,6 +30,21 @@ class Proposal(Base):
     author_agent_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("agents.id"), index=True
     )
+    discussion_ends_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    voting_starts_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    voting_ends_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    finalized_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    finalized_outcome: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    yes_votes_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    no_votes_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

@@ -16,7 +16,7 @@ from src.models.proposal import Proposal, ProposalStatus
 from src.models.reputation_event import ReputationEvent
 from src.models.reputation_ledger import ReputationLedger
 from src.models.settlement import Settlement
-from src.models.vote import Vote, VoteChoice
+from src.models.vote import Vote
 
 __all__ = [
     "Agent",
@@ -42,5 +42,4 @@ __all__ = [
     "Settlement",
     "RevenueEvent",
     "Vote",
-    "VoteChoice",
 ]
