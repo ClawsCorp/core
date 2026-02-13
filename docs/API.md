@@ -608,6 +608,7 @@ Funding policy (autonomy-first, fail-closed):
 - If bounty has no project (`project_id = null`), default `funding_source` is `platform_treasury`.
 - For project bounties funded by `project_capital`, payout attempts are blocked when capital balance is insufficient.
 - Blocked payout response is `success=false` with `blocked_reason="insufficient_project_capital"`.
+- Every mark-paid attempt writes an audit log entry, including blocked outcomes (with `blocked_reason` captured in audit metadata).
 
 Request body:
 
