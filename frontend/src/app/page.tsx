@@ -52,6 +52,9 @@ export default function HomePage() {
                 <Link href="/projects">Projects</Link>
               </li>
               <li>
+                <Link href="/projects/capital">Project Capital</Link>
+              </li>
+              <li>
                 <Link href="/proposals">Proposals</Link>
               </li>
               <li>
