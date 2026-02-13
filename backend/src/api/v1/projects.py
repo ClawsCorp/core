@@ -13,6 +13,12 @@ from src.core.database import get_db
 from src.models.agent import Agent
 from src.models.project import Project, ProjectStatus
 from src.models.project_member import ProjectMember
+from src.services.project_capital import project_capital_leaderboard, project_capital_summary
+from src.schemas.project_capital import (
+    ProjectCapitalLeaderboardData,
+    ProjectCapitalLeaderboardResponse,
+    ProjectCapitalSummaryResponse,
+)
 from src.schemas.project import (
     ProjectCreateRequest,
     ProjectDetail,
@@ -47,7 +53,7 @@ def list_projects(
         query = query.filter(Project.status == ProjectStatus(status))
     total = query.count()
     projects = query.order_by(Project.created_at.desc()).offset(offset).limit(limit).all()
-    items = [_project_summary(project) for project in projects]
+    items = [_project_summary(db, project) for project in projects]
     result = ProjectListResponse(
         success=True,
         data=ProjectListData(items=items, limit=limit, offset=offset, total=total),
@@ -76,6 +82,48 @@ def get_project(
     response.headers["ETag"] = f'W/"project:{project.project_id}:{int(project.updated_at.timestamp())}"'
     return result
 
+
+
+
+@router.get(
+    "/{project_id}/capital",
+    response_model=ProjectCapitalSummaryResponse,
+    summary="Get project capital summary",
+    description="Public read endpoint for append-only project capital totals.",
+)
+def get_project_capital(
+    project_id: str,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> ProjectCapitalSummaryResponse:
+    project = db.query(Project).filter(Project.project_id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    summary = project_capital_summary(db, project)
+    response.headers["Cache-Control"] = "public, max-age=30"
+    response.headers["ETag"] = f'W/"project-capital:{project.project_id}:{summary.events_count}:{summary.capital_sum_micro_usdc}"'
+    return ProjectCapitalSummaryResponse(success=True, data=summary)
+
+
+@router.get(
+    "/capital/leaderboard",
+    response_model=ProjectCapitalLeaderboardResponse,
+    summary="Get project capital leaderboard",
+    description="Public read endpoint sorted by capital descending.",
+)
+def get_project_capital_leaderboard(
+    response: Response,
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+) -> ProjectCapitalLeaderboardResponse:
+    items, total = project_capital_leaderboard(db, limit=limit, offset=offset)
+    response.headers["Cache-Control"] = "public, max-age=30"
+    response.headers["ETag"] = f'W/"project-capital-leaderboard:{offset}:{limit}:{total}"'
+    return ProjectCapitalLeaderboardResponse(
+        success=True,
+        data=ProjectCapitalLeaderboardData(items=items, limit=limit, offset=offset, total=total),
+    )
 
 @router.post("", response_model=ProjectDetailResponse)
 async def create_project(
@@ -195,7 +243,11 @@ def _generate_project_id(db: Session) -> str:
     raise RuntimeError("Failed to generate unique project id.")
 
 
-def _project_summary(project: Project) -> ProjectSummary:
+def _project_summary(db: Session, project: Project) -> ProjectSummary:
+    originator_agent_id: str | None = None
+    if project.originator_agent_id is not None:
+        originator = db.query(Agent).filter(Agent.id == project.originator_agent_id).first()
+        originator_agent_id = originator.agent_id if originator else None
     return ProjectSummary(
         project_id=project.project_id,
         name=project.name,
@@ -208,13 +260,15 @@ def _project_summary(project: Project) -> ProjectSummary:
         created_at=project.created_at,
         updated_at=project.updated_at,
         approved_at=project.approved_at,
+        origin_proposal_id=project.origin_proposal_id,
+        originator_agent_id=originator_agent_id,
     )
 
 
 def _project_detail(db: Session, project: Project) -> ProjectDetail:
     members = _load_project_members(db, project.id)
     return ProjectDetail(
-        **_project_summary(project).model_dump(),
+        **_project_summary(db, project).model_dump(),
         members=members,
     )
 

@@ -14,6 +14,7 @@ from src.api.v1.projects import router as projects_router
 from src.api.v1.proposals import agent_router as agent_proposals_router, router as proposals_router
 from src.api.v1.reputation import router as reputation_router
 from src.api.v1.oracle_accounting import router as oracle_accounting_router
+from src.api.v1.oracle_project_capital import router as oracle_project_capital_router
 from src.api.v1.stats import router as stats_router
 from src.api.v1.settlement import router as settlement_router
 from src.core.config import get_settings
@@ -76,6 +77,7 @@ app.include_router(agent_proposals_router)
 app.include_router(reputation_router)
 app.include_router(stats_router)
 app.include_router(oracle_accounting_router)
+app.include_router(oracle_project_capital_router)
 app.include_router(oracle_settlement_router)
 app.include_router(oracle_reputation_router)
 app.include_router(settlement_router)

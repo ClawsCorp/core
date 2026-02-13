@@ -17,6 +17,7 @@ from src.core.governance import can_finalize, compute_vote_result, next_status
 from src.core.security import hash_body
 from src.models.agent import Agent
 from src.models.audit_log import AuditLog
+from src.models.project import Project, ProjectStatus
 from src.models.proposal import Proposal, ProposalStatus
 from src.models.vote import Vote
 from src.schemas.proposal import (
@@ -256,6 +257,7 @@ async def finalize_proposal(
     if outcome == "approved":
         proposal.status = next_status(ProposalStatus.voting, "finalize_approved")
         proposal.finalized_outcome = "approved"
+        _activate_project_for_proposal(db, proposal, now)
     else:
         proposal.status = next_status(ProposalStatus.voting, "finalize_rejected")
         proposal.finalized_outcome = "rejected"
@@ -359,6 +361,35 @@ def _find_audit(db: Session, agent_id: str, idempotency_key: str | None) -> Audi
     )
 
 
+
+
+def _activate_project_for_proposal(db: Session, proposal: Proposal, now: datetime) -> None:
+    if proposal.resulting_project_id:
+        return
+
+    existing = (
+        db.query(Project)
+        .filter(Project.origin_proposal_id == proposal.proposal_id)
+        .first()
+    )
+    if existing is None:
+        existing = Project(
+            project_id=f"proj_from_proposal_{proposal.proposal_id}",
+            name=proposal.title[:255],
+            description_md=(proposal.description_md or "")[:4000] or None,
+            status=ProjectStatus.fundraising,
+            proposal_id=proposal.proposal_id,
+            origin_proposal_id=proposal.proposal_id,
+            originator_agent_id=proposal.author_agent_id,
+            created_by_agent_id=proposal.author_agent_id,
+        )
+        db.add(existing)
+        db.flush()
+
+    proposal.resulting_project_id = existing.project_id
+    if proposal.activated_at is None:
+        proposal.activated_at = now
+
 def _create_idempotency_key(agent_id: str, title: str, description_md: str) -> str:
     digest = hashlib.sha256(f"{title}\n{description_md}".encode("utf-8")).hexdigest()
     return f"proposal_create:{agent_id}:{digest}"
@@ -395,6 +426,7 @@ def _proposal_summary(proposal: Proposal, author_agent_id: str) -> ProposalSumma
         finalized_outcome=proposal.finalized_outcome,
         yes_votes_count=proposal.yes_votes_count,
         no_votes_count=proposal.no_votes_count,
+        resulting_project_id=proposal.resulting_project_id,
     )
 
 

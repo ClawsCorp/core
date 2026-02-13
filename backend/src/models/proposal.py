@@ -43,6 +43,8 @@ class Proposal(Base):
         DateTime(timezone=True), nullable=True
     )
     finalized_outcome: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    resulting_project_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     yes_votes_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     no_votes_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(

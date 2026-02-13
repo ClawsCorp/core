@@ -13,6 +13,7 @@ from src.core.database import get_db
 from src.core.security import hash_body
 from src.models.agent import Agent
 from src.models.bounty import Bounty, BountyStatus
+from src.models.expense_event import ExpenseEvent
 from src.models.project import Project
 from src.services.reputation_hooks import emit_reputation_event
 
@@ -55,7 +56,7 @@ def list_bounties(
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ) -> BountyListResponse:
-    query = db.query(Bounty, Project.project_id, Agent.agent_id).join(
+    query = db.query(Bounty, Project.project_id, Agent.agent_id).outerjoin(
         Project, Bounty.project_id == Project.id
     ).outerjoin(Agent, Bounty.claimant_agent_id == Agent.id)
     if status is not None:
@@ -89,7 +90,7 @@ def get_bounty(
 ) -> BountyDetailResponse:
     row = (
         db.query(Bounty, Project.project_id, Agent.agent_id)
-        .join(Project, Bounty.project_id == Project.id)
+        .outerjoin(Project, Bounty.project_id == Project.id)
         .outerjoin(Agent, Bounty.claimant_agent_id == Agent.id)
         .filter(Bounty.bounty_id == bounty_id)
         .first()
@@ -155,7 +156,7 @@ async def claim_bounty(
 
     row = (
         db.query(Bounty, Project.project_id)
-        .join(Project, Bounty.project_id == Project.id)
+        .outerjoin(Project, Bounty.project_id == Project.id)
         .filter(Bounty.bounty_id == bounty_id)
         .first()
     )
@@ -195,7 +196,7 @@ async def submit_bounty(
 
     row = (
         db.query(Bounty, Project.project_id, Agent.agent_id)
-        .join(Project, Bounty.project_id == Project.id)
+        .outerjoin(Project, Bounty.project_id == Project.id)
         .outerjoin(Agent, Bounty.claimant_agent_id == Agent.id)
         .filter(Bounty.bounty_id == bounty_id)
         .first()
@@ -239,7 +240,7 @@ async def evaluate_eligibility(
 
     row = (
         db.query(Bounty, Project.project_id, Agent.agent_id)
-        .join(Project, Bounty.project_id == Project.id)
+        .outerjoin(Project, Bounty.project_id == Project.id)
         .outerjoin(Agent, Bounty.claimant_agent_id == Agent.id)
         .filter(Bounty.bounty_id == bounty_id)
         .first()
@@ -293,7 +294,7 @@ async def mark_paid(
 
     row = (
         db.query(Bounty, Project.project_id, Agent.agent_id)
-        .join(Project, Bounty.project_id == Project.id)
+        .outerjoin(Project, Bounty.project_id == Project.id)
         .outerjoin(Agent, Bounty.claimant_agent_id == Agent.id)
         .filter(Bounty.bounty_id == bounty_id)
         .first()
@@ -301,6 +302,12 @@ async def mark_paid(
     if not row:
         raise HTTPException(status_code=404, detail="Bounty not found")
     bounty = row.Bounty
+    if bounty.status == BountyStatus.paid:
+        _record_oracle_audit(request, db, body_hash, request_id, idempotency_key)
+        return BountyDetailResponse(
+            success=True,
+            data=_bounty_public(bounty, row.project_id, row.agent_id),
+        )
     if bounty.status != BountyStatus.eligible_for_payout:
         raise HTTPException(
             status_code=400, detail="Bounty is not eligible for payout."
@@ -308,6 +315,7 @@ async def mark_paid(
 
     bounty.status = BountyStatus.paid
     bounty.paid_tx_hash = payload.paid_tx_hash
+    _append_bounty_paid_expense_event(db, bounty)
     db.commit()
     db.refresh(bounty)
 
@@ -354,6 +362,28 @@ def _evaluate_payload(bounty: Bounty, payload: BountyEligibilityRequest) -> list
             reasons.append(f"check_not_success:{required_name}")
 
     return reasons
+
+
+
+
+def _append_bounty_paid_expense_event(db: Session, bounty: Bounty) -> None:
+    idempotency_key = f"expense:bounty_paid:{bounty.bounty_id}"
+    existing = db.query(ExpenseEvent).filter(ExpenseEvent.idempotency_key == idempotency_key).first()
+    if existing is not None:
+        return
+
+    is_project_bounty = bounty.project_id is not None
+    event = ExpenseEvent(
+        event_id=f"exp_bounty_{bounty.bounty_id}",
+        profit_month_id=datetime.now(timezone.utc).strftime("%Y%m"),
+        project_id=bounty.project_id if is_project_bounty else None,
+        amount_micro_usdc=bounty.amount_micro_usdc,
+        tx_hash=bounty.paid_tx_hash,
+        category="project_bounty_payout" if is_project_bounty else "platform_bounty_payout",
+        idempotency_key=idempotency_key,
+        evidence_url=None,
+    )
+    db.add(event)
 
 
 def _record_oracle_audit(
@@ -410,7 +440,7 @@ def _generate_bounty_id(db: Session) -> str:
 
 def _bounty_public(
     bounty: Bounty,
-    project_id: str,
+    project_id: str | None,
     claimant_agent_id: str | None,
 ) -> BountyPublic:
     return BountyPublic(

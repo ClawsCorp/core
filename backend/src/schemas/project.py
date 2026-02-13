@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 class ProjectStatus(str, Enum):
     draft = "draft"
+    fundraising = "fundraising"
     active = "active"
     paused = "paused"
     archived = "archived"
@@ -50,6 +51,8 @@ class ProjectSummary(BaseModel):
     created_at: datetime
     updated_at: datetime
     approved_at: datetime | None
+    origin_proposal_id: str | None
+    originator_agent_id: str | None
 
 
 class ProjectDetail(ProjectSummary):

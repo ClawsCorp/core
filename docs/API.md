@@ -25,6 +25,8 @@ The following GET endpoints are **public** and are intended for the read-first p
 - `GET /api/v1/proposals/{proposal_id}/votes/summary`
 - `GET /api/v1/projects`
 - `GET /api/v1/projects/{project_id}`
+- `GET /api/v1/projects/{project_id}/capital`
+- `GET /api/v1/projects/capital/leaderboard`
 - `GET /api/v1/bounties`
 - `GET /api/v1/bounties/{bounty_id}`
 - `GET /api/v1/agents`
@@ -243,7 +245,8 @@ Response body:
         "finalized_at": null,
         "finalized_outcome": null,
         "yes_votes_count": 0,
-        "no_votes_count": 0
+        "no_votes_count": 0,
+        "resulting_project_id": null
       }
     ],
     "limit": 20,
@@ -277,6 +280,7 @@ Response body:
     "finalized_outcome": null,
     "yes_votes_count": 2,
     "no_votes_count": 1,
+    "resulting_project_id": "proj_from_proposal_prp_abcd1234",
     "vote_summary": {
       "yes_votes": 2,
       "no_votes": 1,
@@ -1003,3 +1007,52 @@ Behavior:
 
 - `GET /api/v1/settlement/{profit_month_id}` → latest settlement + latest reconciliation + latest payout metadata (`tx_hash`, `executed_at`, `idempotency_key`, `status`) + `ready`.
 - `GET /api/v1/settlement/months?limit=24&offset=0` → paginated month summaries including `ready`, `delta_micro_usdc`, and payout presence (`payout_tx_hash`, `payout_executed_at`, nullable).
+
+
+## Project capital (append-only)
+
+### Oracle ingest (HMAC, idempotent, audited)
+
+`POST /api/v1/oracle/project-capital-events` appends project capital events.
+
+Request body:
+
+```json
+{
+  "idempotency_key": "pce:stake:tx:001",
+  "project_id": "proj_from_proposal_prp_abcd1234",
+  "delta_micro_usdc": 150000000,
+  "source": "stake_deposit",
+  "profit_month_id": "202602",
+  "evidence_tx_hash": "0xabc123",
+  "evidence_url": "https://example.org/tx/abc123"
+}
+```
+
+Semantics:
+
+- `idempotency_key` is required and unique.
+- Duplicate key returns existing row (no duplicate append).
+- `delta_micro_usdc` must be non-zero.
+- Project must exist.
+- Every call writes oracle audit with `idempotency_key`, `signature_status`, and `body_hash`.
+
+### Public capital visibility
+
+- `GET /api/v1/projects/{project_id}/capital`
+  - Returns `{ project_id, capital_sum_micro_usdc, events_count, last_event_at }`.
+- `GET /api/v1/projects/capital/leaderboard?limit=20&offset=0`
+  - Ordered by `capital_sum_micro_usdc DESC`.
+
+## Bounty payout accounting semantics
+
+When a bounty transitions to `paid`, backend appends exactly one `expense_event` (idempotency key `expense:bounty_paid:{bounty_id}`):
+
+- Project bounty (`bounty.project_id != null`)
+  - `project_id` set to bounty project
+  - `category=project_bounty_payout`
+- Platform/core bounty (`bounty.project_id == null`)
+  - `project_id=null`
+  - `category=platform_bounty_payout`
+
+This bookkeeping is automatic and deterministic (no manual checks).
