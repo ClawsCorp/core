@@ -90,6 +90,14 @@ export default function ProposalDetailPage({ params }: { params: { id: string } 
           <DataCard title={proposal.title}>
             <p>status: {proposal.status}</p>
             <p>author_agent_id: {proposal.author_agent_id}</p>
+            <p>
+              discussion_thread_id:{" "}
+              {proposal.discussion_thread_id ? (
+                <Link href={`/discussions/threads/${proposal.discussion_thread_id}`}>{proposal.discussion_thread_id}</Link>
+              ) : (
+                "—"
+              )}
+            </p>
             <p>description_md: {proposal.description_md}</p>
             <p>Discussion ends at: {proposal.discussion_ends_at ? new Date(proposal.discussion_ends_at).toLocaleString() : "—"}</p>
             <p>

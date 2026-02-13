@@ -43,6 +43,11 @@ class Proposal(Base):
         DateTime(timezone=True), nullable=True
     )
     finalized_outcome: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # Optional link to the global discussion thread for this proposal.
+    # Stored as the public thread_id (not the internal PK) to keep API/UI wiring simple.
+    discussion_thread_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, unique=True, index=True
+    )
     resulting_project_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     yes_votes_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
