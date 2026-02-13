@@ -24,10 +24,7 @@ from src.core.security import build_oracle_hmac_v2_payload
 from src.main import app
 
 import src.models  # noqa: F401
-from src.api.v1 import bounties as bounties_api
 from src.models.audit_log import AuditLog
-from src.models.bounty import Bounty, BountyFundingSource, BountyStatus
-from src.models.expense_event import ExpenseEvent
 from src.models.project import Project, ProjectStatus
 from src.models.project_capital_event import ProjectCapitalEvent
 from src.models.project_capital_reconciliation_report import ProjectCapitalReconciliationReport
@@ -94,28 +91,18 @@ def _client(_db: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch) -> Test
         app.dependency_overrides.clear()
 
 
-def _seed_project_bounty(db: Session) -> Bounty:
+def _seed_project(db: Session) -> Project:
     project = Project(
-        project_id="prj_gate_1",
-        slug="gate-prj",
-        name="Gate Project",
+        project_id="prj_cap_gate_1",
+        slug="cap-gate-prj",
+        name="Capital Gate Project",
         status=ProjectStatus.active,
+        treasury_address="0x" + "1" * 40,
     )
     db.add(project)
-    db.flush()
-
-    bounty = Bounty(
-        bounty_id="bty_gate_1",
-        project_id=project.id,
-        funding_source=BountyFundingSource.project_capital,
-        title="Reconciliation gate",
-        description_md=None,
-        amount_micro_usdc=1_000_000,
-        status=BountyStatus.eligible_for_payout,
-    )
-    db.add(bounty)
     db.commit()
-    return bounty
+    db.refresh(project)
+    return project
 
 
 def _insert_reconciliation(
@@ -141,132 +128,110 @@ def _insert_reconciliation(
     db.commit()
 
 
-def _call_mark_paid(client: TestClient, *, idem: str) -> tuple[int, dict[str, object]]:
-    path = "/api/v1/bounties/bty_gate_1/mark-paid"
-    body = json.dumps({"paid_tx_hash": "0x" + "a" * 64}, separators=(",", ":"), sort_keys=True).encode("utf-8")
-    response = client.post(path, content=body, headers=_oracle_headers(path, body, f"req-{idem}", idem=idem))
-    return response.status_code, response.json()
+def _call_outflow(client: TestClient, *, idem: str) -> tuple[int, dict[str, object]]:
+    path = "/api/v1/oracle/project-capital-events"
+    body = json.dumps(
+        {
+            "idempotency_key": idem,
+            "profit_month_id": "202602",
+            "project_id": "prj_cap_gate_1",
+            "delta_micro_usdc": -1_000_000,
+            "source": "manual_outflow",
+            "evidence_tx_hash": "0x" + "a" * 64,
+            "evidence_url": "test",
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    resp = client.post(path, content=body, headers=_oracle_headers(path, body, f"req-{idem}", idem=idem))
+    return resp.status_code, resp.json()
 
 
-def _assert_blocked_side_effects(db: Session) -> None:
-    bounty = db.query(Bounty).filter(Bounty.bounty_id == "bty_gate_1").first()
-    assert bounty is not None
-    assert bounty.status == BountyStatus.eligible_for_payout
-
-    assert db.query(ExpenseEvent).count() == 0
-    assert db.query(ProjectCapitalEvent).count() == 0
-
-
-def _assert_latest_audit(db: Session, *, idem: str, blocked_reason: str) -> None:
-    audit = (
+def _latest_audit(db: Session) -> AuditLog | None:
+    return (
         db.query(AuditLog)
-        .filter(AuditLog.path == "/api/v1/bounties/bty_gate_1/mark-paid")
+        .filter(AuditLog.path == "/api/v1/oracle/project-capital-events")
         .order_by(AuditLog.id.desc())
         .first()
     )
-    assert audit is not None
-    assert audit.idempotency_key == idem
-    assert audit.error_hint is not None
-    assert f"br={blocked_reason};" in audit.error_hint
-    assert len(audit.error_hint) <= 255
 
 
-def test_mark_paid_blocked_when_reconciliation_missing(
-    _client: TestClient,
-    _db: sessionmaker[Session],
-) -> None:
+def test_outflow_blocked_when_reconciliation_missing(_client: TestClient, _db: sessionmaker[Session]) -> None:
     with _db() as db:
-        _seed_project_bounty(db)
+        _seed_project(db)
 
-    status_code, data = _call_mark_paid(_client, idem="idem-missing-recon")
+    status_code, data = _call_outflow(_client, idem="idem-outflow-missing")
     assert status_code == 200
     assert data["success"] is False
     assert data["blocked_reason"] == "project_capital_reconciliation_missing"
+    assert data["data"] is None
 
     with _db() as db:
-        _assert_blocked_side_effects(db)
-        _assert_latest_audit(
-            db,
-            idem="idem-missing-recon",
-            blocked_reason="project_capital_reconciliation_missing",
-        )
+        assert db.query(ProjectCapitalEvent).count() == 0
+        audit = _latest_audit(db)
+        assert audit is not None
+        assert audit.idempotency_key == "idem-outflow-missing"
+        assert audit.error_hint is not None
+        assert "br=project_capital_reconciliation_missing;" in audit.error_hint
 
 
-def test_mark_paid_blocked_when_reconciliation_not_ready(
-    _client: TestClient,
-    _db: sessionmaker[Session],
-) -> None:
+def test_outflow_blocked_when_reconciliation_not_ready(_client: TestClient, _db: sessionmaker[Session]) -> None:
     with _db() as db:
-        bounty = _seed_project_bounty(db)
+        project = _seed_project(db)
         _insert_reconciliation(
             db,
-            project_id=bounty.project_id,
+            project_id=project.id,
             ready=False,
             delta_micro_usdc=50,
             computed_at=datetime.now(timezone.utc),
         )
 
-    status_code, data = _call_mark_paid(_client, idem="idem-not-ready")
+    status_code, data = _call_outflow(_client, idem="idem-outflow-not-ready")
     assert status_code == 200
     assert data["success"] is False
     assert data["blocked_reason"] == "project_capital_not_reconciled"
 
     with _db() as db:
-        _assert_blocked_side_effects(db)
-        _assert_latest_audit(
-            db,
-            idem="idem-not-ready",
-            blocked_reason="project_capital_not_reconciled",
-        )
+        assert db.query(ProjectCapitalEvent).count() == 0
 
 
-def test_mark_paid_blocked_when_reconciliation_stale(
-    _client: TestClient,
-    _db: sessionmaker[Session],
-) -> None:
+def test_outflow_blocked_when_reconciliation_stale(_client: TestClient, _db: sessionmaker[Session]) -> None:
     with _db() as db:
-        bounty = _seed_project_bounty(db)
+        project = _seed_project(db)
         _insert_reconciliation(
             db,
-            project_id=bounty.project_id,
+            project_id=project.id,
             ready=True,
             delta_micro_usdc=0,
             computed_at=datetime.now(timezone.utc) - timedelta(hours=2),
         )
 
-    status_code, data = _call_mark_paid(_client, idem="idem-stale")
+    status_code, data = _call_outflow(_client, idem="idem-outflow-stale")
     assert status_code == 200
     assert data["success"] is False
     assert data["blocked_reason"] == "project_capital_reconciliation_stale"
 
     with _db() as db:
-        _assert_blocked_side_effects(db)
-        _assert_latest_audit(
-            db,
-            idem="idem-stale",
-            blocked_reason="project_capital_reconciliation_stale",
-        )
+        assert db.query(ProjectCapitalEvent).count() == 0
 
 
-def test_mark_paid_fresh_reconciliation_reaches_insufficient_capital_check(
-    _client: TestClient,
-    _db: sessionmaker[Session],
-) -> None:
+def test_outflow_allows_fresh_ready_reconciliation(_client: TestClient, _db: sessionmaker[Session]) -> None:
     with _db() as db:
-        bounty = _seed_project_bounty(db)
+        project = _seed_project(db)
         _insert_reconciliation(
             db,
-            project_id=bounty.project_id,
+            project_id=project.id,
             ready=True,
             delta_micro_usdc=0,
             computed_at=datetime.now(timezone.utc),
         )
 
-    status_code, data = _call_mark_paid(_client, idem="idem-insufficient")
+    status_code, data = _call_outflow(_client, idem="idem-outflow-ok")
     assert status_code == 200
-    assert data["success"] is False
-    assert data["blocked_reason"] == "insufficient_project_capital"
+    assert data["success"] is True
+    assert data["blocked_reason"] is None
+    assert data["data"]["delta_micro_usdc"] == -1_000_000
 
     with _db() as db:
-        _assert_blocked_side_effects(db)
-        _assert_latest_audit(db, idem="idem-insufficient", blocked_reason="insufficient_project_capital")
+        assert db.query(ProjectCapitalEvent).count() == 1
+

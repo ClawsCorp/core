@@ -1089,6 +1089,10 @@ Semantics:
 - `delta_micro_usdc` must be non-zero (`+` deposit, `-` spend/withdraw)
 - `idempotency_key` is unique; duplicates return existing event
 - Every call is oracle-audited (`idempotency_key`, `signature_status`, `body_hash`)
+- Fail-closed outflow gate: when `delta_micro_usdc < 0`, the latest project capital reconciliation must exist, be strict-ready, and be fresh:
+  - missing reconciliation ⇒ `success=false`, `blocked_reason="project_capital_reconciliation_missing"`
+  - not strict-ready (`ready!=true` or `delta_micro_usdc!=0`) ⇒ `success=false`, `blocked_reason="project_capital_not_reconciled"`
+  - stale (`computed_at < now - PROJECT_CAPITAL_RECONCILIATION_MAX_AGE_SECONDS`) ⇒ `success=false`, `blocked_reason="project_capital_reconciliation_stale"`
 
 ## Oracle project treasury and capital reconciliation
 
