@@ -6,9 +6,11 @@ from pathlib import Path
 
 def test_alembic_revision_ids_are_short_enough() -> None:
     """
-    Railway runs Alembic against PostgreSQL. By default, Alembic uses
-    `alembic_version.version_num VARCHAR(32)`, so revision identifiers longer than
-    32 chars will crash deploys when Alembic tries to update the version table.
+    Railway runs Alembic against PostgreSQL.
+
+    We expanded `alembic_version.version_num` to VARCHAR(255) (migration 0019), so
+    deploys no longer hard-fail at 32 chars. However, very long revision IDs are
+    still a footgun for readability and ops, so we enforce a soft limit.
     """
 
     versions_dir = Path(__file__).resolve().parents[1] / "alembic" / "versions"
@@ -23,10 +25,9 @@ def test_alembic_revision_ids_are_short_enough() -> None:
         if not match:
             continue
         rev = match.group(1)
-        if len(rev) > 32:
+        if len(rev) > 64:
             bad.append((path.name, rev, len(rev)))
 
-    assert not bad, "Alembic revision id(s) > 32 chars: " + ", ".join(
+    assert not bad, "Alembic revision id(s) > 64 chars: " + ", ".join(
         f"{name}({length}):{rev}" for name, rev, length in bad
     )
-
