@@ -40,8 +40,10 @@ export default function SettlementPage() {
       {!loading && !error && items.length === 0 ? <EmptyState message="No settlement months found." /> : null}
       {!loading && !error && items.length > 0
         ? items.map((month) => {
-            const payoutTxHash = month.payout_tx_hash ?? month.payout?.tx_hash ?? null;
+            const payoutTxHash = month.payout_tx_hash;
             const hasPayout = Boolean(payoutTxHash);
+            const payoutStatus = month.payout_status;
+            const monthFinalized = month.ready && payoutStatus === "confirmed";
 
             return (
               <DataCard key={month.profit_month_id} title={month.profit_month_id}>
@@ -51,7 +53,7 @@ export default function SettlementPage() {
                 <p>distributor_balance: {formatMicroUsdc(month.distributor_balance_micro_usdc)}</p>
                 <p>delta: {formatMicroUsdc(month.delta_micro_usdc)}</p>
                 <p>ready: {formatBoolean(month.ready)}</p>
-                <p>payout: {hasPayout ? "Paid ✅" : "Not paid"}</p>
+                <p>payout: {monthFinalized ? "Finalized ✅" : payoutStatus === "failed" ? "Failed" : hasPayout ? "Pending" : "Not paid"}</p>
                 {payoutTxHash ? (
                   <p>
                     explorer: <a href={getExplorerTxUrl(payoutTxHash)} target="_blank" rel="noreferrer">View tx</a>
