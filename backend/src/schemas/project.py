@@ -41,6 +41,7 @@ class ProjectMemberInfo(BaseModel):
 
 class ProjectSummary(BaseModel):
     project_id: str
+    slug: str
     name: str
     description_md: str | None
     status: ProjectStatus

@@ -65,6 +65,7 @@ export interface ProjectCapitalSummary {
 
 export interface ProjectSummary {
   project_id: string;
+  slug: string;
   name: string;
   description_md: string | null;
   status: string;

@@ -198,6 +198,10 @@ export const api = {
     const payload = await fetchJSON<Envelope<ProjectDetail>>(`/api/v1/projects/${id}`);
     return payload.data;
   },
+  getProjectBySlug: async (slug: string) => {
+    const payload = await fetchJSON<Envelope<ProjectDetail>>(`/api/v1/projects/slug/${slug}`);
+    return payload.data;
+  },
   getProjectCapitalSummary: async (projectId: string) => {
     const payload = await fetchJSON<Envelope<ProjectCapitalSummary>>(`/api/v1/projects/${projectId}/capital`);
     return payload.data;

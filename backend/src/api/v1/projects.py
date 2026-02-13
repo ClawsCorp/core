@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import secrets
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -91,6 +92,26 @@ def list_projects(
     return result
 
 
+@router.get(
+    "/slug/{slug}",
+    response_model=ProjectDetailResponse,
+    summary="Get project detail by slug",
+    description="Public read endpoint for a project and public member roster by project slug.",
+)
+def get_project_by_slug(
+    slug: str,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> ProjectDetailResponse:
+    project = db.query(Project).filter(Project.slug == slug).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    result = ProjectDetailResponse(success=True, data=_project_detail(db, project))
+    response.headers["Cache-Control"] = "public, max-age=60"
+    response.headers["ETag"] = f'W/"project-slug:{project.slug}:{int(project.updated_at.timestamp())}"'
+    return result
+
+
 @router.get("/{project_id}/capital", response_model=ProjectCapitalSummaryResponse, summary="Get project capital summary")
 def get_project_capital(project_id: str, db: Session = Depends(get_db)) -> ProjectCapitalSummaryResponse:
     project = db.query(Project).filter(Project.project_id == project_id).first()
@@ -149,6 +170,7 @@ async def create_project(
     project_id = _generate_project_id(db)
     project = Project(
         project_id=project_id,
+        slug=_generate_project_slug(db, payload.name, project_id),
         name=payload.name,
         description_md=payload.description_md,
         status=ProjectStatus.draft,
@@ -253,9 +275,31 @@ def _generate_project_id(db: Session) -> str:
     raise RuntimeError("Failed to generate unique project id.")
 
 
+def _generate_project_slug(db: Session, name: str, project_id: str) -> str:
+    base = _slugify_name(name)
+    candidates = [base, f"{base}-{project_id[-6:]}", f"proj-{project_id}"]
+
+    for candidate in candidates:
+        if not db.query(Project).filter(Project.slug == candidate).first():
+            return candidate
+
+    for _ in range(5):
+        fallback = f"{base}-{secrets.token_hex(2)}"
+        if not db.query(Project).filter(Project.slug == fallback).first():
+            return fallback
+
+    return f"proj-{project_id}"
+
+
+def _slugify_name(name: str) -> str:
+    normalized = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    return (normalized or "project")[:48].strip("-") or "project"
+
+
 def _project_summary(project: Project) -> ProjectSummary:
     return ProjectSummary(
         project_id=project.project_id,
+        slug=project.slug,
         name=project.name,
         description_md=project.description_md,
         status=ProjectStatusSchema(project.status),
