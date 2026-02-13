@@ -7,6 +7,7 @@ import type {
   HealthResponse,
   ListData,
   ProjectCapitalSummary,
+  ProjectCapitalReconciliationReport,
   ProjectDetail,
   ProjectSummary,
   ReputationAgentSummary,
@@ -204,6 +205,12 @@ export const api = {
   },
   getProjectCapitalSummary: async (projectId: string) => {
     const payload = await fetchJSON<Envelope<ProjectCapitalSummary>>(`/api/v1/projects/${projectId}/capital`);
+    return payload.data;
+  },
+  getProjectCapitalReconciliationLatest: async (projectId: string) => {
+    const payload = await fetchJSON<Envelope<ProjectCapitalReconciliationReport | null>>(
+      `/api/v1/projects/${projectId}/capital/reconciliation/latest`,
+    );
     return payload.data;
   },
   getProjectCapitalLeaderboard: async (limit = 100, offset = 0) => {

@@ -11,6 +11,7 @@ from src.models.oracle_nonce import OracleNonce
 from src.models.expense_event import ExpenseEvent
 from src.models.project import Project, ProjectStatus
 from src.models.project_capital_event import ProjectCapitalEvent
+from src.models.project_capital_reconciliation_report import ProjectCapitalReconciliationReport
 from src.models.reconciliation_report import ReconciliationReport
 from src.models.revenue_event import RevenueEvent
 from src.models.project_member import ProjectMember, ProjectMemberRole
@@ -36,6 +37,7 @@ __all__ = [
     "ExpenseEvent",
     "Project",
     "ProjectCapitalEvent",
+    "ProjectCapitalReconciliationReport",
     "ReconciliationReport",
     "ProjectMember",
     "ProjectMemberRole",
