@@ -39,6 +39,23 @@ oracle_runner reconcile --month 202501 --json
 - `stdout`: one JSON summary object (success and all failure exits)
 - `stderr`: stage progress/human diagnostics
 
+### Stage Progress Lines (stderr)
+
+Progress lines use stable stage identifiers for grep/parsers:
+
+```
+stage=<stage> status=<status> [detail=<message>]
+```
+
+Statuses are:
+- `start`: stage began
+- `ok`: stage completed and business rules passed
+- `blocked`: stage returned a business-level blocked result (HTTP 200 but not acceptable to proceed)
+- `pending`: stage completed but requires external confirmation (e.g. payout confirmation pending)
+- `error`: stage failed due to a runner/config/network/HTTP error (includes `detail=...`)
+
+For blocked cases, the runner emits `start` and a single final `blocked` status (no intermediate `ok`).
+
 Stage coverage includes settlement to avoid `missing_settlement` flows:
 - settlement
 - reconcile

@@ -244,7 +244,6 @@ def run(argv: list[str] | None = None) -> int:
                 _print_progress("reconcile", "start")
                 rec = _post_action(client, f"/api/v1/oracle/reconciliation/{month}", b"")
                 summary["reconcile"] = rec
-                _print_progress("reconcile", "ok")
             except OracleRunnerError as exc:
                 _print_progress("reconcile", "error", str(exc))
                 summary["failed_step"] = "reconcile"
@@ -257,12 +256,12 @@ def run(argv: list[str] | None = None) -> int:
                 summary["failed_step"] = "reconcile"
                 _print_json(summary)
                 return 4
+            _print_progress("reconcile", "ok")
 
             try:
                 _print_progress("create_distribution", "start")
                 create = _post_action(client, f"/api/v1/oracle/distributions/{month}/create", b"")
                 summary["create_distribution"] = create
-                _print_progress("create_distribution", "ok")
             except OracleRunnerError as exc:
                 _print_progress("create_distribution", "error", str(exc))
                 summary["failed_step"] = "create_distribution"
@@ -275,6 +274,7 @@ def run(argv: list[str] | None = None) -> int:
                 summary["failed_step"] = "create_distribution"
                 _print_json(summary)
                 return 6
+            _print_progress("create_distribution", "ok")
 
             try:
                 _print_progress("execute_distribution", "start")
@@ -287,7 +287,6 @@ def run(argv: list[str] | None = None) -> int:
                     idempotency_key=run_idempotency_key,
                 )
                 summary["execute_distribution"] = execute
-                _print_progress("execute_distribution", "ok")
             except OracleRunnerError as exc:
                 _print_progress("execute_distribution", "error", str(exc))
                 summary["failed_step"] = "execute_distribution"
@@ -300,6 +299,7 @@ def run(argv: list[str] | None = None) -> int:
                 summary["failed_step"] = "execute_distribution"
                 _print_json(summary)
                 return 8
+            _print_progress("execute_distribution", "ok")
 
             try:
                 _print_progress("confirm_payout", "start")
@@ -309,13 +309,13 @@ def run(argv: list[str] | None = None) -> int:
                     b"{}",
                 )
                 summary["confirm_payout"] = confirm
-                _print_progress("confirm_payout", "ok")
             except OracleRunnerError as exc:
                 _print_progress("confirm_payout", "error", str(exc))
                 summary["failed_step"] = "confirm_payout"
                 summary["error"] = str(exc)
                 _print_json(summary)
                 return 9
+            _print_progress("confirm_payout", "pending" if confirm.get("status") == "pending" else "ok")
 
             summary["success"] = True
             _print_json(summary)
