@@ -53,6 +53,7 @@ def project_capital_leaderboard(
     items = [
         ProjectCapitalSummary(
             project_id=row.project_id,
+            balance_micro_usdc=int(row.capital_sum_micro_usdc or 0),
             capital_sum_micro_usdc=int(row.capital_sum_micro_usdc or 0),
             events_count=int(row.events_count or 0),
             last_event_at=row.last_event_at,
@@ -106,6 +107,7 @@ def get_project_capital(project_id: str, db: Session = Depends(get_db)) -> Proje
         success=True,
         data=ProjectCapitalSummary(
             project_id=project.project_id,
+            balance_micro_usdc=int(row[0] or 0),
             capital_sum_micro_usdc=int(row[0] or 0),
             events_count=int(row[1] or 0),
             last_event_at=row[2],

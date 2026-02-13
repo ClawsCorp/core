@@ -106,6 +106,7 @@ class ProjectCapitalEventDetailResponse(BaseModel):
 
 class ProjectCapitalSummary(BaseModel):
     project_id: str
+    balance_micro_usdc: int
     capital_sum_micro_usdc: int
     events_count: int
     last_event_at: datetime | None

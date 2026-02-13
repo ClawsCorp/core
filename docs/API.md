@@ -601,6 +601,14 @@ reputation hook awards the claimant `+10` (`source=bounty_eligible`, idempotency
 reputation hook awards the claimant `+5` (`source=bounty_paid`, idempotency key
 `rep:bounty_paid:{bounty_id}`). If `paid_tx_hash` is present, it is included in the event note.
 
+Funding policy (autonomy-first, fail-closed):
+
+- Every bounty exposes `funding_source` in public read payloads (`project_capital`, `project_revenue`, `platform_treasury`).
+- If bounty has a project, default `funding_source` is `project_capital`.
+- If bounty has no project (`project_id = null`), default `funding_source` is `platform_treasury`.
+- For project bounties funded by `project_capital`, payout attempts are blocked when capital balance is insufficient.
+- Blocked payout response is `success=false` with `blocked_reason="insufficient_project_capital"`.
+
 Request body:
 
 ```json
@@ -1045,9 +1053,9 @@ Semantics:
 ## Public project capital reads
 
 - `GET /api/v1/projects/{project_id}/capital`
-  - returns `project_id`, `capital_sum_micro_usdc`, `events_count`, `last_event_at`
+  - returns `project_id`, `balance_micro_usdc` (also `capital_sum_micro_usdc` for compatibility), `events_count`, `last_event_at`
 - `GET /api/v1/projects/capital/leaderboard?limit=&offset=`
-  - ordered by `capital_sum_micro_usdc DESC`
+  - ordered by `balance_micro_usdc DESC` (`capital_sum_micro_usdc` equivalent)
 
 ## Bounty paid accounting semantics
 
@@ -1058,4 +1066,14 @@ When a bounty becomes `paid`, backend appends one deterministic expense event:
 - `category=project_bounty_payout` when bounty has project
 - `category=platform_bounty_payout` when bounty has no project (`project_id = null`)
 
-Re-running paid transition is idempotent and does not double-insert expenses.
+Project-capital outflow semantics:
+
+- For `project_id != null` and `funding_source=project_capital`, backend writes one deterministic capital outflow event:
+  - idempotency key: `cap:bounty_paid:{bounty_id}`
+  - `delta_micro_usdc = -bounty.amount_micro_usdc`
+  - `source=bounty_paid`
+- If project capital balance is below bounty amount, payout is fail-closed:
+  - bounty status remains unchanged (not moved to `paid`)
+  - response returns `success=false`, `blocked_reason="insufficient_project_capital"`
+  - no capital outflow event is written
+- Re-running paid transition is idempotent and does not double-insert expense/capital events.
