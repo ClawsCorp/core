@@ -21,15 +21,24 @@ def insert_or_get_by_unique(
     occurred and the existing row matching ``unique_filter`` was loaded.
     """
 
-    nested = db.begin_nested()
-    try:
-        db.add(instance)
-        db.flush()
-        nested.commit()
-        return instance, True
-    except IntegrityError as exc:
-        nested.rollback()
-        integrity_error = exc
+    if db.in_transaction():
+        nested = db.begin_nested()
+        try:
+            db.add(instance)
+            db.flush()
+            nested.commit()
+            return instance, True
+        except IntegrityError as exc:
+            nested.rollback()
+            integrity_error = exc
+    else:
+        try:
+            db.add(instance)
+            db.flush()
+            return instance, True
+        except IntegrityError as exc:
+            db.rollback()
+            integrity_error = exc
 
     existing = db.query(model).filter_by(**unique_filter).first()
     if existing is None:
