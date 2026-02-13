@@ -1,6 +1,6 @@
 """bigint money fields and oracle nonce replay guard
 
-Revision ID: 0019_bigint_money_and_oracle_nonce
+Revision ID: 0019_bigint_money_oracle_nonce
 Revises: 0018_bounty_funding_source
 Create Date: 2026-02-13 00:00:00.000000
 """
@@ -11,13 +11,23 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0019_bigint_money_and_oracle_nonce"
+revision = "0019_bigint_money_oracle_nonce"
 down_revision = "0018_bounty_funding_source"
 branch_labels = None
 depends_on = None
 
 
 def upgrade() -> None:
+    # Alembic's default `alembic_version.version_num` is VARCHAR(32).
+    # Keep revisions <= 32 chars, and expand the column to avoid future deploy outages.
+    op.alter_column(
+        "alembic_version",
+        "version_num",
+        existing_type=sa.String(length=32),
+        type_=sa.String(length=255),
+        nullable=False,
+    )
+
     op.alter_column(
         "revenue_events",
         "amount_micro_usdc",
@@ -106,6 +116,14 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.alter_column(
+        "alembic_version",
+        "version_num",
+        existing_type=sa.String(length=255),
+        type_=sa.String(length=32),
+        nullable=False,
+    )
+
     op.drop_index("ix_oracle_nonces_request_id", table_name="oracle_nonces")
     op.drop_table("oracle_nonces")
 
