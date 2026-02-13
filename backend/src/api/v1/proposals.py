@@ -46,6 +46,7 @@ def list_proposals(
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ) -> ProposalListResponse:
+    advance_expired_discussions(db, datetime.now(timezone.utc))
     query = db.query(Proposal)
     if status is not None:
         query = query.filter(Proposal.status == status)
@@ -62,6 +63,7 @@ def list_proposals(
 
 @router.get("/{proposal_id}", response_model=ProposalDetailResponse, summary="Get proposal detail")
 def get_proposal(proposal_id: str, response: Response, db: Session = Depends(get_db)) -> ProposalDetailResponse:
+    advance_expired_discussions(db, datetime.now(timezone.utc))
     proposal = db.query(Proposal).filter(Proposal.proposal_id == proposal_id).first()
     if not proposal:
         raise HTTPException(status_code=404, detail="Proposal not found")
@@ -73,6 +75,7 @@ def get_proposal(proposal_id: str, response: Response, db: Session = Depends(get
 
 @router.get("/{proposal_id}/votes/summary", response_model=VoteSummary, summary="Get proposal vote summary")
 def get_proposal_vote_summary(proposal_id: str, db: Session = Depends(get_db)) -> VoteSummary:
+    advance_expired_discussions(db, datetime.now(timezone.utc))
     proposal = db.query(Proposal).filter(Proposal.proposal_id == proposal_id).first()
     if not proposal:
         raise HTTPException(status_code=404, detail="Proposal not found")
@@ -277,17 +280,38 @@ async def finalize_proposal(
     return ProposalDetailResponse(success=True, data=_proposal_detail(db, proposal))
 
 
+def advance_expired_discussions(db: Session, now: datetime) -> None:
+    expired_discussions = (
+        db.query(Proposal)
+        .filter(
+            Proposal.status == ProposalStatus.discussion,
+            Proposal.discussion_ends_at.isnot(None),
+            Proposal.discussion_ends_at <= now,
+        )
+        .all()
+    )
+    if not expired_discussions:
+        return
+
+    for proposal in expired_discussions:
+        proposal.status = next_status(proposal.status, "start_voting")
+        if proposal.voting_starts_at is None:
+            proposal.voting_starts_at = proposal.discussion_ends_at or now
+        if proposal.voting_ends_at is None and proposal.voting_starts_at is not None:
+            proposal.voting_ends_at = proposal.voting_starts_at + timedelta(hours=settings.governance_voting_hours)
+
+    db.commit()
+
+
 def _ensure_voting_status(db: Session, proposal: Proposal) -> None:
     if proposal.status != ProposalStatus.discussion:
         return
     now = datetime.now(timezone.utc)
     if proposal.discussion_ends_at is not None and now >= proposal.discussion_ends_at:
-        proposal.status = next_status(proposal.status, "start_voting")
-        if proposal.voting_starts_at is None:
-            proposal.voting_starts_at = proposal.discussion_ends_at
-        if proposal.voting_ends_at is None and proposal.voting_starts_at is not None:
-            proposal.voting_ends_at = proposal.voting_starts_at + timedelta(hours=settings.governance_voting_hours)
-        db.commit()
+        advance_expired_discussions(
+            db,
+            now,
+        )
         db.refresh(proposal)
 
 
