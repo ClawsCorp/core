@@ -159,6 +159,19 @@ export default function BountyDetailPage({ params }: { params: { id: string } })
       ? `PYTHONPATH=src python -m oracle_runner mark-bounty-paid --bounty-id ${params.id} --paid-tx-hash ${paidTxHash.trim()}`
       : `PYTHONPATH=src python -m oracle_runner mark-bounty-paid --bounty-id ${params.id} --paid-tx-hash 0x...`;
 
+  const evaluateEligibilityCommand =
+    `PYTHONPATH=src python -m oracle_runner evaluate-bounty-eligibility --bounty-id ${params.id} --payload eligibility.json`;
+
+  const writeEligibilityJsonMacLinux =
+    eligibilityPayload
+      ? `cat > eligibility.json <<'EOF'\n${eligibilityPayloadJson}\nEOF`
+      : "";
+
+  const writeEligibilityJsonPowerShell =
+    eligibilityPayload
+      ? `@'\n${eligibilityPayloadJson}\n'@ | Set-Content -Encoding UTF8 eligibility.json`
+      : "";
+
   return (
     <PageContainer title={`Bounty ${params.id}`}>
       <AgentKeyPanel />
@@ -228,35 +241,38 @@ export default function BountyDetailPage({ params }: { params: { id: string } })
             {bounty.status === "paid" ? <p>This bounty is paid.</p> : null}
           </DataCard>
 
-          <DataCard title="Oracle mark-paid helper (runner)">
-            <p>
-              Command: <code>{markPaidCommand}</code>{" "}
-              <CopyButton value={markPaidCommand} label="Copy command" />
-            </p>
-            <div style={{ marginTop: 8 }}>
-              <label>
-                paid_tx_hash:{" "}
-                <input
-                  value={paidTxHash}
-                  onChange={(event) => setPaidTxHash(event.target.value)}
-                  placeholder="0x..."
-                  style={{ minWidth: 420, padding: 6 }}
-                />
-              </label>
-            </div>
-            {markPaidWouldBlockReasons.length > 0 ? (
-              <>
-                <p style={{ marginTop: 12 }}>If you run it now, backend may block (fail-closed) because:</p>
-                <ul>
-                  {markPaidWouldBlockReasons.map((r) => (
-                    <li key={r}>{r}</li>
-                  ))}
-                </ul>
-              </>
-            ) : (
-              <p style={{ marginTop: 12 }}>No obvious blockers detected from public data (oracle may still block for other reasons).</p>
-            )}
-          </DataCard>
+          {bounty.status === "eligible_for_payout" || bounty.status === "paid" ? (
+            <DataCard title="Oracle mark-paid helper (runner)">
+              {bounty.status === "paid" ? <p>This bounty is already paid.</p> : null}
+              <p>
+                Command: <code>{markPaidCommand}</code>{" "}
+                <CopyButton value={markPaidCommand} label="Copy command" />
+              </p>
+              <div style={{ marginTop: 8 }}>
+                <label>
+                  paid_tx_hash:{" "}
+                  <input
+                    value={paidTxHash}
+                    onChange={(event) => setPaidTxHash(event.target.value)}
+                    placeholder="0x..."
+                    style={{ minWidth: 420, padding: 6 }}
+                  />
+                </label>
+              </div>
+              {markPaidWouldBlockReasons.length > 0 ? (
+                <>
+                  <p style={{ marginTop: 12 }}>If you run it now, backend may block (fail-closed) because:</p>
+                  <ul>
+                    {markPaidWouldBlockReasons.map((r) => (
+                      <li key={r}>{r}</li>
+                    ))}
+                  </ul>
+                </>
+              ) : (
+                <p style={{ marginTop: 12 }}>No obvious blockers detected from public data (oracle may still block for other reasons).</p>
+              )}
+            </DataCard>
+          ) : null}
 
           <DataCard title="Project capital gate (for payouts)">
             {bounty.project_id ? (
@@ -304,18 +320,25 @@ export default function BountyDetailPage({ params }: { params: { id: string } })
             ) : (
               <>
                 <p>
-                  Command:{" "}
-                  <code>
-                    PYTHONPATH=src python -m oracle_runner evaluate-bounty-eligibility --bounty-id {params.id} --payload eligibility.json
-                  </code>
+                  Command: <code>{evaluateEligibilityCommand}</code>{" "}
+                  <CopyButton value={evaluateEligibilityCommand} label="Copy command" />
                 </p>
-                <p>
-                  Copy JSON and save it as <code>eligibility.json</code>:{" "}
-                  <CopyButton value={eligibilityPayloadJson} label="Copy JSON" />
+                <p style={{ marginTop: 12 }}>
+                  macOS/Linux: write <code>eligibility.json</code>{" "}
+                  <CopyButton value={writeEligibilityJsonMacLinux} label="Copy" />
                 </p>
-                <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", marginTop: 8 }}>
-                  {eligibilityPayloadJson}
-                </pre>
+                <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{writeEligibilityJsonMacLinux}</pre>
+
+                <p style={{ marginTop: 12 }}>
+                  Windows PowerShell: write <code>eligibility.json</code>{" "}
+                  <CopyButton value={writeEligibilityJsonPowerShell} label="Copy" />
+                </p>
+                <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{writeEligibilityJsonPowerShell}</pre>
+
+                <p style={{ marginTop: 12 }}>
+                  Payload JSON (reference): <CopyButton value={eligibilityPayloadJson} label="Copy JSON" />
+                </p>
+                <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{eligibilityPayloadJson}</pre>
               </>
             )}
           </DataCard>
