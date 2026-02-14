@@ -92,6 +92,7 @@ class DistributionCreateData(BaseModel):
     tx_hash: str | None
     blocked_reason: str | None
     idempotency_key: str
+    task_id: str | None = None
 
 
 class DistributionCreateResponse(BaseModel):
@@ -113,8 +114,23 @@ class DistributionExecuteData(BaseModel):
     tx_hash: str | None
     blocked_reason: str | None
     idempotency_key: str
+    task_id: str | None = None
 
 
 class DistributionExecuteResponse(BaseModel):
     success: bool
     data: DistributionExecuteData
+
+
+class DistributionCreateRecordRequest(BaseModel):
+    idempotency_key: str = Field(..., min_length=1, max_length=255)
+    profit_sum_micro_usdc: int = Field(..., ge=0)
+    tx_hash: str = Field(..., min_length=1, max_length=80)
+
+
+class DistributionExecuteRecordRequest(BaseModel):
+    idempotency_key: str = Field(..., min_length=1, max_length=255)
+    tx_hash: str = Field(..., min_length=1, max_length=80)
+    total_profit_micro_usdc: int = Field(..., ge=0)
+    stakers_count: int = Field(..., ge=0)
+    authors_count: int = Field(..., ge=0)

@@ -3,6 +3,10 @@ require("@nomicfoundation/hardhat-toolbox");
 const { subtask } = require("hardhat/config");
 const { TASK_COMPILE_SOLIDITY_GET_SOLC_BUILD } = require("hardhat/builtin-tasks/task-names");
 
+const baseSepoliaUrl = (process.env.BASE_SEPOLIA_RPC_URL || "").trim();
+const deployerKey =
+  (process.env.ORACLE_SIGNER_PRIVATE_KEY || process.env.DEPLOYER_PRIVATE_KEY || "").trim();
+
 // Hardhat normally downloads solc builds from upstream.
 // To avoid flaky CI due to network issues, force Hardhat to use the locally installed
 // solc-js (pinned in package.json) for the configured compiler version.
@@ -45,6 +49,16 @@ module.exports = {
       },
       viaIR: true
     }
+  },
+  networks: {
+    ...(baseSepoliaUrl
+      ? {
+          baseSepolia: {
+            url: baseSepoliaUrl,
+            accounts: deployerKey ? [deployerKey] : []
+          }
+        }
+      : {})
   },
   paths: {
     sources: "./contracts",
