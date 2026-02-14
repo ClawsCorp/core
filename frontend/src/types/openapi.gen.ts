@@ -202,6 +202,14 @@ export interface paths {
     /** Execute Distribution */
     post: operations["execute_distribution_api_v1_oracle_distributions__profit_month_id__execute_post"];
   };
+  "/api/v1/oracle/distributions/{profit_month_id}/create/record": {
+    /** Record Create Distribution Tx */
+    post: operations["record_create_distribution_tx_api_v1_oracle_distributions__profit_month_id__create_record_post"];
+  };
+  "/api/v1/oracle/distributions/{profit_month_id}/execute/record": {
+    /** Record Execute Distribution Tx */
+    post: operations["record_execute_distribution_tx_api_v1_oracle_distributions__profit_month_id__execute_record_post"];
+  };
   "/api/v1/oracle/payouts/{profit_month_id}/sync": {
     /** Sync Payout Metadata */
     post: operations["sync_payout_metadata_api_v1_oracle_payouts__profit_month_id__sync_post"];
@@ -241,6 +249,14 @@ export interface paths {
   "/api/v1/oracle/tx-outbox": {
     /** Enqueue Task */
     post: operations["enqueue_task_api_v1_oracle_tx_outbox_post"];
+  };
+  "/api/v1/oracle/tx-outbox/pending": {
+    /** List Pending */
+    get: operations["list_pending_api_v1_oracle_tx_outbox_pending_get"];
+  };
+  "/api/v1/oracle/tx-outbox/claim-next": {
+    /** Claim Next */
+    post: operations["claim_next_api_v1_oracle_tx_outbox_claim_next_post"];
   };
   "/api/v1/oracle/tx-outbox/{task_id}": {
     /** Get Task */
@@ -690,6 +706,17 @@ export interface components {
       blocked_reason: string | null;
       /** Idempotency Key */
       idempotency_key: string;
+      /** Task Id */
+      task_id?: string | null;
+    };
+    /** DistributionCreateRecordRequest */
+    DistributionCreateRecordRequest: {
+      /** Idempotency Key */
+      idempotency_key: string;
+      /** Profit Sum Micro Usdc */
+      profit_sum_micro_usdc: number;
+      /** Tx Hash */
+      tx_hash: string;
     };
     /** DistributionCreateResponse */
     DistributionCreateResponse: {
@@ -709,6 +736,21 @@ export interface components {
       blocked_reason: string | null;
       /** Idempotency Key */
       idempotency_key: string;
+      /** Task Id */
+      task_id?: string | null;
+    };
+    /** DistributionExecuteRecordRequest */
+    DistributionExecuteRecordRequest: {
+      /** Idempotency Key */
+      idempotency_key: string;
+      /** Tx Hash */
+      tx_hash: string;
+      /** Total Profit Micro Usdc */
+      total_profit_micro_usdc: number;
+      /** Stakers Count */
+      stakers_count: number;
+      /** Authors Count */
+      authors_count: number;
     };
     /** DistributionExecuteRequest */
     DistributionExecuteRequest: {
@@ -1723,6 +1765,19 @@ export interface components {
       };
       /** Idempotency Key */
       idempotency_key?: string | null;
+    };
+    /** TxOutboxPendingData */
+    TxOutboxPendingData: {
+      /** Items */
+      items: components["schemas"]["TxOutboxTask"][];
+      /** Limit */
+      limit: number;
+    };
+    /** TxOutboxPendingResponse */
+    TxOutboxPendingResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["TxOutboxPendingData"];
     };
     /** TxOutboxTask */
     TxOutboxTask: {
@@ -2877,6 +2932,60 @@ export interface operations {
       };
     };
   };
+  /** Record Create Distribution Tx */
+  record_create_distribution_tx_api_v1_oracle_distributions__profit_month_id__create_record_post: {
+    parameters: {
+      path: {
+        profit_month_id: string;
+      };
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["DistributionCreateRecordRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["DistributionCreateResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Record Execute Distribution Tx */
+  record_execute_distribution_tx_api_v1_oracle_distributions__profit_month_id__execute_record_post: {
+    parameters: {
+      path: {
+        profit_month_id: string;
+      };
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["DistributionExecuteRecordRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["DistributionExecuteResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   /** Sync Payout Metadata */
   sync_payout_metadata_api_v1_oracle_payouts__profit_month_id__sync_post: {
     parameters: {
@@ -3112,6 +3221,50 @@ export interface operations {
       200: {
         content: {
           "application/json": components["schemas"]["TxOutboxTaskResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** List Pending */
+  list_pending_api_v1_oracle_tx_outbox_pending_get: {
+    parameters: {
+      query?: {
+        limit?: number;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["TxOutboxPendingResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Claim Next */
+  claim_next_api_v1_oracle_tx_outbox_claim_next_post: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["TxOutboxClaimRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["TxOutboxClaimResponse"];
         };
       };
       /** @description Validation Error */

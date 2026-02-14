@@ -31,10 +31,12 @@ def _sign(secret: str, payload: str) -> str:
     return hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
-def _oracle_headers(path: str, body: bytes, request_id: str, *, idem: str) -> dict[str, str]:
+def _oracle_headers(
+    path: str, body: bytes, request_id: str, *, idem: str, method: str = "POST"
+) -> dict[str, str]:
     timestamp = str(int(time.time()))
     body_hash = hashlib.sha256(body).hexdigest()
-    payload = build_oracle_hmac_v2_payload(timestamp, request_id, "POST", path, body_hash)
+    payload = build_oracle_hmac_v2_payload(timestamp, request_id, method, path, body_hash)
     return {
         "Content-Type": "application/json",
         "X-Request-Timestamp": timestamp,
@@ -122,3 +124,58 @@ def test_tx_outbox_enqueue_claim_complete_happy_path(_client: TestClient) -> Non
     assert resp.status_code == 200
     assert resp.json()["data"]["status"] == "succeeded"
 
+
+def test_tx_outbox_claim_next_claims_oldest_pending(_client: TestClient) -> None:
+    enqueue_path = "/api/v1/oracle/tx-outbox"
+    for i in range(2):
+        body = json.dumps(
+            {"task_type": "noop", "payload": {"i": i}, "idempotency_key": f"idem-{i}"},
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+        resp = _client.post(
+            enqueue_path,
+            content=body,
+            headers=_oracle_headers(enqueue_path, body, f"req-enq-{i}", idem=f"idem-enq-{i}"),
+        )
+        assert resp.status_code == 200
+
+    claim_next_path = "/api/v1/oracle/tx-outbox/claim-next"
+    claim_body = json.dumps({"worker_id": "w-next"}, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    resp = _client.post(
+        claim_next_path,
+        content=claim_body,
+        headers=_oracle_headers(claim_next_path, claim_body, "req-claim-next", idem="idem-claim-next"),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["success"] is True
+    task = resp.json()["data"]["task"]
+    assert task["status"] == "processing"
+    assert task["locked_by"] == "w-next"
+    assert task["payload"]["i"] == 0
+
+
+def test_tx_outbox_pending_requires_hmac_and_lists_items(_client: TestClient) -> None:
+    enqueue_path = "/api/v1/oracle/tx-outbox"
+    body = json.dumps(
+        {"task_type": "noop", "payload": {"x": 1}, "idempotency_key": "idem-pending-1"},
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    resp = _client.post(
+        enqueue_path,
+        content=body,
+        headers=_oracle_headers(enqueue_path, body, "req-enq-p", idem="idem-enq-p"),
+    )
+    assert resp.status_code == 200
+
+    pending_path = "/api/v1/oracle/tx-outbox/pending?limit=10"
+    pending_sign_path = "/api/v1/oracle/tx-outbox/pending"
+    # Signed GET with empty body.
+    resp = _client.get(
+        pending_path,
+        headers=_oracle_headers(pending_sign_path, b"", "req-pending", idem="idem-pending", method="GET"),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["success"] is True
+    assert len(resp.json()["data"]["items"]) >= 1

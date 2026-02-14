@@ -12,8 +12,10 @@ from sqlalchemy.orm import Session
 
 from src.api.v1.dependencies import require_oracle_hmac
 from src.core.audit import record_audit
+from src.core.config import get_settings
 from src.core.database import get_db
 from src.core.db_utils import insert_or_get_by_unique
+from src.core.tx_outbox import enqueue_tx_outbox_task
 from src.models.distribution_creation import DistributionCreation
 from src.models.distribution_execution import DistributionExecution
 from src.models.dividend_payout import DividendPayout
@@ -21,6 +23,7 @@ from src.models.expense_event import ExpenseEvent
 from src.models.reconciliation_report import ReconciliationReport
 from src.models.revenue_event import RevenueEvent
 from src.models.settlement import Settlement
+from src.models.tx_outbox import TxOutbox
 from src.schemas.oracle import (
     PayoutConfirmRequest,
     PayoutConfirmResponse,
@@ -29,7 +32,9 @@ from src.schemas.oracle import (
 )
 from src.schemas.reconciliation import ReconciliationReportPublic
 from src.schemas.settlement import (
+    DistributionCreateRecordRequest,
     DistributionCreateResponse,
+    DistributionExecuteRecordRequest,
     DistributionExecuteRequest,
     DistributionExecuteResponse,
     PayoutTriggerRequest,
@@ -278,6 +283,54 @@ def create_distribution(
                 "tx_hash": None,
                 "blocked_reason": None,
                 "idempotency_key": idempotency_key,
+                "task_id": None,
+            },
+        )
+
+    settings = get_settings()
+    if settings.tx_outbox_enabled:
+        existing_task = (
+            db.query(TxOutbox)
+            .filter(TxOutbox.idempotency_key == idempotency_key)
+            .order_by(TxOutbox.id.desc())
+            .first()
+        )
+        if existing_task is not None:
+            _record_oracle_audit(request, db, idempotency_key=idempotency_key)
+            return DistributionCreateResponse(
+                success=True,
+                data={
+                    "profit_month_id": profit_month_id,
+                    "status": "queued",
+                    "tx_hash": None,
+                    "blocked_reason": None,
+                    "idempotency_key": idempotency_key,
+                    "task_id": existing_task.task_id,
+                },
+            )
+
+        task = enqueue_tx_outbox_task(
+            db,
+            task_type="create_distribution",
+            payload={
+                "profit_month_id": profit_month_id,
+                "profit_month_value": profit_month_value,
+                "profit_sum_micro_usdc": int(report.profit_sum_micro_usdc),
+                "idempotency_key": idempotency_key,
+            },
+            idempotency_key=idempotency_key,
+        )
+        _record_oracle_audit(request, db, idempotency_key=idempotency_key, commit=False)
+        db.commit()
+        return DistributionCreateResponse(
+            success=True,
+            data={
+                "profit_month_id": profit_month_id,
+                "status": "queued",
+                "tx_hash": None,
+                "blocked_reason": None,
+                "idempotency_key": idempotency_key,
+                "task_id": task.task_id,
             },
         )
 
@@ -339,6 +392,7 @@ def create_distribution(
             "tx_hash": creation.tx_hash,
             "blocked_reason": None,
             "idempotency_key": idempotency_key,
+            "task_id": None,
         },
     )
 
@@ -381,6 +435,7 @@ def execute_distribution(
                 "tx_hash": existing_execution.tx_hash,
                 "blocked_reason": existing_execution.blocked_reason,
                 "idempotency_key": idempotency_key,
+                "task_id": None,
             },
         )
 
@@ -464,6 +519,7 @@ def execute_distribution(
                 "tx_hash": execution.tx_hash,
                 "blocked_reason": execution.blocked_reason,
                 "idempotency_key": idempotency_key,
+                "task_id": None,
             },
         )
 
@@ -484,6 +540,59 @@ def execute_distribution(
             profit_month_id=profit_month_id,
             idempotency_key=idempotency_key,
             blocked_reason=validation_error,
+        )
+
+    settings = get_settings()
+    if settings.tx_outbox_enabled:
+        existing_task = (
+            db.query(TxOutbox)
+            .filter(TxOutbox.idempotency_key == idempotency_key)
+            .order_by(TxOutbox.id.desc())
+            .first()
+        )
+        if existing_task is not None:
+            _record_oracle_audit(request, db, idempotency_key=idempotency_key)
+            return DistributionExecuteResponse(
+                success=True,
+                data={
+                    "profit_month_id": profit_month_id,
+                    "status": "queued",
+                    "tx_hash": None,
+                    "blocked_reason": None,
+                    "idempotency_key": idempotency_key,
+                    "task_id": existing_task.task_id,
+                },
+            )
+
+        task = enqueue_tx_outbox_task(
+            db,
+            task_type="execute_distribution",
+            payload={
+                "profit_month_id": profit_month_id,
+                "profit_month_value": int(profit_month_id),
+                "idempotency_key": idempotency_key,
+                "stakers": payload.stakers,
+                "staker_shares": payload.staker_shares,
+                "authors": payload.authors,
+                "author_shares": payload.author_shares,
+                "total_profit_micro_usdc": int(settlement.profit_sum_micro_usdc),
+                "stakers_count": len(payload.stakers),
+                "authors_count": len(payload.authors),
+            },
+            idempotency_key=idempotency_key,
+        )
+        _record_oracle_audit(request, db, idempotency_key=idempotency_key, commit=False)
+        db.commit()
+        return DistributionExecuteResponse(
+            success=True,
+            data={
+                "profit_month_id": profit_month_id,
+                "status": "queued",
+                "tx_hash": None,
+                "blocked_reason": None,
+                "idempotency_key": idempotency_key,
+                "task_id": task.task_id,
+            },
         )
 
     try:
@@ -545,6 +654,131 @@ def execute_distribution(
             "tx_hash": execution.tx_hash,
             "blocked_reason": execution.blocked_reason,
             "idempotency_key": idempotency_key,
+            "task_id": None,
+        },
+    )
+
+
+@router.post("/distributions/{profit_month_id}/create/record", response_model=DistributionCreateResponse)
+def record_create_distribution_tx(
+    profit_month_id: str,
+    payload: DistributionCreateRecordRequest,
+    request: Request,
+    _: str = Depends(require_oracle_hmac),
+    db: Session = Depends(get_db),
+) -> DistributionCreateResponse:
+    _validate_month(profit_month_id)
+
+    existing = (
+        db.query(DistributionCreation)
+        .filter(DistributionCreation.idempotency_key == payload.idempotency_key)
+        .order_by(DistributionCreation.id.desc())
+        .first()
+    )
+    if existing is not None:
+        _record_oracle_audit(request, db, idempotency_key=payload.idempotency_key, tx_hash=existing.tx_hash)
+        return DistributionCreateResponse(
+            success=True,
+            data={
+                "profit_month_id": existing.profit_month_id,
+                "status": "submitted",
+                "tx_hash": existing.tx_hash,
+                "blocked_reason": None,
+                "idempotency_key": existing.idempotency_key,
+                "task_id": None,
+            },
+        )
+
+    creation = DistributionCreation(
+        profit_month_id=profit_month_id,
+        profit_sum_micro_usdc=int(payload.profit_sum_micro_usdc),
+        idempotency_key=payload.idempotency_key,
+        tx_hash=payload.tx_hash,
+    )
+    creation, _ = insert_or_get_by_unique(
+        db,
+        instance=creation,
+        model=DistributionCreation,
+        unique_filter={"idempotency_key": payload.idempotency_key},
+    )
+    _record_oracle_audit(request, db, idempotency_key=payload.idempotency_key, tx_hash=payload.tx_hash, commit=False)
+    db.commit()
+    return DistributionCreateResponse(
+        success=True,
+        data={
+            "profit_month_id": creation.profit_month_id,
+            "status": "submitted",
+            "tx_hash": creation.tx_hash,
+            "blocked_reason": None,
+            "idempotency_key": creation.idempotency_key,
+            "task_id": None,
+        },
+    )
+
+
+@router.post("/distributions/{profit_month_id}/execute/record", response_model=DistributionExecuteResponse)
+def record_execute_distribution_tx(
+    profit_month_id: str,
+    payload: DistributionExecuteRecordRequest,
+    request: Request,
+    _: str = Depends(require_oracle_hmac),
+    db: Session = Depends(get_db),
+) -> DistributionExecuteResponse:
+    _validate_month(profit_month_id)
+
+    existing = (
+        db.query(DistributionExecution)
+        .filter(DistributionExecution.idempotency_key == payload.idempotency_key)
+        .order_by(DistributionExecution.id.desc())
+        .first()
+    )
+    if existing is not None:
+        _record_oracle_audit(request, db, idempotency_key=payload.idempotency_key, tx_hash=existing.tx_hash)
+        return DistributionExecuteResponse(
+            success=True,
+            data={
+                "profit_month_id": existing.profit_month_id,
+                "status": existing.status,
+                "tx_hash": existing.tx_hash,
+                "blocked_reason": existing.blocked_reason,
+                "idempotency_key": existing.idempotency_key,
+                "task_id": None,
+            },
+        )
+
+    execution = DistributionExecution(
+        profit_month_id=profit_month_id,
+        idempotency_key=payload.idempotency_key,
+        status="submitted",
+        tx_hash=payload.tx_hash,
+        blocked_reason=None,
+    )
+    execution, _ = insert_or_get_by_unique(
+        db,
+        instance=execution,
+        model=DistributionExecution,
+        unique_filter={"idempotency_key": payload.idempotency_key},
+    )
+    _upsert_dividend_payout(
+        db,
+        profit_month_id=profit_month_id,
+        idempotency_key=payload.idempotency_key,
+        tx_hash=payload.tx_hash,
+        total_profit_micro_usdc=int(payload.total_profit_micro_usdc),
+        stakers_count=int(payload.stakers_count),
+        authors_count=int(payload.authors_count),
+    )
+    _record_oracle_audit(request, db, idempotency_key=payload.idempotency_key, tx_hash=payload.tx_hash, commit=False)
+    db.commit()
+    return DistributionExecuteResponse(
+        success=True,
+        data={
+            "profit_month_id": execution.profit_month_id,
+            "status": execution.status,
+            "tx_hash": execution.tx_hash,
+            "blocked_reason": execution.blocked_reason,
+            "idempotency_key": execution.idempotency_key,
+            "task_id": None,
         },
     )
 
