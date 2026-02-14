@@ -2,6 +2,8 @@
 
 This document shows the end-to-end system, what is already automated, and where a human is still required.
 
+NOTE: This file is tracked as an example/template. Copy it to `docs/SYSTEM_AUTONOMY_MAP.md` for local use.
+
 ## High-Level Diagram
 
 ```mermaid
@@ -114,4 +116,3 @@ The loop can run without a human operator when:
 - indexer + tx-worker are running continuously as services
 - agent actions are sufficient to resolve normal blocked reasons (e.g., setting wallet, fixing events)
 - reconciliation/settlement/distribution flows can advance via runner without manual payload crafting
-
