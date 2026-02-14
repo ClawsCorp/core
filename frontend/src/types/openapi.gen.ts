@@ -289,6 +289,16 @@ export interface paths {
     /** Create Project Capital Event */
     post: operations["create_project_capital_event_api_v1_oracle_project_capital_events_post"];
   };
+  "/api/v1/oracle/project-capital-events/sync": {
+    /**
+     * Sync Project Capital From Observed Usdc Transfers
+     * @description MVP automation helper: turn observed on-chain USDC transfers into project treasury addresses into append-only
+     * `project_capital_events` (capital inflows).
+     *
+     * Safe to run repeatedly: idempotent per (chain_id, tx_hash, log_index, project_id).
+     */
+    post: operations["sync_project_capital_from_observed_usdc_transfers_api_v1_oracle_project_capital_events_sync_post"];
+  };
   "/api/v1/oracle/projects/{project_id}/treasury": {
     /** Set Project Treasury Address */
     post: operations["set_project_treasury_address_api_v1_oracle_projects__project_id__treasury_post"];
@@ -1268,6 +1278,21 @@ export interface components {
       /** Success */
       success: boolean;
       data: components["schemas"]["ProjectCapitalSummary"];
+    };
+    /** ProjectCapitalSyncData */
+    ProjectCapitalSyncData: {
+      /** Transfers Seen */
+      transfers_seen: number;
+      /** Capital Events Inserted */
+      capital_events_inserted: number;
+      /** Projects With Treasury Count */
+      projects_with_treasury_count: number;
+    };
+    /** ProjectCapitalSyncResponse */
+    ProjectCapitalSyncResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["ProjectCapitalSyncData"];
     };
     /** ProjectCreateRequest */
     ProjectCreateRequest: {
@@ -3726,6 +3751,23 @@ export interface operations {
       422: {
         content: {
           "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /**
+   * Sync Project Capital From Observed Usdc Transfers
+   * @description MVP automation helper: turn observed on-chain USDC transfers into project treasury addresses into append-only
+   * `project_capital_events` (capital inflows).
+   *
+   * Safe to run repeatedly: idempotent per (chain_id, tx_hash, log_index, project_id).
+   */
+  sync_project_capital_from_observed_usdc_transfers_api_v1_oracle_project_capital_events_sync_post: {
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ProjectCapitalSyncResponse"];
         };
       };
     };
