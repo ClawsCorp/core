@@ -261,6 +261,9 @@ def _resolve_watched_addresses(db: Session) -> list[str]:
     for (addr,) in db.query(Project.treasury_address).filter(Project.treasury_address.isnot(None)).all():
         if _looks_like_address(addr):
             watched.append(str(addr).lower())
+    for (addr,) in db.query(Project.revenue_address).filter(Project.revenue_address.isnot(None)).all():
+        if _looks_like_address(addr):
+            watched.append(str(addr).lower())
     # De-dupe while preserving order.
     out: list[str] = []
     seen: set[str] = set()
@@ -353,4 +356,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
