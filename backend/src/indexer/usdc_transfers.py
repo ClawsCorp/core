@@ -258,6 +258,8 @@ def _resolve_watched_addresses(db: Session) -> list[str]:
     watched: list[str] = []
     if _looks_like_address(settings.dividend_distributor_contract_address or ""):
         watched.append(settings.dividend_distributor_contract_address.lower())
+    if _looks_like_address(settings.funding_pool_contract_address or ""):
+        watched.append(settings.funding_pool_contract_address.lower())
     for (addr,) in db.query(Project.treasury_address).filter(Project.treasury_address.isnot(None)).all():
         if _looks_like_address(addr):
             watched.append(str(addr).lower())

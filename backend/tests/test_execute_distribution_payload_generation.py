@@ -31,6 +31,7 @@ from src.models.reconciliation_report import ReconciliationReport
 from src.models.revenue_event import RevenueEvent
 from src.models.expense_event import ExpenseEvent
 from src.models.settlement import Settlement
+from src.models.observed_usdc_transfer import ObservedUsdcTransfer
 
 
 ORACLE_SECRET = "test-oracle-secret"
@@ -282,3 +283,90 @@ def test_execute_payload_caps_authors_to_50(_client: TestClient, _db: sessionmak
     assert len(data["authors"]) == 50
     assert f"authors_capped_to_50" in (data.get("notes") or [])
 
+
+def test_execute_payload_includes_stakers_from_funding_pool_observed_transfers(
+    _client: TestClient,
+    _db: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    month = "202501"
+    pool = "0x9999999999999999999999999999999999999999"
+    monkeypatch.setenv("FUNDING_POOL_CONTRACT_ADDRESS", pool)
+    get_settings.cache_clear()
+
+    with _db() as db:
+        db.add(
+            Settlement(
+                profit_month_id=month,
+                revenue_sum_micro_usdc=10,
+                expense_sum_micro_usdc=0,
+                profit_sum_micro_usdc=10,
+                profit_nonnegative=True,
+            )
+        )
+        db.add(
+            ReconciliationReport(
+                profit_month_id=month,
+                revenue_sum_micro_usdc=10,
+                expense_sum_micro_usdc=0,
+                profit_sum_micro_usdc=10,
+                distributor_balance_micro_usdc=10,
+                delta_micro_usdc=0,
+                ready=True,
+                blocked_reason=None,
+                rpc_chain_id=None,
+                rpc_url_name=None,
+            )
+        )
+        # Staker1 stakes 7, unstakes 2 => net 5
+        # Staker2 stakes 3 => net 3
+        db.add(
+            ObservedUsdcTransfer(
+                chain_id=84532,
+                token_address="0x0000000000000000000000000000000000000001",
+                from_address="0x1111111111111111111111111111111111111111",
+                to_address=pool,
+                amount_micro_usdc=7,
+                block_number=1,
+                tx_hash="0x" + "11" * 32,
+                log_index=0,
+            )
+        )
+        db.add(
+            ObservedUsdcTransfer(
+                chain_id=84532,
+                token_address="0x0000000000000000000000000000000000000001",
+                from_address=pool,
+                to_address="0x1111111111111111111111111111111111111111",
+                amount_micro_usdc=2,
+                block_number=2,
+                tx_hash="0x" + "22" * 32,
+                log_index=0,
+            )
+        )
+        db.add(
+            ObservedUsdcTransfer(
+                chain_id=84532,
+                token_address="0x0000000000000000000000000000000000000001",
+                from_address="0x2222222222222222222222222222222222222222",
+                to_address=pool,
+                amount_micro_usdc=3,
+                block_number=3,
+                tx_hash="0x" + "33" * 32,
+                log_index=0,
+            )
+        )
+        db.commit()
+
+    path = f"/api/v1/oracle/distributions/{month}/execute/payload"
+    status, payload = _post_signed(_client, request_id="req_stakers_1", path=path, body=b"{}")
+    assert status == 200, payload
+    assert payload["success"] is True
+    data = payload["data"]
+    assert data["status"] == "ok"
+    assert data["stakers"] == [
+        "0x1111111111111111111111111111111111111111",
+        "0x2222222222222222222222222222222222222222",
+    ]
+    assert data["staker_shares"] == [5, 3]
+    assert "stakers_from_funding_pool_observed_transfers" in (data.get("notes") or [])

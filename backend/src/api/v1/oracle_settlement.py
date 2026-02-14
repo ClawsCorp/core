@@ -21,6 +21,7 @@ from src.models.distribution_execution import DistributionExecution
 from src.models.dividend_payout import DividendPayout
 from src.models.expense_event import ExpenseEvent
 from src.models.agent import Agent
+from src.models.observed_usdc_transfer import ObservedUsdcTransfer
 from src.models.project import Project
 from src.models.reconciliation_report import ReconciliationReport
 from src.models.revenue_event import RevenueEvent
@@ -620,11 +621,62 @@ def create_distribution(
 
 def _build_execute_distribution_payload(
     db: Session, *, profit_month_id: str
-) -> tuple[list[str], list[int], list[str], list[int], list[str]]:
-    # MVP: stakers are not yet indexed. Empty stakers means the stakers bucket
-    # is routed to treasury on-chain (fail-closed and explicit in notes).
+) -> tuple[list[str], list[int], list[str], list[int], list[str], str | None]:
+    # Stakers bucket: derive from net USDC movement into/out of FundingPool (if configured).
+    # If stakers end up empty, stakers bucket is routed to treasury on-chain.
     stakers: list[str] = []
     staker_shares: list[int] = []
+    notes: list[str] = []
+    stakers_blocked_reason: str | None = None
+
+    settings = get_settings()
+    pool_addr = (settings.funding_pool_contract_address or "").strip().lower()
+    if not pool_addr:
+        notes.append("stakers_source_missing_routes_stakers_to_treasury")
+    elif not _ADDRESS_RE.fullmatch(pool_addr) or pool_addr == "0x0000000000000000000000000000000000000000":
+        stakers_blocked_reason = "funding_pool_address_invalid"
+    else:
+        notes.append("stakers_from_funding_pool_observed_transfers")
+        in_rows = (
+            db.query(
+                ObservedUsdcTransfer.from_address,
+                func.sum(ObservedUsdcTransfer.amount_micro_usdc).label("amount_sum"),
+            )
+            .filter(ObservedUsdcTransfer.to_address == pool_addr)
+            .group_by(ObservedUsdcTransfer.from_address)
+            .all()
+        )
+        out_rows = (
+            db.query(
+                ObservedUsdcTransfer.to_address,
+                func.sum(ObservedUsdcTransfer.amount_micro_usdc).label("amount_sum"),
+            )
+            .filter(ObservedUsdcTransfer.from_address == pool_addr)
+            .group_by(ObservedUsdcTransfer.to_address)
+            .all()
+        )
+
+        net_by_address: dict[str, int] = {}
+        for addr, amount_sum in in_rows:
+            a = str(addr).lower()
+            net_by_address[a] = net_by_address.get(a, 0) + int(amount_sum or 0)
+        for addr, amount_sum in out_rows:
+            a = str(addr).lower()
+            net_by_address[a] = net_by_address.get(a, 0) - int(amount_sum or 0)
+
+        negatives = [a for a, v in net_by_address.items() if int(v) < 0]
+        if negatives:
+            stakers_blocked_reason = "stakers_negative_balance"
+        else:
+            items = [(a, int(v)) for a, v in net_by_address.items() if int(v) > 0]
+            items = sorted(items, key=lambda kv: (-int(kv[1]), kv[0]))
+            if len(items) > _MAX_STAKERS:
+                notes.append(f"stakers_capped_to_{_MAX_STAKERS}")
+                items = items[:_MAX_STAKERS]
+            stakers = [a for a, _v in items]
+            staker_shares = [int(v) for _a, v in items]
+            if not stakers:
+                notes.append("no_stakers_detected_routes_stakers_to_treasury")
 
     # Authors bucket: originators of projects that generated positive profit for the month.
     rev_rows = (
@@ -658,8 +710,8 @@ def _build_execute_distribution_payload(
 
     positive_project_pks = [pk for pk, profit in profit_by_project_pk.items() if int(profit) > 0]
     if not positive_project_pks:
-        notes = ["no_positive_profit_projects_for_month", "stakers_indexer_missing_routes_stakers_to_treasury"]
-        return stakers, staker_shares, [], [], notes
+        notes.append("no_positive_profit_projects_for_month")
+        return stakers, staker_shares, [], [], notes, stakers_blocked_reason
 
     projects = (
         db.query(Project.id, Project.project_id, Project.originator_agent_id)
@@ -695,7 +747,6 @@ def _build_execute_distribution_payload(
         w = wallet.lower()
         weight_by_wallet[w] = weight_by_wallet.get(w, 0) + profit
 
-    notes: list[str] = ["stakers_indexer_missing_routes_stakers_to_treasury"]
     if missing_wallet_agents:
         notes.append("some_originators_missing_wallet_address")
     if invalid_wallet_agents:
@@ -713,7 +764,7 @@ def _build_execute_distribution_payload(
     # Ensure strictly positive shares (contract requires totalShares > 0 and per-share used for payout math).
     author_shares = [max(1, int(s)) for s in author_shares]
 
-    return stakers, staker_shares, authors, author_shares, notes
+    return stakers, staker_shares, authors, author_shares, notes, stakers_blocked_reason
 
 
 @router.post(
@@ -741,9 +792,11 @@ def build_execute_distribution_payload(
     elif not report.ready or report.delta_micro_usdc != 0:
         blocked_reason = blocked_reason or "not_ready"
 
-    stakers, staker_shares, authors, author_shares, notes = _build_execute_distribution_payload(
+    stakers, staker_shares, authors, author_shares, notes, stakers_blocked_reason = _build_execute_distribution_payload(
         db, profit_month_id=profit_month_id
     )
+    if stakers_blocked_reason is not None:
+        blocked_reason = blocked_reason or stakers_blocked_reason
 
     # Basic validation parity: if we generated a payload that would be rejected, mark as blocked.
     validation_error = _validate_execute_distribution_payload(
