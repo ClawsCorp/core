@@ -219,6 +219,13 @@ def build_parser() -> argparse.ArgumentParser:
     sync.add_argument("--tx-hash")
     sync.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
 
+    deposit_profit = subparsers.add_parser(
+        "deposit-profit",
+        help="Enqueue/submit an autonomous profit top-up transfer into DividendDistributor for a given month (oracle HMAC protected).",
+    )
+    deposit_profit.add_argument("--month", required=True)
+    deposit_profit.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
+
     run_month = subparsers.add_parser("run-month")
     run_month.add_argument("--month", required=True)
     run_month.add_argument("--execute-payload", required=True)
@@ -448,6 +455,25 @@ def run(argv: list[str] | None = None) -> int:
                 _print_json(data)
             else:
                 _print_fields(data, ["status", "tx_hash", "blocked_reason", "idempotency_key", "executed_at"])
+            return 0
+
+        if args.command == "deposit-profit":
+            month = _validate_month(args.month)
+            data = _post_action(client, f"/api/v1/oracle/settlement/{month}/deposit-profit", b"")
+            if json_mode:
+                _print_json(data)
+            else:
+                _print_fields(
+                    data,
+                    [
+                        "status",
+                        "tx_hash",
+                        "blocked_reason",
+                        "idempotency_key",
+                        "task_id",
+                        "amount_micro_usdc",
+                    ],
+                )
             return 0
 
         if args.command == "run-month":
