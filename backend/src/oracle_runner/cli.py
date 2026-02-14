@@ -216,6 +216,12 @@ def build_parser() -> argparse.ArgumentParser:
     mark_bounty_paid.add_argument("--idempotency-key")
     mark_bounty_paid.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
 
+    billing_sync = subparsers.add_parser(
+        "billing-sync",
+        help="Sync observed on-chain USDC transfers into billing_events/revenue_events (oracle HMAC protected).",
+    )
+    billing_sync.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
+
     create = subparsers.add_parser("create-distribution")
     create.add_argument("--month", required=True)
     create.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
@@ -440,6 +446,14 @@ def run(argv: list[str] | None = None) -> int:
                 _print_json(data)
             else:
                 _print_fields(data, ["status", "blocked_reason"])
+            return 0
+
+        if args.command == "billing-sync":
+            data = _post_action(client, "/api/v1/oracle/billing/sync", b"{}")
+            if json_mode:
+                _print_json(data)
+            else:
+                _print_fields(data, ["transfers_seen", "billing_events_inserted", "revenue_events_inserted"])
             return 0
 
         if args.command == "create-distribution":
