@@ -131,6 +131,10 @@ export interface paths {
      */
     get: operations["get_project_settlement_api_v1_projects__project_id__settlement__profit_month_id__get"];
   };
+  "/api/v1/projects/{project_id}/spend-policy": {
+    /** Get Spend Policy */
+    get: operations["get_spend_policy_api_v1_projects__project_id__spend_policy_get"];
+  };
   "/api/v1/proposals": {
     /** List proposals */
     get: operations["list_proposals_api_v1_proposals_get"];
@@ -279,6 +283,10 @@ export interface paths {
      * @description Oracle/HMAC-protected compute endpoint for a project's monthly profit summary (ledger-only). Append-only.
      */
     post: operations["compute_project_settlement_api_v1_oracle_projects__project_id__settlement__profit_month_id__post"];
+  };
+  "/api/v1/oracle/projects/{project_id}/spend-policy": {
+    /** Upsert Spend Policy */
+    post: operations["upsert_spend_policy_api_v1_oracle_projects__project_id__spend_policy_post"];
   };
   "/api/v1/oracle/tx-outbox": {
     /** Enqueue Task */
@@ -1306,6 +1314,42 @@ export interface components {
        * Format: date-time
        */
       computed_at: string;
+    };
+    /** ProjectSpendPolicyPublic */
+    ProjectSpendPolicyPublic: {
+      /** Project Id */
+      project_id: string;
+      /** Per Bounty Cap Micro Usdc */
+      per_bounty_cap_micro_usdc: number | null;
+      /** Per Day Cap Micro Usdc */
+      per_day_cap_micro_usdc: number | null;
+      /** Per Month Cap Micro Usdc */
+      per_month_cap_micro_usdc: number | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string;
+    };
+    /** ProjectSpendPolicyResponse */
+    ProjectSpendPolicyResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["ProjectSpendPolicyPublic"] | null;
+    };
+    /** ProjectSpendPolicyUpsertRequest */
+    ProjectSpendPolicyUpsertRequest: {
+      /** Per Bounty Cap Micro Usdc */
+      per_bounty_cap_micro_usdc?: number | null;
+      /** Per Day Cap Micro Usdc */
+      per_day_cap_micro_usdc?: number | null;
+      /** Per Month Cap Micro Usdc */
+      per_month_cap_micro_usdc?: number | null;
     };
     /**
      * ProjectStatus
@@ -2612,6 +2656,28 @@ export interface operations {
       };
     };
   };
+  /** Get Spend Policy */
+  get_spend_policy_api_v1_projects__project_id__spend_policy_get: {
+    parameters: {
+      path: {
+        project_id: string;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ProjectSpendPolicyResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   /** List proposals */
   list_proposals_api_v1_proposals_get: {
     parameters: {
@@ -3441,6 +3507,33 @@ export interface operations {
       200: {
         content: {
           "application/json": components["schemas"]["ProjectSettlementPublic"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Upsert Spend Policy */
+  upsert_spend_policy_api_v1_oracle_projects__project_id__spend_policy_post: {
+    parameters: {
+      path: {
+        project_id: string;
+      };
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ProjectSpendPolicyUpsertRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ProjectSpendPolicyResponse"];
         };
       };
       /** @description Validation Error */

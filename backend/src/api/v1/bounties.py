@@ -28,6 +28,7 @@ from src.services.project_revenue import (
     get_project_revenue_balance_micro_usdc,
     is_reconciliation_fresh as is_revenue_reconciliation_fresh,
 )
+from src.services.project_spend_policy import check_spend_allowed
 from src.services.reputation_hooks import emit_reputation_event
 
 from src.schemas.bounty import (
@@ -404,6 +405,8 @@ async def mark_paid(
     if blocked_reason is None:
         blocked_reason = _ensure_project_revenue_reconciliation_gate(db, bounty)
     if blocked_reason is None:
+        blocked_reason = _ensure_project_spend_policy_gate(db, bounty)
+    if blocked_reason is None:
         blocked_reason = _ensure_bounty_paid_capital_outflow(db, bounty, payload.paid_tx_hash)
     if blocked_reason is None:
         blocked_reason = _ensure_bounty_paid_revenue_outflow(db, bounty)
@@ -660,6 +663,22 @@ def _ensure_bounty_paid_revenue_outflow(db: Session, bounty: Bounty) -> str | No
     if balance_micro_usdc < bounty.amount_micro_usdc:
         return "insufficient_project_revenue"
     return None
+
+
+def _ensure_project_spend_policy_gate(db: Session, bounty: Bounty) -> str | None:
+    if bounty.project_id is None:
+        return None
+    # Policy applies to any project spend (regardless of funding source).
+    project = db.query(Project).filter(Project.id == bounty.project_id).first()
+    if project is None:
+        return "project_not_found"
+    profit_month_id = datetime.now(timezone.utc).strftime("%Y%m")
+    return check_spend_allowed(
+        db,
+        project=project,
+        profit_month_id=profit_month_id,
+        amount_micro_usdc=int(bounty.amount_micro_usdc),
+    )
 
 def _ensure_bounty_paid_expense(db: Session, bounty: Bounty) -> ExpenseEvent:
     idempotency_key = f"expense:bounty_paid:{bounty.bounty_id}"
