@@ -251,6 +251,71 @@ def get_alerts(response: Response, db: Session = Depends(get_db)) -> AlertsRespo
                 )
             )
 
+            # If we are under-funded, surface whether an autonomous profit deposit task exists.
+            # This helps operators distinguish "waiting for tx-worker" vs "nothing is progressing".
+            try:
+                delta = int(rep.delta_micro_usdc or 0)
+            except Exception:
+                delta = 0
+            if rep.blocked_reason == "balance_mismatch" and delta < 0:
+                amount = -delta
+                idem = f"deposit_profit:{month}:{amount}"
+                task = (
+                    db.query(TxOutbox)
+                    .filter(TxOutbox.idempotency_key == idem)
+                    .order_by(TxOutbox.id.desc())
+                    .first()
+                )
+                if task is None:
+                    items.append(
+                        AlertItem(
+                            alert_type="platform_profit_deposit_missing",
+                            severity="warning",
+                            message="Platform is under-funded but no profit deposit task exists yet (autonomy loop may not be running).",
+                            ref=month,
+                            observed_at=now,
+                            data={"idempotency_key": idem, "amount_micro_usdc": amount},
+                        )
+                    )
+                elif task.status in {"pending", "processing"}:
+                    items.append(
+                        AlertItem(
+                            alert_type="platform_profit_deposit_pending",
+                            severity="info",
+                            message="Profit deposit is queued/processing; waiting for tx-worker.",
+                            ref=month,
+                            observed_at=now,
+                            data={
+                                "task_id": task.task_id,
+                                "status": task.status,
+                                "amount_micro_usdc": amount,
+                                "tx_hash": task.tx_hash,
+                                "attempts": task.attempts,
+                                "locked_at": task.locked_at.isoformat() if task.locked_at else None,
+                                "locked_by": task.locked_by,
+                            },
+                        )
+                    )
+                elif task.status == "failed":
+                    items.append(
+                        AlertItem(
+                            alert_type="platform_profit_deposit_failed",
+                            severity="critical",
+                            message="Profit deposit task failed; payout cannot proceed until fixed.",
+                            ref=month,
+                            observed_at=now,
+                            data={
+                                "task_id": task.task_id,
+                                "status": task.status,
+                                "amount_micro_usdc": amount,
+                                "tx_hash": task.tx_hash,
+                                "attempts": task.attempts,
+                                "last_error_hint": task.last_error_hint,
+                                "updated_at": task.updated_at.isoformat(),
+                            },
+                        )
+                    )
+
     # Tx outbox tasks (money-moving loop visibility).
     # Keep this lightweight; show recent failed + oldest pending/processing.
     pending = (
