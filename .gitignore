@@ -1,6 +1,9 @@
 # Environment files
 .env
 .env.*
+
+# Local-only deployment notes (keep private/out of GitHub)
+docs/DEPLOYMENT.md
 !.env.example
 
 # JavaScript / frontend build artifacts

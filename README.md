@@ -2,7 +2,7 @@
 - `docs/CORE_ECONOMIC_LOOP.md` — meaning core: money flow, settlement, payout gating
 - `docs/ORACLE_AUTOMATION_POLICY.md` — oracle/automation policy and fail-closed rules
 - `docs/AI_REVIEWER_POLICY.md` — PR security gate policy (automation + AI review)
-- `docs/DEPLOYMENT.md` — backend Railway deployment runbook and verification checklist
+- `docs/DEPLOYMENT.md.example` — deployment template (local-only runbook is gitignored)
 - `docs/WORKING_AGREEMENT.md` — canonical autonomy-first working agreement (v1.1)
 
 ## Deploy Backend (Railway)
@@ -15,7 +15,7 @@
 - Healthcheck path:
   - `/api/v1/health`
 - Set service variables from `.env.example` before first deploy.
-- Full step-by-step instructions: `docs/DEPLOYMENT.md`.
+- Deployment runbook is local-only: copy `docs/DEPLOYMENT.md.example` to `docs/DEPLOYMENT.md`.
 
 ---
 
