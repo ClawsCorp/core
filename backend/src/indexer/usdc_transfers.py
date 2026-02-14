@@ -323,18 +323,27 @@ def main(argv: list[str] | None = None) -> int:
                 else:
                     to_block = safe_tip
 
+                # Max block span per `eth_getLogs` call. This is both:
+                # - a correctness guard (avoid genesis..tip scans)
+                # - an operational guard (some RPC tiers cap `eth_getLogs` block range)
+                max_span = max(1, int(args.lookback_blocks))
+
                 if args.from_block is not None:
                     from_block = int(args.from_block)
                 else:
                     cursor = _get_or_create_cursor(db, cursor_key=args.cursor_key, chain_id=chain_id)
                     last = int(cursor.last_block_number or 0)
-                    from_block = max(0, last + 1)
-                    if from_block > to_block:
-                        from_block = max(0, to_block - int(args.lookback_blocks))
+                    if last <= 0:
+                        # Bootstrap: start near the safe tip so the cursor becomes fresh quickly.
+                        from_block = max(0, to_block - max_span)
+                    else:
+                        from_block = max(0, last + 1)
+                        if from_block > to_block:
+                            # Re-scan a small window near tip (reorg safety + keeps cursor fresh).
+                            from_block = max(0, to_block - max_span)
 
                 # Never try to scan an unbounded range (e.g. fresh cursor=0 -> genesis..tip).
                 # Instead, catch up in bounded batches; the cursor will advance each iteration.
-                max_span = max(1, int(args.lookback_blocks))
                 if to_block - from_block > max_span:
                     to_block = from_block + max_span
 
