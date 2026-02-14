@@ -19,6 +19,7 @@ from src.models.proposal import Proposal, ProposalStatus
 from src.models.reputation_event import ReputationEvent
 from src.models.reputation_ledger import ReputationLedger
 from src.models.settlement import Settlement
+from src.models.tx_outbox import TxOutbox
 from src.models.vote import Vote
 
 __all__ = [
@@ -48,6 +49,7 @@ __all__ = [
     "ReputationEvent",
     "ReputationLedger",
     "Settlement",
+    "TxOutbox",
     "RevenueEvent",
     "Vote",
 ]
