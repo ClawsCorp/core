@@ -47,7 +47,22 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install frontend dependencies
-        run: npm ci
+        run: |
+          npm config set fetch-retries 5
+          npm config set fetch-retry-mintimeout 10000
+          npm config set fetch-retry-maxtimeout 120000
+          attempts=3
+          for i in $(seq 1 $attempts); do
+            if npm ci; then
+              break
+            fi
+            if [ "$i" -eq "$attempts" ]; then
+              echo "npm ci failed after $attempts attempts" >&2
+              exit 1
+            fi
+            echo "npm ci failed (attempt $i/$attempts); retrying..." >&2
+            sleep $((i * 10))
+          done
 
       - name: Run frontend lint
         run: npm run lint
@@ -127,7 +142,22 @@ jobs:
           python -m pip install -r backend/requirements.txt
 
       - name: Install frontend dependencies
-        run: npm --prefix frontend ci
+        run: |
+          npm config set fetch-retries 5
+          npm config set fetch-retry-mintimeout 10000
+          npm config set fetch-retry-maxtimeout 120000
+          attempts=3
+          for i in $(seq 1 $attempts); do
+            if npm --prefix frontend ci; then
+              break
+            fi
+            if [ "$i" -eq "$attempts" ]; then
+              echo "npm ci failed after $attempts attempts" >&2
+              exit 1
+            fi
+            echo "npm ci failed (attempt $i/$attempts); retrying..." >&2
+            sleep $((i * 10))
+          done
 
       - name: Verify OpenAPI TypeScript types are up to date
         run: scripts/generate_openapi_types.sh --check
