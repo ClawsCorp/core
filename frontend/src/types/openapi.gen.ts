@@ -208,6 +208,19 @@ export interface paths {
     /** Compute Reconciliation */
     post: operations["compute_reconciliation_api_v1_oracle_reconciliation__profit_month_id__post"];
   };
+  "/api/v1/oracle/settlement/{profit_month_id}/deposit-profit": {
+    /**
+     * Deposit Profit
+     * @description Autonomous profit deposit helper:
+     * if DividendDistributor USDC balance is below computed profit for the month, enqueue/submit a USDC transfer to top it up.
+     *
+     * Fail-closed gates:
+     * - requires a reconciliation report (contains on-chain balance + delta)
+     * - deposit allowed only when delta < 0 and profit_sum > 0
+     * - blocks on rpc_not_configured / rpc_error and on balance_excess (delta > 0)
+     */
+    post: operations["deposit_profit_api_v1_oracle_settlement__profit_month_id__deposit_profit_post"];
+  };
   "/api/v1/oracle/distributions/{profit_month_id}/create": {
     /** Create Distribution */
     post: operations["create_distribution_api_v1_oracle_distributions__profit_month_id__create_post"];
@@ -962,6 +975,29 @@ export interface components {
       /** Success */
       success: boolean;
       data: components["schemas"]["PayoutTriggerData"];
+    };
+    /** ProfitDepositData */
+    ProfitDepositData: {
+      /** Profit Month Id */
+      profit_month_id: string;
+      /** Status */
+      status: string;
+      /** Tx Hash */
+      tx_hash: string | null;
+      /** Blocked Reason */
+      blocked_reason: string | null;
+      /** Idempotency Key */
+      idempotency_key: string;
+      /** Task Id */
+      task_id?: string | null;
+      /** Amount Micro Usdc */
+      amount_micro_usdc?: number | null;
+    };
+    /** ProfitDepositResponse */
+    ProfitDepositResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["ProfitDepositData"];
     };
     /** ProjectCapitalEventCreateRequest */
     ProjectCapitalEventCreateRequest: {
@@ -3022,6 +3058,37 @@ export interface operations {
       200: {
         content: {
           "application/json": components["schemas"]["ReconciliationReportPublic"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /**
+   * Deposit Profit
+   * @description Autonomous profit deposit helper:
+   * if DividendDistributor USDC balance is below computed profit for the month, enqueue/submit a USDC transfer to top it up.
+   *
+   * Fail-closed gates:
+   * - requires a reconciliation report (contains on-chain balance + delta)
+   * - deposit allowed only when delta < 0 and profit_sum > 0
+   * - blocks on rpc_not_configured / rpc_error and on balance_excess (delta > 0)
+   */
+  deposit_profit_api_v1_oracle_settlement__profit_month_id__deposit_profit_post: {
+    parameters: {
+      path: {
+        profit_month_id: string;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ProfitDepositResponse"];
         };
       };
       /** @description Validation Error */

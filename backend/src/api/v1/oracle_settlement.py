@@ -39,6 +39,7 @@ from src.schemas.settlement import (
     DistributionExecuteResponse,
     PayoutTriggerRequest,
     PayoutTriggerResponse,
+    ProfitDepositResponse,
     SettlementPublic,
 )
 from src.services.blockchain import (
@@ -50,6 +51,7 @@ from src.services.blockchain import (
     read_usdc_balance_of_distributor,
     submit_create_distribution_tx,
     submit_execute_distribution_tx,
+    submit_usdc_transfer_tx,
 )
 
 router = APIRouter(prefix="/api/v1/oracle", tags=["oracle-settlement"])
@@ -168,6 +170,222 @@ def compute_reconciliation(
 
     _record_oracle_audit(request, db)
     return _report_public(report)
+
+
+@router.post("/settlement/{profit_month_id}/deposit-profit", response_model=ProfitDepositResponse)
+def deposit_profit(
+    profit_month_id: str,
+    request: Request,
+    _: str = Depends(require_oracle_hmac),
+    db: Session = Depends(get_db),
+) -> ProfitDepositResponse:
+    """
+    Autonomous profit deposit helper:
+    if DividendDistributor USDC balance is below computed profit for the month, enqueue/submit a USDC transfer to top it up.
+
+    Fail-closed gates:
+    - requires a reconciliation report (contains on-chain balance + delta)
+    - deposit allowed only when delta < 0 and profit_sum > 0
+    - blocks on rpc_not_configured / rpc_error and on balance_excess (delta > 0)
+    """
+    _validate_month(profit_month_id)
+    settings = get_settings()
+
+    report = _latest_reconciliation(db, profit_month_id)
+    if report is None:
+        idempotency_key = f"deposit_profit:{profit_month_id}:0"
+        _record_oracle_audit(request, db, idempotency_key=idempotency_key)
+        return ProfitDepositResponse(
+            success=False,
+            data={
+                "profit_month_id": profit_month_id,
+                "status": "blocked",
+                "tx_hash": None,
+                "blocked_reason": "reconciliation_missing",
+                "idempotency_key": idempotency_key,
+                "task_id": None,
+                "amount_micro_usdc": None,
+            },
+        )
+
+    if report.blocked_reason in {"rpc_not_configured", "rpc_error"}:
+        idempotency_key = f"deposit_profit:{profit_month_id}:{int(report.profit_sum_micro_usdc or 0)}"
+        _record_oracle_audit(request, db, idempotency_key=idempotency_key)
+        return ProfitDepositResponse(
+            success=False,
+            data={
+                "profit_month_id": profit_month_id,
+                "status": "blocked",
+                "tx_hash": None,
+                "blocked_reason": report.blocked_reason,
+                "idempotency_key": idempotency_key,
+                "task_id": None,
+                "amount_micro_usdc": None,
+            },
+        )
+
+    profit_sum = int(report.profit_sum_micro_usdc or 0)
+    if profit_sum <= 0:
+        idempotency_key = f"deposit_profit:{profit_month_id}:{profit_sum}"
+        _record_oracle_audit(request, db, idempotency_key=idempotency_key)
+        return ProfitDepositResponse(
+            success=False,
+            data={
+                "profit_month_id": profit_month_id,
+                "status": "blocked",
+                "tx_hash": None,
+                "blocked_reason": "profit_required",
+                "idempotency_key": idempotency_key,
+                "task_id": None,
+                "amount_micro_usdc": None,
+            },
+        )
+
+    delta = int(report.delta_micro_usdc or 0)  # balance - profit
+    if delta == 0:
+        idempotency_key = f"deposit_profit:{profit_month_id}:0"
+        _record_oracle_audit(request, db, idempotency_key=idempotency_key)
+        return ProfitDepositResponse(
+            success=False,
+            data={
+                "profit_month_id": profit_month_id,
+                "status": "blocked",
+                "tx_hash": None,
+                "blocked_reason": "already_funded",
+                "idempotency_key": idempotency_key,
+                "task_id": None,
+                "amount_micro_usdc": 0,
+            },
+        )
+    if delta > 0:
+        idempotency_key = f"deposit_profit:{profit_month_id}:0"
+        _record_oracle_audit(request, db, idempotency_key=idempotency_key)
+        return ProfitDepositResponse(
+            success=False,
+            data={
+                "profit_month_id": profit_month_id,
+                "status": "blocked",
+                "tx_hash": None,
+                "blocked_reason": "balance_excess",
+                "idempotency_key": idempotency_key,
+                "task_id": None,
+                "amount_micro_usdc": None,
+            },
+        )
+
+    amount = -delta
+    idempotency_key = f"deposit_profit:{profit_month_id}:{amount}"
+
+    existing_task = (
+        db.query(TxOutbox)
+        .filter(TxOutbox.idempotency_key == idempotency_key)
+        .order_by(TxOutbox.id.desc())
+        .first()
+    )
+    if existing_task is not None:
+        _record_oracle_audit(request, db, idempotency_key=idempotency_key, tx_hash=existing_task.tx_hash)
+        return ProfitDepositResponse(
+            success=True,
+            data={
+                "profit_month_id": profit_month_id,
+                "status": "submitted",
+                "tx_hash": existing_task.tx_hash,
+                "blocked_reason": None,
+                "idempotency_key": idempotency_key,
+                "task_id": existing_task.task_id,
+                "amount_micro_usdc": amount,
+            },
+        )
+
+    distributor_address = settings.dividend_distributor_contract_address
+    if distributor_address is None:
+        _record_oracle_audit(request, db, idempotency_key=idempotency_key)
+        return ProfitDepositResponse(
+            success=False,
+            data={
+                "profit_month_id": profit_month_id,
+                "status": "blocked",
+                "tx_hash": None,
+                "blocked_reason": "missing_distributor_address",
+                "idempotency_key": idempotency_key,
+                "task_id": None,
+                "amount_micro_usdc": amount,
+            },
+        )
+
+    if settings.tx_outbox_enabled:
+        task = enqueue_tx_outbox_task(
+            db,
+            task_type="deposit_profit",
+            payload={
+                "profit_month_id": profit_month_id,
+                "amount_micro_usdc": amount,
+                "to_address": distributor_address,
+                "idempotency_key": idempotency_key,
+            },
+            idempotency_key=idempotency_key,
+        )
+        _record_oracle_audit(request, db, idempotency_key=idempotency_key, commit=False)
+        db.commit()
+        db.refresh(task)
+        return ProfitDepositResponse(
+            success=True,
+            data={
+                "profit_month_id": profit_month_id,
+                "status": "submitted",
+                "tx_hash": task.tx_hash,
+                "blocked_reason": None,
+                "idempotency_key": idempotency_key,
+                "task_id": task.task_id,
+                "amount_micro_usdc": amount,
+            },
+        )
+
+    try:
+        tx_hash = submit_usdc_transfer_tx(to_address=distributor_address, amount_micro_usdc=amount)
+    except BlockchainConfigError as exc:
+        blocked_reason = "signer_key_required" if "ORACLE_SIGNER_PRIVATE_KEY" in str(exc) else "rpc_not_configured"
+        _record_oracle_audit(request, db, idempotency_key=idempotency_key)
+        return ProfitDepositResponse(
+            success=False,
+            data={
+                "profit_month_id": profit_month_id,
+                "status": "blocked",
+                "tx_hash": None,
+                "blocked_reason": blocked_reason,
+                "idempotency_key": idempotency_key,
+                "task_id": None,
+                "amount_micro_usdc": amount,
+            },
+        )
+    except BlockchainTxError as exc:
+        _record_oracle_audit(request, db, idempotency_key=idempotency_key, error_hint=exc.error_hint)
+        return ProfitDepositResponse(
+            success=False,
+            data={
+                "profit_month_id": profit_month_id,
+                "status": "blocked",
+                "tx_hash": None,
+                "blocked_reason": "tx_error",
+                "idempotency_key": idempotency_key,
+                "task_id": None,
+                "amount_micro_usdc": amount,
+            },
+        )
+
+    _record_oracle_audit(request, db, idempotency_key=idempotency_key, tx_hash=tx_hash)
+    return ProfitDepositResponse(
+        success=True,
+        data={
+            "profit_month_id": profit_month_id,
+            "status": "submitted",
+            "tx_hash": tx_hash,
+            "blocked_reason": None,
+            "idempotency_key": idempotency_key,
+            "task_id": None,
+            "amount_micro_usdc": amount,
+        },
+    )
 
 
 @router.post("/distributions/{profit_month_id}/create", response_model=DistributionCreateResponse)

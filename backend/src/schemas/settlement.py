@@ -86,6 +86,21 @@ class PayoutTriggerResponse(BaseModel):
     data: PayoutTriggerData
 
 
+class ProfitDepositData(BaseModel):
+    profit_month_id: str
+    status: str  # submitted|blocked
+    tx_hash: str | None
+    blocked_reason: str | None
+    idempotency_key: str
+    task_id: str | None = None
+    amount_micro_usdc: int | None = None
+
+
+class ProfitDepositResponse(BaseModel):
+    success: bool
+    data: ProfitDepositData
+
+
 class DistributionCreateData(BaseModel):
     profit_month_id: str
     status: str

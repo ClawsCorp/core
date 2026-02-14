@@ -553,6 +553,7 @@ def run(argv: list[str] | None = None) -> int:
             from src.services.blockchain import (
                 BlockchainConfigError,
                 BlockchainTxError,
+                submit_usdc_transfer_tx,
                 submit_create_distribution_tx,
                 submit_execute_distribution_tx,
             )
@@ -681,6 +682,31 @@ def run(argv: list[str] | None = None) -> int:
                                 "task_type": task_type,
                                 "status": "succeeded",
                                 "tx_hash": tx_hash,
+                            }
+                        )
+                        continue
+
+                    if task_type == "deposit_profit":
+                        profit_month_id = str(payload.get("profit_month_id") or "")
+                        amount = int(payload.get("amount_micro_usdc"))
+                        to_address = str(payload.get("to_address") or "")
+
+                        tx_hash = existing_tx_hash or submit_usdc_transfer_tx(
+                            to_address=to_address,
+                            amount_micro_usdc=amount,
+                        )
+                        _update(tx_hash, {"stage": "submitted"})
+                        # No additional record endpoint needed; reconciliation is the source of truth.
+                        _update(tx_hash, {"stage": "submitted_only"})
+                        _complete("succeeded", None)
+                        processed.append(
+                            {
+                                "task_id": task_id,
+                                "task_type": task_type,
+                                "status": "succeeded",
+                                "tx_hash": tx_hash,
+                                "profit_month_id": profit_month_id,
+                                "amount_micro_usdc": amount,
                             }
                         )
                         continue
