@@ -905,7 +905,6 @@ def run(argv: list[str] | None = None) -> int:
                 raise OracleRunnerError("--loop is not compatible with --json (streaming mode).")
 
             sleep_seconds = max(1, int(args.sleep_seconds))
-            month = _resolve_month_arg(getattr(args, "month", "auto"))
 
             # Default to "do everything" if user didn't specify any actions.
             wants_any = any(
@@ -925,6 +924,9 @@ def run(argv: list[str] | None = None) -> int:
                 args.run_month = True
 
             while True:
+                # Re-resolve month every cycle so long-running services naturally roll over
+                # when the calendar month changes (for --month auto).
+                month = _resolve_month_arg(getattr(args, "month", "auto"))
                 cycle: dict[str, Any] = {
                     "success": True,
                     "command": command,
