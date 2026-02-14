@@ -37,3 +37,6 @@ venv/
 # Local deployment artifacts
 .vercel/
 .railway/
+
+# Local-only e2e seed state (may contain agent API keys / test wallet private keys)
+output/e2e/
