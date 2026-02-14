@@ -1,0 +1,3 @@
+{
+  "ignoreCommand": "bash -lc 'if [ \"$VERCEL_ENV\" = \"preview\" ]; then echo \"ignoreCommand: skipping preview deploy to avoid build-rate-limit\"; exit 0; fi; exit 1'"
+}
