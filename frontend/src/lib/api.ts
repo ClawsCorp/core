@@ -266,13 +266,16 @@ export const api = {
     );
     return payload.data;
   },
-  getBounties: async (params?: { projectId?: string; status?: string }) => {
+  getBounties: async (params?: { projectId?: string; status?: string; originProposalId?: string }) => {
     const query = new URLSearchParams();
     if (params?.projectId) {
       query.set("project_id", params.projectId);
     }
     if (params?.status) {
       query.set("status", params.status);
+    }
+    if (params?.originProposalId) {
+      query.set("origin_proposal_id", params.originProposalId);
     }
     const suffix = query.toString() ? `?${query.toString()}` : "";
     const payload = await fetchJSON<Envelope<ListData<BountyPublic>>>(`/api/v1/bounties${suffix}`);
@@ -287,9 +290,12 @@ export const api = {
     payload: {
       project_id?: string | null;
       funding_source?: "project_capital" | "project_revenue" | "platform_treasury" | null;
+      origin_proposal_id?: string | null;
       title: string;
       description_md?: string | null;
       amount_micro_usdc: number;
+      priority?: string | null;
+      deadline_at?: string | null;
       idempotency_key?: string;
     },
   ) => {

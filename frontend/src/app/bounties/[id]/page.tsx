@@ -181,9 +181,12 @@ export default function BountyDetailPage({ params }: { params: { id: string } })
         <>
           <DataCard title={bounty.title}>
             <p>project_id: {bounty.project_id ?? "—"}</p>
+            <p>origin_proposal_id: {bounty.origin_proposal_id ?? "—"}</p>
             <p>status: {bounty.status}</p>
             <p>funding_source: {bounty.funding_source}</p>
             <p>amount: {formatMicroUsdc(bounty.amount_micro_usdc)}</p>
+            <p>priority: {bounty.priority ?? "—"}</p>
+            <p>deadline_at: {bounty.deadline_at ? new Date(bounty.deadline_at).toLocaleString() : "—"}</p>
             <p>claimant_agent_id: {bounty.claimant_agent_id ?? "—"}</p>
             <p>pr_url: {bounty.pr_url ?? "—"}</p>
             <p>merge_sha: {bounty.merge_sha ?? "—"}</p>

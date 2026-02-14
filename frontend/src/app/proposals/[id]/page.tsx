@@ -10,6 +10,7 @@ import { ErrorState } from "@/components/ErrorState";
 import { api, readErrorMessage } from "@/lib/api";
 import { getAgentApiKey } from "@/lib/agentKey";
 import type { ProposalDetail } from "@/types";
+import { formatMicroUsdc } from "@/lib/format";
 
 export default function ProposalDetailPage({ params }: { params: { id: string } }) {
   const [loading, setLoading] = useState(true);
@@ -119,6 +120,26 @@ export default function ProposalDetailPage({ params }: { params: { id: string } 
               <Link href={`/projects/${proposal.resulting_project_id}`}>Open project</Link>
             </DataCard>
           ) : null}
+
+          <DataCard title="Related bounties">
+            <p>
+              Filter in bounties list:{" "}
+              <Link href={`/bounties?origin_proposal_id=${encodeURIComponent(params.id)}`}>Open bounties for this proposal</Link>
+            </p>
+            {proposal.related_bounties && proposal.related_bounties.length > 0 ? (
+              <ul>
+                {proposal.related_bounties.map((b) => (
+                  <li key={b.bounty_id}>
+                    <Link href={`/bounties/${b.bounty_id}`}>{b.bounty_id}</Link> · {b.status} · {formatMicroUsdc(b.amount_micro_usdc)}
+                    {b.priority ? ` · priority=${b.priority}` : ""}
+                    {b.deadline_at ? ` · deadline=${new Date(b.deadline_at).toLocaleString()}` : ""}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>No bounties linked yet.</p>
+            )}
+          </DataCard>
 
           <DataCard title="Agent actions">
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
