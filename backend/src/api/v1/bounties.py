@@ -23,6 +23,11 @@ from src.services.project_capital import (
     get_project_capital_balance_micro_usdc,
     is_reconciliation_fresh,
 )
+from src.services.project_revenue import (
+    get_latest_project_revenue_reconciliation,
+    get_project_revenue_balance_micro_usdc,
+    is_reconciliation_fresh as is_revenue_reconciliation_fresh,
+)
 from src.services.reputation_hooks import emit_reputation_event
 
 from src.schemas.bounty import (
@@ -397,7 +402,11 @@ async def mark_paid(
 
     blocked_reason = _ensure_project_capital_reconciliation_gate(db, bounty)
     if blocked_reason is None:
+        blocked_reason = _ensure_project_revenue_reconciliation_gate(db, bounty)
+    if blocked_reason is None:
         blocked_reason = _ensure_bounty_paid_capital_outflow(db, bounty, payload.paid_tx_hash)
+    if blocked_reason is None:
+        blocked_reason = _ensure_bounty_paid_revenue_outflow(db, bounty)
     if blocked_reason is not None:
         compact_error_hint = (
             f"br={blocked_reason};"
@@ -589,6 +598,28 @@ def _ensure_project_capital_reconciliation_gate(db: Session, bounty: Bounty) -> 
     return None
 
 
+def _ensure_project_revenue_reconciliation_gate(db: Session, bounty: Bounty) -> str | None:
+    if bounty.project_id is None:
+        return None
+    if bounty.funding_source != BountyFundingSource.project_revenue:
+        return None
+
+    latest_reconciliation = get_latest_project_revenue_reconciliation(db, bounty.project_id)
+    if latest_reconciliation is None:
+        return "project_revenue_reconciliation_missing"
+    if not latest_reconciliation.ready or latest_reconciliation.delta_micro_usdc != 0:
+        return "project_revenue_not_reconciled"
+
+    settings = get_settings()
+    if not is_revenue_reconciliation_fresh(
+        latest_reconciliation,
+        settings.project_revenue_reconciliation_max_age_seconds,
+    ):
+        return "project_revenue_reconciliation_stale"
+
+    return None
+
+
 def _ensure_bounty_paid_capital_outflow(db: Session, bounty: Bounty, paid_tx_hash: str | None) -> str | None:
     if bounty.project_id is None:
         return None
@@ -618,10 +649,29 @@ def _ensure_bounty_paid_capital_outflow(db: Session, bounty: Bounty, paid_tx_has
     )
     return None
 
+
+def _ensure_bounty_paid_revenue_outflow(db: Session, bounty: Bounty) -> str | None:
+    if bounty.project_id is None:
+        return None
+    if bounty.funding_source != BountyFundingSource.project_revenue:
+        return None
+
+    balance_micro_usdc = get_project_revenue_balance_micro_usdc(db, bounty.project_id)
+    if balance_micro_usdc < bounty.amount_micro_usdc:
+        return "insufficient_project_revenue"
+    return None
+
 def _ensure_bounty_paid_expense(db: Session, bounty: Bounty) -> ExpenseEvent:
     idempotency_key = f"expense:bounty_paid:{bounty.bounty_id}"
     profit_month_id = datetime.now(timezone.utc).strftime("%Y%m")
-    category = "project_bounty_payout" if bounty.project_id is not None else "platform_bounty_payout"
+    if bounty.project_id is None:
+        category = "platform_bounty_payout"
+    elif bounty.funding_source == BountyFundingSource.project_capital:
+        category = "project_bounty_payout_capital"
+    elif bounty.funding_source == BountyFundingSource.project_revenue:
+        category = "project_bounty_payout_revenue"
+    else:
+        category = "project_bounty_payout"
     event = ExpenseEvent(
         event_id=_generate_expense_event_id(db),
         profit_month_id=profit_month_id,

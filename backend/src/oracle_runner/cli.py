@@ -146,6 +146,13 @@ def build_parser() -> argparse.ArgumentParser:
     reconcile_project_capital.add_argument("--project-id", required=True)
     reconcile_project_capital.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
 
+    reconcile_project_revenue = subparsers.add_parser(
+        "reconcile-project-revenue",
+        help="Run project revenue on-chain vs ledger reconciliation for a project.",
+    )
+    reconcile_project_revenue.add_argument("--project-id", required=True)
+    reconcile_project_revenue.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
+
     project_reconcile = subparsers.add_parser(
         "project-reconcile",
         help="Alias for reconcile-project-capital.",
@@ -254,6 +261,17 @@ def run(argv: list[str] | None = None) -> int:
             if not project_id:
                 raise OracleRunnerError("--project-id is required.")
             data = _post_action(client, f"/api/v1/oracle/projects/{project_id}/capital/reconciliation", b"")
+            if json_mode:
+                _print_json(data)
+            else:
+                _print_fields(data, ["ready", "blocked_reason", "delta_micro_usdc", "onchain_balance_micro_usdc", "ledger_balance_micro_usdc", "computed_at"])
+            return 0
+
+        if args.command == "reconcile-project-revenue":
+            project_id = str(args.project_id).strip()
+            if not project_id:
+                raise OracleRunnerError("--project-id is required.")
+            data = _post_action(client, f"/api/v1/oracle/projects/{project_id}/revenue/reconciliation", b"")
             if json_mode:
                 _print_json(data)
             else:

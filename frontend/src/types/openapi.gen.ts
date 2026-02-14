@@ -98,6 +98,10 @@ export interface paths {
     /** Get latest project capital reconciliation report */
     get: operations["get_project_capital_reconciliation_latest_api_v1_projects__project_id__capital_reconciliation_latest_get"];
   };
+  "/api/v1/projects/{project_id}/revenue/reconciliation/latest": {
+    /** Get latest project revenue reconciliation report */
+    get: operations["get_project_revenue_reconciliation_latest_api_v1_projects__project_id__revenue_reconciliation_latest_get"];
+  };
   "/api/v1/projects/{project_id}": {
     /**
      * Get project detail
@@ -225,6 +229,14 @@ export interface paths {
   "/api/v1/oracle/projects/{project_id}/capital/reconciliation": {
     /** Reconcile Project Capital */
     post: operations["reconcile_project_capital_api_v1_oracle_projects__project_id__capital_reconciliation_post"];
+  };
+  "/api/v1/oracle/projects/{project_id}/revenue/address": {
+    /** Set Project Revenue Address */
+    post: operations["set_project_revenue_address_api_v1_oracle_projects__project_id__revenue_address_post"];
+  };
+  "/api/v1/oracle/projects/{project_id}/revenue/reconciliation": {
+    /** Reconcile Project Revenue */
+    post: operations["reconcile_project_revenue_api_v1_oracle_projects__project_id__revenue_reconciliation_post"];
   };
   "/api/v1/oracle/tx-outbox": {
     /** Enqueue Task */
@@ -425,7 +437,7 @@ export interface components {
      * BountyMarkPaidBlockedReason
      * @enum {string}
      */
-    BountyMarkPaidBlockedReason: "insufficient_project_capital" | "project_capital_reconciliation_missing" | "project_capital_not_reconciled" | "project_capital_reconciliation_stale";
+    BountyMarkPaidBlockedReason: "insufficient_project_capital" | "project_capital_reconciliation_missing" | "project_capital_not_reconciled" | "project_capital_reconciliation_stale" | "insufficient_project_revenue" | "project_revenue_reconciliation_missing" | "project_revenue_not_reconciled" | "project_revenue_reconciliation_stale";
     /** BountyMarkPaidRequest */
     BountyMarkPaidRequest: {
       /** Paid Tx Hash */
@@ -986,6 +998,8 @@ export interface components {
       treasury_wallet_address?: string | null;
       /** Revenue Wallet Address */
       revenue_wallet_address?: string | null;
+      /** Revenue Address */
+      revenue_address?: string | null;
       /** Monthly Budget Micro Usdc */
       monthly_budget_micro_usdc?: number | null;
     };
@@ -1014,6 +1028,8 @@ export interface components {
       treasury_address: string | null;
       /** Revenue Wallet Address */
       revenue_wallet_address: string | null;
+      /** Revenue Address */
+      revenue_address: string | null;
       /** Monthly Budget Micro Usdc */
       monthly_budget_micro_usdc: number | null;
       /**
@@ -1031,6 +1047,7 @@ export interface components {
       /** Members */
       members: components["schemas"]["ProjectMemberInfo"][];
       capital_reconciliation?: components["schemas"]["ProjectCapitalReconciliationReportPublic"] | null;
+      revenue_reconciliation?: components["schemas"]["ProjectRevenueReconciliationReportPublic"] | null;
     };
     /** ProjectDetailResponse */
     ProjectDetailResponse: {
@@ -1068,6 +1085,62 @@ export interface components {
      * @enum {string}
      */
     ProjectMemberRole: "owner" | "maintainer" | "contributor";
+    /** ProjectRevenueAddressSetData */
+    ProjectRevenueAddressSetData: {
+      /** Project Id */
+      project_id: string;
+      /** Revenue Address */
+      revenue_address: string | null;
+      /** Status */
+      status: string;
+      /** Blocked Reason */
+      blocked_reason?: string | null;
+    };
+    /** ProjectRevenueAddressSetRequest */
+    ProjectRevenueAddressSetRequest: {
+      /** Revenue Address */
+      revenue_address: string;
+    };
+    /** ProjectRevenueAddressSetResponse */
+    ProjectRevenueAddressSetResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["ProjectRevenueAddressSetData"];
+    };
+    /** ProjectRevenueReconciliationLatestResponse */
+    ProjectRevenueReconciliationLatestResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["ProjectRevenueReconciliationReportPublic"] | null;
+    };
+    /** ProjectRevenueReconciliationReportPublic */
+    ProjectRevenueReconciliationReportPublic: {
+      /** Project Id */
+      project_id: string;
+      /** Revenue Address */
+      revenue_address: string;
+      /** Ledger Balance Micro Usdc */
+      ledger_balance_micro_usdc: number | null;
+      /** Onchain Balance Micro Usdc */
+      onchain_balance_micro_usdc: number | null;
+      /** Delta Micro Usdc */
+      delta_micro_usdc: number | null;
+      /** Ready */
+      ready: boolean;
+      /** Blocked Reason */
+      blocked_reason: string | null;
+      /**
+       * Computed At
+       * Format: date-time
+       */
+      computed_at: string;
+    };
+    /** ProjectRevenueReconciliationRunResponse */
+    ProjectRevenueReconciliationRunResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["ProjectRevenueReconciliationReportPublic"];
+    };
     /**
      * ProjectStatus
      * @enum {string}
@@ -1102,6 +1175,8 @@ export interface components {
       treasury_address: string | null;
       /** Revenue Wallet Address */
       revenue_wallet_address: string | null;
+      /** Revenue Address */
+      revenue_address: string | null;
       /** Monthly Budget Micro Usdc */
       monthly_budget_micro_usdc: number | null;
       /**
@@ -1599,6 +1674,8 @@ export interface components {
       server_time_utc: string;
       /** Project Capital Reconciliation Max Age Seconds */
       project_capital_reconciliation_max_age_seconds: number;
+      /** Project Revenue Reconciliation Max Age Seconds */
+      project_revenue_reconciliation_max_age_seconds: number;
     };
     /** StatsResponse */
     StatsResponse: {
@@ -2189,6 +2266,28 @@ export interface operations {
       200: {
         content: {
           "application/json": components["schemas"]["ProjectCapitalReconciliationLatestResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Get latest project revenue reconciliation report */
+  get_project_revenue_reconciliation_latest_api_v1_projects__project_id__revenue_reconciliation_latest_get: {
+    parameters: {
+      path: {
+        project_id: string;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ProjectRevenueReconciliationLatestResponse"];
         };
       };
       /** @description Validation Error */
@@ -2942,6 +3041,55 @@ export interface operations {
       200: {
         content: {
           "application/json": components["schemas"]["ProjectCapitalReconciliationRunResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Set Project Revenue Address */
+  set_project_revenue_address_api_v1_oracle_projects__project_id__revenue_address_post: {
+    parameters: {
+      path: {
+        project_id: string;
+      };
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ProjectRevenueAddressSetRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ProjectRevenueAddressSetResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Reconcile Project Revenue */
+  reconcile_project_revenue_api_v1_oracle_projects__project_id__revenue_reconciliation_post: {
+    parameters: {
+      path: {
+        project_id: string;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ProjectRevenueReconciliationRunResponse"];
         };
       };
       /** @description Validation Error */

@@ -62,6 +62,10 @@ class BountyMarkPaidBlockedReason(str, Enum):
     project_capital_reconciliation_missing = "project_capital_reconciliation_missing"
     project_capital_not_reconciled = "project_capital_not_reconciled"
     project_capital_reconciliation_stale = "project_capital_reconciliation_stale"
+    insufficient_project_revenue = "insufficient_project_revenue"
+    project_revenue_reconciliation_missing = "project_revenue_reconciliation_missing"
+    project_revenue_not_reconciled = "project_revenue_not_reconciled"
+    project_revenue_reconciliation_stale = "project_revenue_reconciliation_stale"
 
 
 class BountyPublic(BaseModel):
