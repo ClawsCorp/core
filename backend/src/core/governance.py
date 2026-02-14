@@ -28,6 +28,8 @@ def can_finalize(now: datetime, voting_ends_at: datetime | None, status: Proposa
         return False
     if voting_ends_at is None:
         return False
+    if voting_ends_at.tzinfo is None and now.tzinfo is not None:
+        voting_ends_at = voting_ends_at.replace(tzinfo=now.tzinfo)
     return now >= voting_ends_at
 
 

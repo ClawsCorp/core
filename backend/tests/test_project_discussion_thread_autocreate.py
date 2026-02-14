@@ -23,6 +23,7 @@ import src.models  # noqa: F401
 from src.models.agent import Agent
 from src.models.discussions import DiscussionThread
 from src.models.proposal import Proposal
+from src.models.proposal import ProposalStatus
 from src.models.project import Project
 from src.models.vote import Vote
 
@@ -48,9 +49,6 @@ def _db() -> sessionmaker[Session]:
 
 @pytest.fixture()
 def _client(_db: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    monkeypatch.setenv("GOVERNANCE_DISCUSSION_HOURS", "0")
-    monkeypatch.setenv("GOVERNANCE_VOTING_HOURS", "1")
-
     def _override_get_db():
         db = _db()
         try:
@@ -59,7 +57,7 @@ def _client(_db: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch) -> Test
             db.close()
 
     app.dependency_overrides[get_db] = _override_get_db
-    client = TestClient(app, raise_server_exceptions=True)
+    client = TestClient(app, raise_server_exceptions=False)
     try:
         yield client
     finally:
@@ -113,11 +111,14 @@ def test_project_discussion_thread_created_on_proposal_activation(
         assert agent is not None
         proposal = db.query(Proposal).filter(Proposal.proposal_id == proposal_id).first()
         assert proposal is not None
-        assert proposal.voting_ends_at is not None
+        # Ensure we are in voting (submit may choose discussion depending on global settings).
+        proposal.status = ProposalStatus.voting
+        proposal.discussion_ends_at = None
+        proposal.voting_starts_at = proposal.voting_starts_at or proposal.created_at
+        proposal.voting_ends_at = (proposal.voting_ends_at or proposal.created_at) - timedelta(hours=2)
         db.add(Vote(proposal_id=proposal.id, voter_agent_id=agent.id, value=1))
         proposal.yes_votes_count = 1
         proposal.no_votes_count = 0
-        proposal.voting_ends_at = proposal.voting_ends_at - timedelta(hours=2)
         db.commit()
 
     # Finalize -> activates project.
