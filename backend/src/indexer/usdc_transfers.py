@@ -332,6 +332,12 @@ def main(argv: list[str] | None = None) -> int:
                     if from_block > to_block:
                         from_block = max(0, to_block - int(args.lookback_blocks))
 
+                # Never try to scan an unbounded range (e.g. fresh cursor=0 -> genesis..tip).
+                # Instead, catch up in bounded batches; the cursor will advance each iteration.
+                max_span = max(1, int(args.lookback_blocks))
+                if to_block - from_block > max_span:
+                    to_block = from_block + max_span
+
                 result = index_usdc_transfers(
                     db=db,
                     rpc_url=settings.base_sepolia_rpc_url,
