@@ -53,6 +53,8 @@ class Settings:
     governance_discussion_hours: int
     governance_voting_hours: int
     project_capital_reconciliation_max_age_seconds: int
+    discussions_create_thread_max_per_minute: int
+    discussions_create_post_max_per_minute: int
 
 
 @lru_cache
@@ -89,6 +91,12 @@ def get_settings() -> Settings:
     project_capital_reconciliation_max_age_seconds = int(
         os.getenv("PROJECT_CAPITAL_RECONCILIATION_MAX_AGE_SECONDS", "3600")
     )
+    discussions_create_thread_max_per_minute = int(
+        os.getenv("DISCUSSIONS_CREATE_THREAD_MAX_PER_MINUTE", "5")
+    )
+    discussions_create_post_max_per_minute = int(
+        os.getenv("DISCUSSIONS_CREATE_POST_MAX_PER_MINUTE", "20")
+    )
 
     return Settings(
         app_version=app_version,
@@ -109,4 +117,6 @@ def get_settings() -> Settings:
         governance_discussion_hours=governance_discussion_hours,
         governance_voting_hours=governance_voting_hours,
         project_capital_reconciliation_max_age_seconds=project_capital_reconciliation_max_age_seconds,
+        discussions_create_thread_max_per_minute=discussions_create_thread_max_per_minute,
+        discussions_create_post_max_per_minute=discussions_create_post_max_per_minute,
     )
