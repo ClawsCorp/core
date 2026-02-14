@@ -1,7 +1,7 @@
 """bounties: proposal link + basic SLA fields
 
 Revision ID: 0035
-Revises: 0034
+Revises: 0034_project_domains
 Create Date: 2026-02-14
 """
 
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 revision = "0035"
-down_revision = "0034"
+down_revision = "0034_project_domains"
 branch_labels = None
 depends_on = None
 
@@ -27,4 +27,3 @@ def downgrade() -> None:
     op.drop_column("bounties", "deadline_at")
     op.drop_column("bounties", "priority")
     op.drop_column("bounties", "origin_proposal_id")
-
