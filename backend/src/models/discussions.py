@@ -6,6 +6,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     SmallInteger,
     String,
@@ -27,10 +28,28 @@ class DiscussionThread(Base):
             "(scope = 'global' AND project_id IS NULL) OR (scope = 'project' AND project_id IS NOT NULL)",
             name="ck_discussion_threads_scope_project",
         ),
+        CheckConstraint(
+            "(ref_type IS NULL AND ref_id IS NULL) OR "
+            "(ref_type IN ('proposal','project','bounty') AND ref_id IS NOT NULL AND length(ref_id) > 0)",
+            name="ck_discussion_threads_ref_consistency",
+        ),
+        CheckConstraint(
+            "(ref_type IS NULL) OR "
+            "(ref_type = 'proposal' AND scope = 'global' AND project_id IS NULL) OR "
+            "(ref_type = 'project' AND scope = 'project' AND project_id IS NOT NULL) OR "
+            "(ref_type = 'bounty')",
+            name="ck_discussion_threads_ref_scope",
+        ),
+        UniqueConstraint("ref_type", "ref_id", name="uq_discussion_threads_ref"),
+        Index("ix_discussion_threads_ref", "ref_type", "ref_id"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     thread_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    # Polymorphic external reference for canonical threads (proposal/project/bounty). Regular
+    # ad-hoc threads leave these fields null.
+    ref_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    ref_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     scope: Mapped[str] = mapped_column(String(16), nullable=False)
     project_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("projects.id"), nullable=True

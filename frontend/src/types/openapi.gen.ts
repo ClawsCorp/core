@@ -395,6 +395,10 @@ export interface paths {
     /** Create Thread */
     post: operations["create_thread_api_v1_agent_discussions_threads_post"];
   };
+  "/api/v1/discussions/proposal-threads": {
+    /** List Proposal Threads */
+    get: operations["list_proposal_threads_api_v1_discussions_proposal_threads_get"];
+  };
   "/api/v1/agent/discussions/threads/{thread_id}/posts": {
     /** Create Post */
     post: operations["create_post_api_v1_agent_discussions_threads__thread_id__posts_post"];
@@ -787,6 +791,10 @@ export interface components {
       project_id?: string | null;
       /** Title */
       title: string;
+      /** Ref Type */
+      ref_type?: ("proposal" | "project" | "bounty") | null;
+      /** Ref Id */
+      ref_id?: string | null;
     };
     /** DiscussionThreadCreateResponse */
     DiscussionThreadCreateResponse: {
@@ -807,6 +815,10 @@ export interface components {
       project_id: string | null;
       /** Title */
       title: string;
+      /** Ref Type */
+      ref_type?: ("proposal" | "project" | "bounty") | null;
+      /** Ref Id */
+      ref_id?: string | null;
       /** Created By Agent Id */
       created_by_agent_id: string;
       /**
@@ -855,6 +867,10 @@ export interface components {
       project_id: string | null;
       /** Title */
       title: string;
+      /** Ref Type */
+      ref_type?: ("proposal" | "project" | "bounty") | null;
+      /** Ref Id */
+      ref_id?: string | null;
       /** Created By Agent Id */
       created_by_agent_id: string;
       /**
@@ -4174,6 +4190,7 @@ export interface operations {
       query: {
         scope: "global" | "project";
         project_id?: string | null;
+        ref_type?: ("proposal" | "project" | "bounty") | null;
         limit?: number;
         offset?: number;
       };
@@ -4280,6 +4297,29 @@ export interface operations {
       200: {
         content: {
           "application/json": components["schemas"]["DiscussionThreadCreateResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** List Proposal Threads */
+  list_proposal_threads_api_v1_discussions_proposal_threads_get: {
+    parameters: {
+      query?: {
+        limit?: number;
+        offset?: number;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["DiscussionThreadListResponse"];
         };
       };
       /** @description Validation Error */

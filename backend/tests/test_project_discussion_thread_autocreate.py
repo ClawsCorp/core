@@ -139,3 +139,5 @@ def test_project_discussion_thread_created_on_proposal_activation(
         thread = db.query(DiscussionThread).filter(DiscussionThread.thread_id == project.discussion_thread_id).first()
         assert thread is not None
         assert thread.scope == "project"
+        assert thread.ref_type == "project"
+        assert thread.ref_id == project.project_id

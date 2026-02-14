@@ -552,6 +552,8 @@ def _ensure_proposal_discussion_thread(db: Session, proposal: Proposal) -> None:
     thread_id = _proposal_discussion_thread_id(proposal.proposal_id)
     thread = DiscussionThread(
         thread_id=thread_id,
+        ref_type="proposal",
+        ref_id=proposal.proposal_id,
         scope="global",
         project_id=None,
         title=f"Proposal {proposal.proposal_id}: {proposal.title}"[:255],
@@ -563,6 +565,12 @@ def _ensure_proposal_discussion_thread(db: Session, proposal: Proposal) -> None:
         model=DiscussionThread,
         unique_filter={"thread_id": thread_id},
     )
+    # Backfill/repair in case the canonical thread existed pre-v2.
+    if thread.ref_type != "proposal" or thread.ref_id != proposal.proposal_id:
+        thread.ref_type = "proposal"
+        thread.ref_id = proposal.proposal_id
+        db.add(thread)
+        db.flush()
     proposal.discussion_thread_id = thread.thread_id
 
 
@@ -616,6 +624,8 @@ def _ensure_project_discussion_thread(db: Session, project: Project) -> None:
     thread_id = _project_discussion_thread_id(project.project_id)
     thread = DiscussionThread(
         thread_id=thread_id,
+        ref_type="project",
+        ref_id=project.project_id,
         scope="project",
         project_id=project.id,
         title=f"Project {project.project_id}: general"[:255],
@@ -627,4 +637,13 @@ def _ensure_project_discussion_thread(db: Session, project: Project) -> None:
         model=DiscussionThread,
         unique_filter={"thread_id": thread_id},
     )
+    # Backfill/repair in case the canonical thread existed pre-v2.
+    if thread.ref_type != "project" or thread.ref_id != project.project_id:
+        thread.ref_type = "project"
+        thread.ref_id = project.project_id
+        # Ensure the canonical project thread stays anchored to the right project PK.
+        if thread.project_id is None:
+            thread.project_id = project.id
+        db.add(thread)
+        db.flush()
     project.discussion_thread_id = thread.thread_id

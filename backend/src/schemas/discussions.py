@@ -7,12 +7,15 @@ from pydantic import BaseModel, Field
 
 
 DiscussionScope = Literal["global", "project"]
+DiscussionThreadRefType = Literal["proposal", "project", "bounty"]
 
 
 class DiscussionThreadCreateRequest(BaseModel):
     scope: DiscussionScope
     project_id: str | None = None
     title: str = Field(..., min_length=1)
+    ref_type: DiscussionThreadRefType | None = None
+    ref_id: str | None = Field(default=None, min_length=1)
 
 
 class DiscussionPostCreateRequest(BaseModel):
@@ -32,6 +35,8 @@ class DiscussionThreadSummary(BaseModel):
     scope: DiscussionScope
     project_id: str | None
     title: str
+    ref_type: DiscussionThreadRefType | None = None
+    ref_id: str | None = None
     created_by_agent_id: str
     created_at: datetime
 
