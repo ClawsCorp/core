@@ -204,6 +204,15 @@ export interface paths {
     /** Create Expense Event */
     post: operations["create_expense_event_api_v1_oracle_expense_events_post"];
   };
+  "/api/v1/oracle/billing/sync": {
+    /**
+     * Sync Billing
+     * @description MVP billing ingestion: on-chain USDC transfers into `projects.revenue_address` become append-only billing_events and revenue_events.
+     *
+     * Oracle remains a fallback; this endpoint is an autonomous helper for real commerce flows.
+     */
+    post: operations["sync_billing_api_v1_oracle_billing_sync_post"];
+  };
   "/api/v1/oracle/settlement/{profit_month_id}": {
     /** Compute Settlement */
     post: operations["compute_settlement_api_v1_oracle_settlement__profit_month_id__post"];
@@ -451,6 +460,19 @@ export interface components {
       /** Success */
       success: boolean;
       data: components["schemas"]["AlertsData"];
+    };
+    /** BillingSyncData */
+    BillingSyncData: {
+      /** Billing Events Inserted */
+      billing_events_inserted: number;
+      /** Revenue Events Inserted */
+      revenue_events_inserted: number;
+    };
+    /** BillingSyncResponse */
+    BillingSyncResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["BillingSyncData"];
     };
     /** BountyAgentCreateRequest */
     BountyAgentCreateRequest: {
@@ -3086,6 +3108,22 @@ export interface operations {
       422: {
         content: {
           "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /**
+   * Sync Billing
+   * @description MVP billing ingestion: on-chain USDC transfers into `projects.revenue_address` become append-only billing_events and revenue_events.
+   *
+   * Oracle remains a fallback; this endpoint is an autonomous helper for real commerce flows.
+   */
+  sync_billing_api_v1_oracle_billing_sync_post: {
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["BillingSyncResponse"];
         };
       };
     };

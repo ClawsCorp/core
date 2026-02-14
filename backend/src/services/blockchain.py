@@ -6,6 +6,7 @@ import os
 import re
 import subprocess
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -50,6 +51,31 @@ class TransactionReceiptResult:
     found: bool
     status: int | None
     block_number: int | None
+
+
+def read_block_timestamp_utc(block_number: int) -> datetime:
+    settings = get_settings()
+    rpc_url = settings.base_sepolia_rpc_url
+    if rpc_url is None or _is_placeholder(rpc_url):
+        raise BlockchainConfigError("Missing BASE_SEPOLIA_RPC_URL")
+    if block_number < 0:
+        raise BlockchainReadError("block_number must be >= 0")
+
+    result = _rpc_call(
+        rpc_url,
+        "eth_getBlockByNumber",
+        [hex(int(block_number)), False],
+    )
+    if not isinstance(result, dict):
+        raise BlockchainReadError("Invalid eth_getBlockByNumber response")
+    ts_hex = result.get("timestamp")
+    if not isinstance(ts_hex, str) or not ts_hex.startswith("0x"):
+        raise BlockchainReadError("Invalid block timestamp")
+    try:
+        ts = int(ts_hex, 16)
+    except ValueError as exc:
+        raise BlockchainReadError("Unable to parse block timestamp") from exc
+    return datetime.fromtimestamp(ts, tz=timezone.utc)
 
 
 def read_usdc_balance_of_distributor() -> BalanceReadResult:
