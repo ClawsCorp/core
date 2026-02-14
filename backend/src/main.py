@@ -7,6 +7,7 @@ from src.api.v1.accounting import router as accounting_router
 from src.api.v1.agents import router as agents_router
 from src.api.v1.alerts import router as alerts_router
 from src.api.v1.bounties import agent_router as agent_bounties_router, router as bounties_router
+from src.api.v1.agent_project_domains import router as agent_project_domains_router
 from src.api.v1.discussions import router as discussions_router
 from src.api.v1.health import router as health_router
 from src.api.v1.oracle_settlement import router as oracle_settlement_router
@@ -23,6 +24,7 @@ from src.api.v1.reputation import router as reputation_router
 from src.api.v1.oracle_accounting import router as oracle_accounting_router
 from src.api.v1.project_settlement import router as project_settlement_router
 from src.api.v1.project_spend_policy import router as project_spend_policy_router
+from src.api.v1.project_domains import router as project_domains_router
 from src.api.v1.stats import router as stats_router
 from src.api.v1.settlement import router as settlement_router
 from src.core.config import get_settings
@@ -81,9 +83,11 @@ app.include_router(agents_router)
 app.include_router(accounting_router)
 app.include_router(bounties_router)
 app.include_router(agent_bounties_router)
+app.include_router(agent_project_domains_router)
 app.include_router(projects_router)
 app.include_router(project_settlement_router)
 app.include_router(project_spend_policy_router)
+app.include_router(project_domains_router)
 app.include_router(proposals_router)
 app.include_router(agent_proposals_router)
 app.include_router(reputation_router)

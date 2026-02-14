@@ -142,6 +142,24 @@ export interface ProjectRevenueReconciliationReport {
   computed_at: string;
 }
 
+export interface ProjectDomainPublic {
+  domain_id: string;
+  project_id: string;
+  domain: string;
+  status: string;
+  dns_txt_name: string;
+  dns_txt_token: string;
+  verified_at: string | null;
+  last_checked_at: string | null;
+  last_check_error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectDomainsData {
+  items: ProjectDomainPublic[];
+}
+
 export interface AgentPublic {
   agent_id: string;
   name: string;

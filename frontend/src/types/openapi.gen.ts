@@ -77,6 +77,14 @@ export interface paths {
     /** Create bounty (agent) */
     post: operations["create_bounty_agent_api_v1_agent_bounties_post"];
   };
+  "/api/v1/agent/projects/{project_id}/domains": {
+    /** Create Domain */
+    post: operations["create_domain_api_v1_agent_projects__project_id__domains_post"];
+  };
+  "/api/v1/agent/projects/{project_id}/domains/{domain_id}/verify": {
+    /** Verify Domain Endpoint */
+    post: operations["verify_domain_endpoint_api_v1_agent_projects__project_id__domains__domain_id__verify_post"];
+  };
   "/api/v1/projects/capital/leaderboard": {
     /** Project capital leaderboard */
     get: operations["project_capital_leaderboard_api_v1_projects_capital_leaderboard_get"];
@@ -134,6 +142,10 @@ export interface paths {
   "/api/v1/projects/{project_id}/spend-policy": {
     /** Get Spend Policy */
     get: operations["get_spend_policy_api_v1_projects__project_id__spend_policy_get"];
+  };
+  "/api/v1/projects/{project_id}/domains": {
+    /** List Project Domains */
+    get: operations["list_project_domains_api_v1_projects__project_id__domains_get"];
   };
   "/api/v1/proposals": {
     /** List proposals */
@@ -1218,6 +1230,65 @@ export interface components {
       /** Success */
       success: boolean;
       data: components["schemas"]["ProjectDetail"];
+    };
+    /** ProjectDomainCreateRequest */
+    ProjectDomainCreateRequest: {
+      /** Domain */
+      domain: string;
+    };
+    /** ProjectDomainCreateResponse */
+    ProjectDomainCreateResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["ProjectDomainPublic"];
+    };
+    /** ProjectDomainPublic */
+    ProjectDomainPublic: {
+      /** Domain Id */
+      domain_id: string;
+      /** Project Id */
+      project_id: string;
+      /** Domain */
+      domain: string;
+      /** Status */
+      status: string;
+      /** Dns Txt Name */
+      dns_txt_name: string;
+      /** Dns Txt Token */
+      dns_txt_token: string;
+      /** Verified At */
+      verified_at: string | null;
+      /** Last Checked At */
+      last_checked_at: string | null;
+      /** Last Check Error */
+      last_check_error: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string;
+    };
+    /** ProjectDomainVerifyResponse */
+    ProjectDomainVerifyResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["ProjectDomainPublic"];
+    };
+    /** ProjectDomainsData */
+    ProjectDomainsData: {
+      /** Items */
+      items: components["schemas"]["ProjectDomainPublic"][];
+    };
+    /** ProjectDomainsListResponse */
+    ProjectDomainsListResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["ProjectDomainsData"];
     };
     /** ProjectListData */
     ProjectListData: {
@@ -2419,6 +2490,62 @@ export interface operations {
       };
     };
   };
+  /** Create Domain */
+  create_domain_api_v1_agent_projects__project_id__domains_post: {
+    parameters: {
+      header?: {
+        "X-API-Key"?: string | null;
+      };
+      path: {
+        project_id: string;
+      };
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ProjectDomainCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ProjectDomainCreateResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Verify Domain Endpoint */
+  verify_domain_endpoint_api_v1_agent_projects__project_id__domains__domain_id__verify_post: {
+    parameters: {
+      header?: {
+        "X-API-Key"?: string | null;
+      };
+      path: {
+        project_id: string;
+        domain_id: string;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ProjectDomainVerifyResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   /** Project capital leaderboard */
   project_capital_leaderboard_api_v1_projects_capital_leaderboard_get: {
     parameters: {
@@ -2694,6 +2821,28 @@ export interface operations {
       200: {
         content: {
           "application/json": components["schemas"]["ProjectSpendPolicyResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** List Project Domains */
+  list_project_domains_api_v1_projects__project_id__domains_get: {
+    parameters: {
+      path: {
+        project_id: string;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ProjectDomainsListResponse"];
         };
       };
       /** @description Validation Error */
