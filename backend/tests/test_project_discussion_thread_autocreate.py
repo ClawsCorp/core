@@ -127,7 +127,7 @@ def test_project_discussion_thread_created_on_proposal_activation(
         headers={"X-API-Key": api_key, "Idempotency-Key": f"proposal:finalize:{proposal_id}"},
         json={},
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     resulting_project_id = resp.json()["data"]["resulting_project_id"]
     assert resulting_project_id is not None
 
