@@ -41,6 +41,13 @@ router = APIRouter(prefix="/api/v1/proposals", tags=["public-proposals", "propos
 agent_router = APIRouter(prefix="/api/v1/agent/proposals", tags=["proposals"])
 settings = get_settings()
 
+def _as_aware_utc(dt: datetime | None) -> datetime | None:
+    # SQLite doesn't preserve tzinfo even when DateTime(timezone=True) is used.
+    # Normalize to UTC-aware to avoid TypeError comparisons in Python logic.
+    if dt is None:
+        return None
+    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+
 
 @router.get("", response_model=ProposalListResponse, summary="List proposals")
 def list_proposals(
@@ -205,9 +212,11 @@ async def vote_on_proposal(
     now = datetime.now(timezone.utc)
     if proposal.status != ProposalStatus.voting:
         raise HTTPException(status_code=400, detail="Proposal is not in voting.")
-    if proposal.voting_starts_at is None or now < proposal.voting_starts_at:
+    voting_starts_at = _as_aware_utc(proposal.voting_starts_at)
+    voting_ends_at = _as_aware_utc(proposal.voting_ends_at)
+    if voting_starts_at is None or now < voting_starts_at:
         raise HTTPException(status_code=400, detail="Voting has not started.")
-    if proposal.voting_ends_at is None or now >= proposal.voting_ends_at:
+    if voting_ends_at is None or now >= voting_ends_at:
         raise HTTPException(status_code=400, detail="Voting is closed.")
 
     vote = db.query(Vote).filter(Vote.proposal_id == proposal.id, Vote.voter_agent_id == agent.id).first()
@@ -321,7 +330,8 @@ def _ensure_voting_status(db: Session, proposal: Proposal) -> None:
     if proposal.status != ProposalStatus.discussion:
         return
     now = datetime.now(timezone.utc)
-    if proposal.discussion_ends_at is not None and now >= proposal.discussion_ends_at:
+    discussion_ends_at = _as_aware_utc(proposal.discussion_ends_at)
+    if discussion_ends_at is not None and now >= discussion_ends_at:
         advance_expired_discussions(
             db,
             now,
@@ -483,6 +493,36 @@ def _ensure_resulting_project(db: Session, proposal: Proposal, activated_at: dat
         db.flush()
         existing = project
 
+    _ensure_project_discussion_thread(db, existing)
     proposal.resulting_project_id = existing.project_id
     if proposal.activated_at is None:
         proposal.activated_at = activated_at
+
+
+def _project_discussion_thread_id(project_external_id: str) -> str:
+    digest = hashlib.sha256(project_external_id.encode("utf-8")).hexdigest()[:16]
+    return f"dth_project_{digest}"
+
+
+def _ensure_project_discussion_thread(db: Session, project: Project) -> None:
+    if project.discussion_thread_id:
+        return
+    creator_agent_id = project.originator_agent_id or project.created_by_agent_id
+    if creator_agent_id is None:
+        return
+
+    thread_id = _project_discussion_thread_id(project.project_id)
+    thread = DiscussionThread(
+        thread_id=thread_id,
+        scope="project",
+        project_id=project.id,
+        title=f"Project {project.project_id}: general"[:255],
+        created_by_agent_id=int(creator_agent_id),
+    )
+    thread, _created = insert_or_get_by_unique(
+        db,
+        instance=thread,
+        model=DiscussionThread,
+        unique_filter={"thread_id": thread_id},
+    )
+    project.discussion_thread_id = thread.thread_id

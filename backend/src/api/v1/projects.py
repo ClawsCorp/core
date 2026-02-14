@@ -342,6 +342,7 @@ def _project_summary(project: Project) -> ProjectSummary:
         proposal_id=project.proposal_id,
         origin_proposal_id=project.origin_proposal_id,
         originator_agent_id=project.originator_agent_id,
+        discussion_thread_id=project.discussion_thread_id,
         treasury_wallet_address=project.treasury_wallet_address,
         treasury_address=project.treasury_address,
         revenue_wallet_address=project.revenue_wallet_address,
