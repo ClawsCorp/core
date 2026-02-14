@@ -31,6 +31,18 @@ def get_alerts(response: Response, db: Session = Depends(get_db)) -> AlertsRespo
 
     items: list[AlertItem] = []
 
+    if not (settings.funding_pool_contract_address or "").strip():
+        items.append(
+            AlertItem(
+                alert_type="funding_pool_address_missing",
+                severity="warning",
+                message="FUNDING_POOL_CONTRACT_ADDRESS is not configured; stakers payouts will route to treasury.",
+                ref=None,
+                data=None,
+                observed_at=now,
+            )
+        )
+
     # Latest per project (simple loop; small data).
     projects = db.query(Project).order_by(Project.project_id.asc()).all()
 
