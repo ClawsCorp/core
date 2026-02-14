@@ -27,6 +27,17 @@ class ProjectCapitalReconciliationRunResponse(BaseModel):
     data: ProjectCapitalReconciliationReportPublic
 
 
+class ProjectCapitalSyncData(BaseModel):
+    transfers_seen: int
+    capital_events_inserted: int
+    projects_with_treasury_count: int
+
+
+class ProjectCapitalSyncResponse(BaseModel):
+    success: bool
+    data: ProjectCapitalSyncData
+
+
 class ProjectRevenueAddressSetRequest(BaseModel):
     revenue_address: str = Field(..., min_length=1)
 
