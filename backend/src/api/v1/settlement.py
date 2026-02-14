@@ -8,8 +8,11 @@ from sqlalchemy.orm import Session
 
 from src.core.database import get_db
 from src.models.dividend_payout import DividendPayout
+from src.models.project import Project
+from src.models.project_settlement import ProjectSettlement
 from src.models.reconciliation_report import ReconciliationReport
 from src.models.settlement import Settlement
+from src.schemas.project_settlement import ProjectSettlementPublic
 from src.schemas.reconciliation import ReconciliationReportPublic
 from src.schemas.settlement import (
     SettlementDetailData,
@@ -19,6 +22,11 @@ from src.schemas.settlement import (
     SettlementMonthsResponse,
     SettlementPayoutPublic,
     SettlementPublic,
+)
+from src.schemas.settlement_consolidated import (
+    ConsolidatedSettlementData,
+    ConsolidatedSettlementProjectsSums,
+    ConsolidatedSettlementResponse,
 )
 
 router = APIRouter(prefix="/api/v1/settlement", tags=["public-settlement", "settlement"])
@@ -136,6 +144,91 @@ def get_settlement_status(
     etag_seed = f"{profit_month_id}:{max(settlement_ts, reconciliation_ts, payout_ts)}:{payout_part}:{recon_part}"
     response.headers["Cache-Control"] = "public, max-age=30"
     response.headers["ETag"] = f'W/"settlement:{etag_seed}"'
+    return result
+
+
+@router.get(
+    "/{profit_month_id}/consolidated",
+    response_model=ConsolidatedSettlementResponse,
+    summary="Get consolidated settlement view for month",
+    description="Public read endpoint: platform settlement status plus latest per-project settlement rows for the same month.",
+)
+def get_consolidated_settlement_status(
+    profit_month_id: str,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> ConsolidatedSettlementResponse:
+    _validate_month(profit_month_id)
+
+    # Platform month status (same primitives as /api/v1/settlement/{YYYYMM}).
+    settlement = _latest_settlement(db, profit_month_id)
+    reconciliation = _latest_reconciliation(db, profit_month_id)
+    payout = _latest_payout(db, profit_month_id)
+    platform = SettlementDetailData(
+        settlement=_settlement_public(settlement) if settlement else None,
+        reconciliation=_reconciliation_public(reconciliation) if reconciliation else None,
+        payout=_payout_public(payout) if payout else None,
+        ready=bool(reconciliation.ready) if reconciliation else False,
+    )
+
+    # Latest per-project settlement rows for the month.
+    rows = (
+        db.query(ProjectSettlement)
+        .filter(ProjectSettlement.profit_month_id == profit_month_id)
+        .order_by(ProjectSettlement.computed_at.desc(), ProjectSettlement.id.desc())
+        .all()
+    )
+    latest_by_project_pk: dict[int, ProjectSettlement] = {}
+    for row in rows:
+        latest_by_project_pk.setdefault(row.project_id, row)
+
+    projects = db.query(Project).order_by(Project.project_id.asc()).all()
+    public_projects: list[ProjectSettlementPublic] = []
+    revenue_sum = 0
+    expense_sum = 0
+    profit_sum = 0
+    for project in projects:
+        s = latest_by_project_pk.get(project.id)
+        if s is None:
+            continue
+        revenue_sum += int(s.revenue_sum_micro_usdc)
+        expense_sum += int(s.expense_sum_micro_usdc)
+        profit_sum += int(s.profit_sum_micro_usdc)
+        public_projects.append(
+            ProjectSettlementPublic(
+                project_id=project.project_id,
+                profit_month_id=s.profit_month_id,
+                revenue_sum_micro_usdc=int(s.revenue_sum_micro_usdc),
+                expense_sum_micro_usdc=int(s.expense_sum_micro_usdc),
+                profit_sum_micro_usdc=int(s.profit_sum_micro_usdc),
+                profit_nonnegative=bool(s.profit_nonnegative),
+                note=s.note,
+                computed_at=s.computed_at,
+            )
+        )
+
+    result = ConsolidatedSettlementResponse(
+        success=True,
+        data=ConsolidatedSettlementData(
+            profit_month_id=profit_month_id,
+            platform=platform,
+            projects=public_projects,
+            sums=ConsolidatedSettlementProjectsSums(
+                projects_revenue_sum_micro_usdc=revenue_sum,
+                projects_expense_sum_micro_usdc=expense_sum,
+                projects_profit_sum_micro_usdc=profit_sum,
+                projects_with_settlement_count=len(public_projects),
+            ),
+        ),
+    )
+
+    # Coarse ETag: reflect platform (settlement/recon/payout) + latest project settlement timestamps.
+    settlement_ts = int(settlement.computed_at.timestamp()) if settlement else 0
+    reconciliation_ts = int(reconciliation.computed_at.timestamp()) if reconciliation else 0
+    payout_ts = int(payout.created_at.timestamp()) if payout else 0
+    projects_ts = max([int(p.computed_at.timestamp()) for p in public_projects], default=0)
+    response.headers["Cache-Control"] = "public, max-age=30"
+    response.headers["ETag"] = f'W/"settlement-consolidated:{profit_month_id}:{max(settlement_ts, reconciliation_ts, payout_ts, projects_ts)}:{len(public_projects)}"'
     return result
 
 

@@ -351,6 +351,13 @@ export interface paths {
      */
     get: operations["get_settlement_status_api_v1_settlement__profit_month_id__get"];
   };
+  "/api/v1/settlement/{profit_month_id}/consolidated": {
+    /**
+     * Get consolidated settlement view for month
+     * @description Public read endpoint: platform settlement status plus latest per-project settlement rows for the same month.
+     */
+    get: operations["get_consolidated_settlement_status_api_v1_settlement__profit_month_id__consolidated_get"];
+  };
   "/api/v1/discussions/threads": {
     /** List Threads */
     get: operations["list_threads_api_v1_discussions_threads_get"];
@@ -625,6 +632,32 @@ export interface components {
       pr_url: string;
       /** Merge Sha */
       merge_sha?: string | null;
+    };
+    /** ConsolidatedSettlementData */
+    ConsolidatedSettlementData: {
+      /** Profit Month Id */
+      profit_month_id: string;
+      platform: components["schemas"]["SettlementDetailData"];
+      /** Projects */
+      projects: components["schemas"]["ProjectSettlementPublic"][];
+      sums: components["schemas"]["ConsolidatedSettlementProjectsSums"];
+    };
+    /** ConsolidatedSettlementProjectsSums */
+    ConsolidatedSettlementProjectsSums: {
+      /** Projects Revenue Sum Micro Usdc */
+      projects_revenue_sum_micro_usdc: number;
+      /** Projects Expense Sum Micro Usdc */
+      projects_expense_sum_micro_usdc: number;
+      /** Projects Profit Sum Micro Usdc */
+      projects_profit_sum_micro_usdc: number;
+      /** Projects With Settlement Count */
+      projects_with_settlement_count: number;
+    };
+    /** ConsolidatedSettlementResponse */
+    ConsolidatedSettlementResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["ConsolidatedSettlementData"];
     };
     /** DiscussionPostCreateRequest */
     DiscussionPostCreateRequest: {
@@ -3945,6 +3978,31 @@ export interface operations {
       200: {
         content: {
           "application/json": components["schemas"]["SettlementDetailResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /**
+   * Get consolidated settlement view for month
+   * @description Public read endpoint: platform settlement status plus latest per-project settlement rows for the same month.
+   */
+  get_consolidated_settlement_status_api_v1_settlement__profit_month_id__consolidated_get: {
+    parameters: {
+      path: {
+        profit_month_id: string;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ConsolidatedSettlementResponse"];
         };
       };
       /** @description Validation Error */
