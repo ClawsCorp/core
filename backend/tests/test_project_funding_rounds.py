@@ -26,8 +26,6 @@ from src.main import app
 import src.models  # noqa: F401
 from src.models.observed_usdc_transfer import ObservedUsdcTransfer
 from src.models.project import Project, ProjectStatus
-from src.models.project_capital_event import ProjectCapitalEvent
-from src.models.project_funding_deposit import ProjectFundingDeposit
 
 ORACLE_SECRET = "test-oracle-secret"
 
@@ -98,16 +96,17 @@ def _client(_db: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch) -> Test
         app.dependency_overrides.clear()
 
 
-def test_project_capital_sync_creates_capital_events(_client: TestClient, _db: sessionmaker[Session]) -> None:
+def test_project_funding_summary_uses_open_round_and_deposits(_client: TestClient, _db: sessionmaker[Session]) -> None:
     treasury = "0x00000000000000000000000000000000000000aa"
+    from_addr = "0x00000000000000000000000000000000000000cc"
 
     with _db() as db:
         project = Project(
-            project_id="prj_cap",
-            slug="cap",
-            name="Capital",
+            project_id="prj_fund",
+            slug="fund",
+            name="Funding",
             description_md=None,
-            status=ProjectStatus.active,
+            status=ProjectStatus.fundraising,
             proposal_id=None,
             origin_proposal_id=None,
             originator_agent_id=None,
@@ -121,44 +120,52 @@ def test_project_capital_sync_creates_capital_events(_client: TestClient, _db: s
             approved_at=None,
         )
         db.add(project)
-        db.flush()
+        db.commit()
+
+    # Open a funding round.
+    path_open = "/api/v1/oracle/projects/prj_fund/funding-rounds"
+    body_open = json.dumps({"idempotency_key": "fr-open-1", "title": "Round 1", "cap_micro_usdc": 5000}).encode("utf-8")
+    resp_open = _client.post(path_open, content=body_open, headers=_oracle_headers(path_open, body_open, "req-open", idem="idem-open"))
+    assert resp_open.status_code == 200
+    opened = resp_open.json()
+    assert opened["success"] is True
+    assert opened["data"]["status"] == "open"
+    assert opened["data"]["cap_micro_usdc"] == 5000
+
+    # Observe a treasury deposit and run sync.
+    with _db() as db:
         db.add(
             ObservedUsdcTransfer(
                 chain_id=84532,
                 token_address="0x0000000000000000000000000000000000000bbb",
-                from_address="0x00000000000000000000000000000000000000cc",
+                from_address=from_addr,
                 to_address=treasury,
                 amount_micro_usdc=1234,
                 block_number=100,
-                tx_hash="0x" + ("11" * 32),
+                tx_hash="0x" + ("22" * 32),
                 log_index=1,
             )
         )
         db.commit()
 
-    path = "/api/v1/oracle/project-capital-events/sync"
-    body = b"{}"
-    resp = _client.post(path, content=body, headers=_oracle_headers(path, body, "req-1", idem="idem-1"))
+    path_sync = "/api/v1/oracle/project-capital-events/sync"
+    body_sync = b"{}"
+    resp_sync = _client.post(path_sync, content=body_sync, headers=_oracle_headers(path_sync, body_sync, "req-sync", idem="idem-sync"))
+    assert resp_sync.status_code == 200
+    assert resp_sync.json()["success"] is True
+
+    # Public funding summary should show progress and cap table for the open round.
+    resp = _client.get("/api/v1/projects/prj_fund/funding")
     assert resp.status_code == 200
     payload = resp.json()
     assert payload["success"] is True
-    assert payload["data"]["transfers_seen"] == 1
-    assert payload["data"]["capital_events_inserted"] == 1
+    data = payload["data"]
+    assert data["project_id"] == "prj_fund"
+    assert data["open_round"] is not None
+    assert data["open_round"]["title"] == "Round 1"
+    assert data["open_round_raised_micro_usdc"] == 1234
+    assert data["total_raised_micro_usdc"] == 1234
+    assert data["contributors_total_count"] == 1
+    assert data["contributors"][0]["address"] == from_addr.lower()
+    assert data["contributors"][0]["amount_micro_usdc"] == 1234
 
-    with _db() as db:
-        assert db.query(ProjectCapitalEvent).count() == 1
-        assert db.query(ProjectFundingDeposit).count() == 1
-        evt = db.query(ProjectCapitalEvent).first()
-        assert evt is not None
-        assert evt.profit_month_id == "202602"
-        assert evt.delta_micro_usdc == 1234
-        assert evt.source == "treasury_usdc_deposit"
-
-    # Idempotent on second run.
-    resp2 = _client.post(path, content=body, headers=_oracle_headers(path, body, "req-2", idem="idem-2"))
-    assert resp2.status_code == 200
-    assert resp2.json()["data"]["transfers_seen"] == 1
-    assert resp2.json()["data"]["capital_events_inserted"] == 0
-
-    with _db() as db:
-        assert db.query(ProjectFundingDeposit).count() == 1

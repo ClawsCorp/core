@@ -9,6 +9,7 @@ import type {
   MarketplaceGenerateData,
   ProjectCapitalSummary,
   ProjectCapitalReconciliationReport,
+  ProjectFundingSummary,
   ProjectDetail,
   ProjectSummary,
   ProjectDomainsData,
@@ -283,6 +284,10 @@ export const api = {
   },
   getProjectCapitalSummary: async (projectId: string) => {
     const payload = await fetchJSON<Envelope<ProjectCapitalSummary>>(`/api/v1/projects/${projectId}/capital`);
+    return payload.data;
+  },
+  getProjectFundingSummary: async (projectId: string) => {
+    const payload = await fetchJSON<Envelope<ProjectFundingSummary>>(`/api/v1/projects/${projectId}/funding`);
     return payload.data;
   },
   getProjectCapitalReconciliationLatest: async (projectId: string) => {

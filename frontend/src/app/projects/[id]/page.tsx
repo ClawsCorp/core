@@ -12,13 +12,23 @@ import { api, readErrorMessage } from "@/lib/api";
 import { getAgentApiKey } from "@/lib/agentKey";
 import { getExplorerBaseUrl } from "@/lib/env";
 import { formatMicroUsdc } from "@/lib/format";
-import type { AccountingMonthSummary, BountyFundingSource, BountyPublic, ProjectCapitalSummary, ProjectDetail, ProjectDomainPublic, StatsData } from "@/types";
+import type {
+  AccountingMonthSummary,
+  BountyFundingSource,
+  BountyPublic,
+  ProjectCapitalSummary,
+  ProjectDetail,
+  ProjectDomainPublic,
+  ProjectFundingSummary,
+  StatsData,
+} from "@/types";
 
 export default function ProjectDetailPage({ params }: { params: { id: string } }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [capital, setCapital] = useState<ProjectCapitalSummary | null>(null);
+  const [funding, setFunding] = useState<ProjectFundingSummary | null>(null);
   const [bounties, setBounties] = useState<BountyPublic[]>([]);
   const [stats, setStats] = useState<StatsData | null>(null);
   const [accountingMonths, setAccountingMonths] = useState<AccountingMonthSummary[]>([]);
@@ -39,9 +49,10 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
     setLoading(true);
     setError(null);
     try {
-      const [projectResult, capitalResult, bountiesResult, statsResult, accountingResult, domainsResult] = await Promise.all([
+      const [projectResult, capitalResult, fundingResult, bountiesResult, statsResult, accountingResult, domainsResult] = await Promise.all([
         api.getProject(params.id),
         api.getProjectCapitalSummary(params.id),
+        api.getProjectFundingSummary(params.id).catch(() => null),
         api.getBounties({ projectId: params.id }),
         api.getStats().catch(() => null),
         api.getAccountingMonths({ projectId: params.id, limit: 6, offset: 0 }).catch(() => null),
@@ -49,6 +60,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
       ]);
       setProject(projectResult);
       setCapital(capitalResult);
+      setFunding(fundingResult);
       setBounties(bountiesResult.items);
       setStats(statsResult);
       setAccountingMonths(accountingResult?.items ?? []);
@@ -137,6 +149,19 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
   const projectReconcileCommand = `PYTHONPATH=src python -m oracle_runner project-reconcile --project-id ${params.id}`;
   const projectRevenueReconcileCommand = `PYTHONPATH=src python -m oracle_runner reconcile-project-revenue --project-id ${params.id}`;
   const projectMonthCommand = `PYTHONPATH=src python -m oracle_runner run-project-month --project-id ${params.id}`;
+
+  const fundingProgress = useMemo(() => {
+    if (!funding?.open_round) {
+      return null;
+    }
+    const cap = funding.open_round.cap_micro_usdc;
+    if (!cap || cap <= 0) {
+      return null;
+    }
+    const raised = funding.open_round_raised_micro_usdc ?? 0;
+    const pct = Math.max(0, Math.min(100, Math.floor((raised / cap) * 100)));
+    return { cap, raised, pct };
+  }, [funding]);
 
   const onCreate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -252,6 +277,39 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
               {revenueMaxAgeSeconds !== null ? <> (max_age_seconds={revenueMaxAgeSeconds})</> : null}
               {revenueAgeSeconds !== null ? <> (age={revenueAgeSeconds}s)</> : null}
             </p>
+            <h3>Funding</h3>
+            <p>
+              open_round: {funding?.open_round ? `${funding.open_round.round_id}${funding.open_round.title ? ` (${funding.open_round.title})` : ""}` : "—"}
+            </p>
+            <p>
+              round_raised: {formatMicroUsdc(funding?.open_round_raised_micro_usdc ?? null)}
+              {funding?.open_round?.cap_micro_usdc ? <> / {formatMicroUsdc(funding.open_round.cap_micro_usdc)}</> : null}
+            </p>
+            {fundingProgress ? (
+              <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 8, marginBottom: 12 }}>
+                <div style={{ height: 10, borderRadius: 6, background: "#eee", overflow: "hidden" }}>
+                  <div style={{ width: `${fundingProgress.pct}%`, height: 10, background: "#111" }} />
+                </div>
+                <p style={{ marginTop: 8 }}>progress: {fundingProgress.pct}%</p>
+              </div>
+            ) : null}
+            <p>total_raised: {formatMicroUsdc(funding?.total_raised_micro_usdc ?? null)}</p>
+            <p>contributors: {funding?.contributors_total_count ?? 0}</p>
+            {funding?.contributors?.length ? (
+              <div>
+                <p>cap_table (top {funding.contributors.length})</p>
+                <ul>
+                  {funding.contributors.map((c) => (
+                    <li key={c.address}>
+                      {c.address.slice(0, 8)}...{c.address.slice(-6)}: {formatMicroUsdc(c.amount_micro_usdc)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <p>cap_table: —</p>
+            )}
+            <p>last_deposit_at: {funding?.last_deposit_at ?? "—"}</p>
             <p>
               app_surface: <Link href={`/apps/${project.slug}`}>/apps/{project.slug}</Link>
             </p>

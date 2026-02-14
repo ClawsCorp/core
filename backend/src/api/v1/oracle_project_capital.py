@@ -18,6 +18,8 @@ from src.models.observed_usdc_transfer import ObservedUsdcTransfer
 from src.models.project import Project
 from src.models.project_capital_event import ProjectCapitalEvent
 from src.models.project_capital_reconciliation_report import ProjectCapitalReconciliationReport
+from src.models.project_funding_deposit import ProjectFundingDeposit
+from src.models.project_funding_round import ProjectFundingRound
 from src.schemas.oracle_projects import (
     ProjectCapitalReconciliationRunResponse,
     ProjectCapitalSyncData,
@@ -28,6 +30,12 @@ from src.schemas.oracle_projects import (
 )
 from src.schemas.project import ProjectCapitalEventCreateRequest, ProjectCapitalEventDetailResponse, ProjectCapitalEventPublic
 from src.schemas.project import ProjectCapitalReconciliationReportPublic
+from src.schemas.project_funding import (
+    ProjectFundingRoundCloseRequest,
+    ProjectFundingRoundCreateRequest,
+    ProjectFundingRoundCreateResponse,
+    ProjectFundingRoundPublic,
+)
 from src.services.blockchain import (
     BlockchainConfigError,
     BlockchainReadError,
@@ -134,9 +142,11 @@ async def sync_project_capital_from_observed_usdc_transfers(
         .all()
     )
     addr_to_project: dict[str, tuple[int, str]] = {}
+    project_db_ids: list[int] = []
     for pid, public_id, addr in projects:
         if addr:
             addr_to_project[str(addr).lower()] = (int(pid), str(public_id))
+            project_db_ids.append(int(pid))
 
     if not addr_to_project:
         _record_oracle_audit(request, db, body_hash, request_id, sync_idem, commit=True)
@@ -148,6 +158,20 @@ async def sync_project_capital_from_observed_usdc_transfers(
                 projects_with_treasury_count=0,
             ),
         )
+
+    # Attach funding deposits to the latest open funding round (if any).
+    open_round_by_project: dict[int, int] = {}
+    if project_db_ids:
+        rounds = (
+            db.query(ProjectFundingRound)
+            .filter(ProjectFundingRound.project_id.in_(project_db_ids), ProjectFundingRound.status == "open")
+            .order_by(ProjectFundingRound.opened_at.desc(), ProjectFundingRound.id.desc())
+            .all()
+        )
+        for r in rounds:
+            pid = int(r.project_id)
+            if pid not in open_round_by_project:
+                open_round_by_project[pid] = int(r.id)
 
     transfers = (
         db.query(ObservedUsdcTransfer)
@@ -200,6 +224,27 @@ async def sync_project_capital_from_observed_usdc_transfers(
         if created:
             inserted += 1
 
+        dep = ProjectFundingDeposit(
+            deposit_id=f"pfdep_{secrets.token_hex(8)}",
+            project_id=project_db_id,
+            funding_round_id=open_round_by_project.get(project_db_id),
+            observed_transfer_id=int(t.id),
+            chain_id=int(t.chain_id),
+            from_address=str(t.from_address).lower(),
+            to_address=str(t.to_address).lower(),
+            amount_micro_usdc=int(t.amount_micro_usdc),
+            block_number=int(t.block_number),
+            tx_hash=str(t.tx_hash).lower(),
+            log_index=int(t.log_index),
+            observed_at=t.observed_at,
+        )
+        insert_or_get_by_unique(
+            db,
+            instance=dep,
+            model=ProjectFundingDeposit,
+            unique_filter={"observed_transfer_id": int(t.id)},
+        )
+
     _record_oracle_audit(request, db, body_hash, request_id, sync_idem, commit=False)
     db.commit()
     return ProjectCapitalSyncResponse(
@@ -210,6 +255,99 @@ async def sync_project_capital_from_observed_usdc_transfers(
             projects_with_treasury_count=len(addr_to_project),
         ),
     )
+
+
+def _funding_round_public(project_id: str, row: ProjectFundingRound) -> ProjectFundingRoundPublic:
+    return ProjectFundingRoundPublic(
+        round_id=row.round_id,
+        project_id=project_id,
+        title=row.title,
+        status=row.status,
+        cap_micro_usdc=int(row.cap_micro_usdc) if row.cap_micro_usdc is not None else None,
+        opened_at=row.opened_at,
+        closed_at=row.closed_at,
+        created_at=row.created_at,
+    )
+
+
+@router.post("/projects/{project_id}/funding-rounds", response_model=ProjectFundingRoundCreateResponse)
+async def open_project_funding_round(
+    project_id: str,
+    payload: ProjectFundingRoundCreateRequest,
+    request: Request,
+    _: str = Depends(require_oracle_hmac),
+    db: Session = Depends(get_db),
+) -> ProjectFundingRoundCreateResponse:
+    project = db.query(Project).filter(Project.project_id == project_id).first()
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    request_id = request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID") or str(uuid4())
+    body_hash = request.state.body_hash
+
+    existing_open = (
+        db.query(ProjectFundingRound)
+        .filter(ProjectFundingRound.project_id == project.id, ProjectFundingRound.status == "open")
+        .order_by(ProjectFundingRound.opened_at.desc(), ProjectFundingRound.id.desc())
+        .first()
+    )
+    if existing_open is not None and str(existing_open.idempotency_key) != str(payload.idempotency_key):
+        _record_oracle_audit(request, db, body_hash, request_id, payload.idempotency_key, commit=True)
+        return ProjectFundingRoundCreateResponse(success=False, data=None, blocked_reason="funding_round_already_open")
+
+    row = ProjectFundingRound(
+        round_id=f"fr_{secrets.token_hex(8)}",
+        idempotency_key=payload.idempotency_key,
+        project_id=int(project.id),
+        title=payload.title,
+        status="open",
+        cap_micro_usdc=int(payload.cap_micro_usdc) if payload.cap_micro_usdc is not None else None,
+    )
+    row, _ = insert_or_get_by_unique(
+        db,
+        instance=row,
+        model=ProjectFundingRound,
+        unique_filter={"idempotency_key": payload.idempotency_key},
+    )
+    _record_oracle_audit(request, db, body_hash, request_id, payload.idempotency_key, commit=False)
+    db.commit()
+    db.refresh(row)
+    return ProjectFundingRoundCreateResponse(success=True, data=_funding_round_public(project.project_id, row), blocked_reason=None)
+
+
+@router.post("/projects/{project_id}/funding-rounds/{round_id}/close", response_model=ProjectFundingRoundCreateResponse)
+async def close_project_funding_round(
+    project_id: str,
+    round_id: str,
+    payload: ProjectFundingRoundCloseRequest,
+    request: Request,
+    _: str = Depends(require_oracle_hmac),
+    db: Session = Depends(get_db),
+) -> ProjectFundingRoundCreateResponse:
+    project = db.query(Project).filter(Project.project_id == project_id).first()
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    row = (
+        db.query(ProjectFundingRound)
+        .filter(ProjectFundingRound.project_id == project.id, ProjectFundingRound.round_id == round_id)
+        .first()
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Funding round not found")
+
+    request_id = request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID") or str(uuid4())
+    body_hash = request.state.body_hash
+
+    if row.status != "closed":
+        row.status = "closed"
+        row.closed_at = func.now()
+        db.add(row)
+
+    _record_oracle_audit(request, db, body_hash, request_id, payload.idempotency_key, commit=False)
+    db.commit()
+    db.refresh(row)
+    return ProjectFundingRoundCreateResponse(success=True, data=_funding_round_public(project.project_id, row), blocked_reason=None)
 
 
 @router.post("/projects/{project_id}/treasury", response_model=ProjectTreasurySetResponse)
