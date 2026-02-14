@@ -41,6 +41,7 @@ class _FakeClientAutonomy:
                 "author_shares": [1],
             },
             "/api/v1/oracle/distributions/202501/execute": {"status": "submitted", "tx_hash": "0xexec"},
+            "/api/v1/oracle/payouts/202501/sync": {"status": "ok", "executed_at": "2026-01-01T00:00:00Z"},
             "/api/v1/oracle/payouts/202501/confirm": {"status": "confirmed", "tx_hash": "0xconfirm"},
         }
 
@@ -77,4 +78,3 @@ def test_autonomy_loop_once_prints_single_json(monkeypatch, capsys) -> None:
     assert payload["success"] is True
     assert "run_month" in payload
     assert payload["run_month"]["success"] is True
-

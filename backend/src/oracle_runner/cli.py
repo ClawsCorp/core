@@ -375,19 +375,45 @@ def _run_month_flow(
         return 3, summary
 
     if not rec.get("ready"):
-        prog("reconcile", "blocked")
+        blocked_reason = str(rec.get("blocked_reason") or "")
+        delta = int(rec.get("delta_micro_usdc") or 0)  # distributor_balance - profit_sum
+
+        # Autonomy: if we are under-funded (delta < 0), try to enqueue a top-up transfer.
+        # This is the expected path for a fresh month where profit was computed but USDC
+        # has not been deposited into DividendDistributor yet.
+        if blocked_reason == "balance_mismatch" and delta < 0:
+            try:
+                prog("deposit_profit", "start")
+                deposit = _post_action(client, f"/api/v1/oracle/settlement/{month}/deposit-profit", b"")
+                summary["deposit_profit"] = deposit
+            except OracleRunnerError as exc:
+                prog("deposit_profit", "error", str(exc))
+                summary["failed_step"] = "deposit_profit"
+                summary["error"] = str(exc)
+                return 4, summary
+
+            if deposit.get("status") == "blocked":
+                prog("deposit_profit", "blocked", str(deposit.get("blocked_reason") or "blocked"))
+                summary["failed_step"] = "deposit_profit"
+                return 4, summary
+
+            # Deposit task is submitted/queued; wait for tx-worker and then rerun run-month.
+            prog("deposit_profit", "pending", str(deposit.get("task_id") or deposit.get("tx_hash") or "submitted"))
+            summary["failed_step"] = "deposit_profit"
+            return 11, summary
+
+        prog("reconcile", "blocked", blocked_reason or None)
         summary["failed_step"] = "reconcile"
         return 4, summary
+
     prog("reconcile", "ok")
 
+    # Reconciliation is strict-ready, so deposit-profit should normally be a no-op/blocked(already_funded).
     try:
         prog("deposit_profit", "start")
         deposit = _post_action(client, f"/api/v1/oracle/settlement/{month}/deposit-profit", b"")
         summary["deposit_profit"] = deposit
-        if deposit.get("status") == "blocked":
-            prog("deposit_profit", "blocked", str(deposit.get("blocked_reason") or "blocked"))
-        else:
-            prog("deposit_profit", "ok")
+        prog("deposit_profit", "ok" if deposit.get("status") != "blocked" else "blocked", str(deposit.get("blocked_reason") or "ok"))
     except OracleRunnerError as exc:
         prog("deposit_profit", "error", str(exc))
         summary["failed_step"] = "deposit_profit"
@@ -453,6 +479,21 @@ def _run_month_flow(
         summary["failed_step"] = "execute_distribution"
         return 9, summary
     prog("execute_distribution", "ok")
+
+    try:
+        prog("sync_payout", "start")
+        sync = _post_action(
+            client,
+            f"/api/v1/oracle/payouts/{month}/sync",
+            b"{}",
+        )
+        summary["sync_payout"] = sync
+        prog("sync_payout", "ok" if sync.get("status") != "blocked" else "blocked", str(sync.get("blocked_reason") or "ok"))
+    except OracleRunnerError as exc:
+        prog("sync_payout", "error", str(exc))
+        summary["failed_step"] = "sync_payout"
+        summary["error"] = str(exc)
+        return 9, summary
 
     try:
         prog("confirm_payout", "start")
