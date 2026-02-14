@@ -5,6 +5,9 @@ import hashlib
 import json
 import re
 import sys
+from datetime import datetime, timedelta, timezone
+import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -13,9 +16,25 @@ from .client import OracleClient, OracleRunnerError, load_config_from_env, to_js
 _MONTH_RE = re.compile(r"^\d{6}$")
 
 
-def _validate_month(month: str) -> str:
+def _auto_month_utc_prev() -> str:
+    override = os.getenv("ORACLE_AUTO_MONTH", "").strip()
+    if override:
+        if not _MONTH_RE.fullmatch(override):
+            raise OracleRunnerError("ORACLE_AUTO_MONTH must be in YYYYMM format when set.")
+        return override
+    now = datetime.now(timezone.utc)
+    first = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    # Previous month: subtract 1 day from the first of this month.
+    prev = first - timedelta(days=1)
+    return prev.strftime("%Y%m")
+
+
+def _resolve_month_arg(raw: str | None) -> str:
+    month = str(raw or "auto").strip()
+    if month.lower() == "auto":
+        return _auto_month_utc_prev()
     if not _MONTH_RE.fullmatch(month):
-        raise OracleRunnerError("--month must be in YYYYMM format.")
+        raise OracleRunnerError("--month must be in YYYYMM format (or 'auto').")
     return month
 
 
@@ -134,6 +153,7 @@ def _derive_execute_idempotency_key(month: str, payload: dict[str, Any]) -> str:
     canonical = json.dumps(payload, separators=(",", ":"), ensure_ascii=True, sort_keys=True)
     digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
     return f"execute_distribution:{month}:{digest}"
+
 
 def _derive_idempotency_key(prefix: str, payload: dict[str, Any]) -> str:
     canonical = json.dumps(payload, separators=(",", ":"), ensure_ascii=True, sort_keys=True)
@@ -258,7 +278,12 @@ def build_parser() -> argparse.ArgumentParser:
     deposit_profit.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
 
     run_month = subparsers.add_parser("run-month")
-    run_month.add_argument("--month", required=True)
+    run_month.add_argument(
+        "--month",
+        required=False,
+        default="auto",
+        help="Target profit month in YYYYMM format. Use 'auto' (default) to run for the previous month (UTC).",
+    )
     run_month.add_argument(
         "--execute-payload",
         help="Path to execute payload JSON file, or 'auto' to fetch from API.",
@@ -275,6 +300,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     tx_worker.add_argument("--worker-id", default="oracle_runner")
     tx_worker.add_argument("--max-tasks", type=int, default=1)
+    tx_worker.add_argument("--loop", action="store_true", help="Run continuously until interrupted.")
+    tx_worker.add_argument("--sleep-seconds", type=int, default=5, help="Sleep time between loop iterations when idle.")
     tx_worker.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
 
     return parser
@@ -299,7 +326,7 @@ def run(argv: list[str] | None = None) -> int:
         client = OracleClient(config)
 
         if args.command == "reconcile":
-            month = _validate_month(args.month)
+            month = _resolve_month_arg(args.month)
             data = _post_action(client, f"/api/v1/oracle/reconciliation/{month}", b"")
             if json_mode:
                 _print_json(data)
@@ -457,7 +484,7 @@ def run(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "create-distribution":
-            month = _validate_month(args.month)
+            month = _resolve_month_arg(args.month)
             data = _post_action(client, f"/api/v1/oracle/distributions/{month}/create", b"")
             if json_mode:
                 _print_json(data)
@@ -466,7 +493,7 @@ def run(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "build-execute-payload":
-            month = _validate_month(args.month)
+            month = _resolve_month_arg(args.month)
             out_path = str(getattr(args, "out", "") or "").strip()
             if not json_mode and not out_path:
                 raise OracleRunnerError("--out is required unless --json is used.")
@@ -509,7 +536,7 @@ def run(argv: list[str] | None = None) -> int:
             return 0 if status == "ok" else 2
 
         if args.command == "execute-distribution":
-            month = _validate_month(args.month)
+            month = _resolve_month_arg(args.month)
             if str(args.payload).strip().lower() == "auto":
                 built = _post_action(client, f"/api/v1/oracle/distributions/{month}/execute/payload", b"{}")
                 payload = {
@@ -537,7 +564,7 @@ def run(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "confirm-payout":
-            month = _validate_month(args.month)
+            month = _resolve_month_arg(args.month)
             body = {} if args.tx_hash is None else {"tx_hash": args.tx_hash}
             data = _post_action(
                 client,
@@ -551,7 +578,7 @@ def run(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "sync-payout":
-            month = _validate_month(args.month)
+            month = _resolve_month_arg(args.month)
             body = {} if args.tx_hash is None else {"tx_hash": args.tx_hash}
             data = _post_action(
                 client,
@@ -565,7 +592,7 @@ def run(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "deposit-profit":
-            month = _validate_month(args.month)
+            month = _resolve_month_arg(args.month)
             data = _post_action(client, f"/api/v1/oracle/settlement/{month}/deposit-profit", b"")
             if json_mode:
                 _print_json(data)
@@ -584,7 +611,7 @@ def run(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "run-month":
-            month = _validate_month(args.month)
+            month = _resolve_month_arg(args.month)
             summary: dict[str, Any] = {"month": month, "success": False}
 
             try:
@@ -714,186 +741,216 @@ def run(argv: list[str] | None = None) -> int:
                 submit_execute_distribution_tx,
             )
 
+            if bool(args.loop) and json_mode:
+                raise OracleRunnerError("--loop is not compatible with --json (streaming mode).")
+
             worker_id = str(args.worker_id).strip() or "oracle_runner"
             max_tasks = max(1, min(int(args.max_tasks), 50))
+            sleep_seconds = max(1, int(args.sleep_seconds))
+
             processed: list[dict[str, Any]] = []
+            while True:
+                processed_this_loop = 0
+                for _ in range(max_tasks):
+                    claim_path = "/api/v1/oracle/tx-outbox/claim-next"
+                    claim_body = to_json_bytes({"worker_id": worker_id})
+                    claim_resp = client.post(claim_path, body_bytes=claim_body)
 
-            for _ in range(max_tasks):
-                claim_path = "/api/v1/oracle/tx-outbox/claim-next"
-                claim_body = to_json_bytes({"worker_id": worker_id})
-                claim_resp = client.post(claim_path, body_bytes=claim_body)
+                    claim_data = _extract_data(claim_resp.data)
+                    task = claim_data.get("task")
+                    blocked_reason = claim_data.get("blocked_reason")
+                    if not isinstance(task, dict):
+                        if bool(args.loop):
+                            _print_progress("tx_worker", "pending", detail=str(blocked_reason or "no_tasks"))
+                            break
+                        if json_mode:
+                            _print_json(
+                                {
+                                    "success": True,
+                                    "command": command,
+                                    "status": "pending",
+                                    "blocked_reason": blocked_reason,
+                                    "processed": processed,
+                                }
+                            )
+                        else:
+                            _print_progress("tx_worker", "pending", detail=str(blocked_reason or "no_tasks"))
+                        return 0
 
-                claim_data = _extract_data(claim_resp.data)
-                task = claim_data.get("task")
-                blocked_reason = claim_data.get("blocked_reason")
-                if not isinstance(task, dict):
-                    if json_mode:
-                        _print_json(
+                    task_id = str(task.get("task_id") or "")
+                    task_type = str(task.get("task_type") or "")
+                    payload = task.get("payload") if isinstance(task.get("payload"), dict) else {}
+                    idem = str(task.get("idempotency_key") or payload.get("idempotency_key") or "")
+                    existing_tx_hash = str(task.get("tx_hash") or "")
+
+                    def _update(tx_hash: str | None, result: dict[str, Any] | None) -> None:
+                        update_path = f"/api/v1/oracle/tx-outbox/{task_id}/update"
+                        client.post(
+                            update_path,
+                            body_bytes=to_json_bytes({"tx_hash": tx_hash, "result": result}),
+                        )
+
+                    def _complete(status: str, error_hint: str | None) -> None:
+                        complete_path = f"/api/v1/oracle/tx-outbox/{task_id}/complete"
+                        client.post(
+                            complete_path,
+                            body_bytes=to_json_bytes(
+                                {
+                                    "status": status,
+                                    "error_hint": error_hint,
+                                }
+                            ),
+                        )
+
+                    try:
+                        if task_type == "create_distribution":
+                            profit_month_id = str(payload.get("profit_month_id") or "")
+                            profit_month_value = int(payload.get("profit_month_value"))
+                            profit_sum = int(payload.get("profit_sum_micro_usdc"))
+                            tx_hash = existing_tx_hash or submit_create_distribution_tx(
+                                profit_month_value=profit_month_value,
+                                total_profit_micro_usdc=profit_sum,
+                            )
+                            # Persist early so we can resume after a crash.
+                            _update(tx_hash, {"stage": "submitted"})
+                            client.post(
+                                f"/api/v1/oracle/distributions/{profit_month_id}/create/record",
+                                body_bytes=to_json_bytes(
+                                    {
+                                        "idempotency_key": idem,
+                                        "profit_sum_micro_usdc": profit_sum,
+                                        "tx_hash": tx_hash,
+                                    }
+                                ),
+                            )
+                            _update(tx_hash, {"stage": "recorded"})
+                            _complete("succeeded", None)
+                            processed.append(
+                                {
+                                    "task_id": task_id,
+                                    "task_type": task_type,
+                                    "status": "succeeded",
+                                    "tx_hash": tx_hash,
+                                }
+                            )
+                            processed_this_loop += 1
+                            if bool(args.loop):
+                                _print_progress("tx_worker_task", "ok", detail=f"{task_type} {task_id}")
+                            continue
+
+                        if task_type == "execute_distribution":
+                            profit_month_id = str(payload.get("profit_month_id") or "")
+                            profit_month_value = int(payload.get("profit_month_value"))
+                            stakers = list(payload.get("stakers") or [])
+                            staker_shares = list(payload.get("staker_shares") or [])
+                            authors = list(payload.get("authors") or [])
+                            author_shares = list(payload.get("author_shares") or [])
+                            total_profit = int(payload.get("total_profit_micro_usdc"))
+                            stakers_count = int(payload.get("stakers_count"))
+                            authors_count = int(payload.get("authors_count"))
+
+                            tx_hash = existing_tx_hash or submit_execute_distribution_tx(
+                                profit_month_value=profit_month_value,
+                                stakers=stakers,
+                                staker_shares=staker_shares,
+                                authors=authors,
+                                author_shares=author_shares,
+                            )
+                            _update(tx_hash, {"stage": "submitted"})
+                            client.post(
+                                f"/api/v1/oracle/distributions/{profit_month_id}/execute/record",
+                                body_bytes=to_json_bytes(
+                                    {
+                                        "idempotency_key": idem,
+                                        "tx_hash": tx_hash,
+                                        "total_profit_micro_usdc": total_profit,
+                                        "stakers_count": stakers_count,
+                                        "authors_count": authors_count,
+                                    }
+                                ),
+                            )
+                            _update(tx_hash, {"stage": "recorded"})
+                            _complete("succeeded", None)
+                            processed.append(
+                                {
+                                    "task_id": task_id,
+                                    "task_type": task_type,
+                                    "status": "succeeded",
+                                    "tx_hash": tx_hash,
+                                }
+                            )
+                            processed_this_loop += 1
+                            if bool(args.loop):
+                                _print_progress("tx_worker_task", "ok", detail=f"{task_type} {task_id}")
+                            continue
+
+                        if task_type == "deposit_profit":
+                            profit_month_id = str(payload.get("profit_month_id") or "")
+                            amount = int(payload.get("amount_micro_usdc"))
+                            to_address = str(payload.get("to_address") or "")
+
+                            tx_hash = existing_tx_hash or submit_usdc_transfer_tx(
+                                to_address=to_address,
+                                amount_micro_usdc=amount,
+                            )
+                            _update(tx_hash, {"stage": "submitted"})
+                            # No additional record endpoint needed; reconciliation is the source of truth.
+                            _update(tx_hash, {"stage": "submitted_only"})
+                            _complete("succeeded", None)
+                            processed.append(
+                                {
+                                    "task_id": task_id,
+                                    "task_type": task_type,
+                                    "status": "succeeded",
+                                    "tx_hash": tx_hash,
+                                    "profit_month_id": profit_month_id,
+                                    "amount_micro_usdc": amount,
+                                }
+                            )
+                            processed_this_loop += 1
+                            if bool(args.loop):
+                                _print_progress("tx_worker_task", "ok", detail=f"{task_type} {task_id}")
+                            continue
+
+                        _complete("failed", "unknown_task_type")
+                        processed.append(
                             {
-                                "success": True,
-                                "command": command,
-                                "status": "pending",
-                                "blocked_reason": blocked_reason,
-                                "processed": processed,
+                                "task_id": task_id,
+                                "task_type": task_type,
+                                "status": "failed",
+                                "error_hint": "unknown_task_type",
                             }
                         )
+                        processed_this_loop += 1
+                        if bool(args.loop):
+                            _print_progress("tx_worker_task", "error", detail=f"{task_type} {task_id} unknown_task_type")
+                    except (BlockchainConfigError, BlockchainTxError) as exc:
+                        hint = getattr(exc, "error_hint", None) or "tx_error"
+                        _update(existing_tx_hash or None, {"stage": "failed", "error_hint": hint})
+                        _complete("failed", hint)
+                        processed.append(
+                            {
+                                "task_id": task_id,
+                                "task_type": task_type,
+                                "status": "failed",
+                                "error_hint": hint,
+                            }
+                        )
+                        processed_this_loop += 1
+                        if bool(args.loop):
+                            _print_progress("tx_worker_task", "error", detail=f"{task_type} {task_id} {hint}")
+
+                if not bool(args.loop):
+                    if json_mode:
+                        _print_json({"success": True, "command": command, "status": "ok", "processed": processed})
                     else:
-                        _print_progress("tx_worker", "pending", detail=str(blocked_reason or "no_tasks"))
+                        _print_progress("tx_worker", "ok", detail=f"processed={len(processed)}")
                     return 0
 
-                task_id = str(task.get("task_id") or "")
-                task_type = str(task.get("task_type") or "")
-                payload = task.get("payload") if isinstance(task.get("payload"), dict) else {}
-                idem = str(task.get("idempotency_key") or payload.get("idempotency_key") or "")
-                existing_tx_hash = str(task.get("tx_hash") or "")
-
-                def _update(tx_hash: str | None, result: dict[str, Any] | None) -> None:
-                    update_path = f"/api/v1/oracle/tx-outbox/{task_id}/update"
-                    client.post(
-                        update_path,
-                        body_bytes=to_json_bytes({"tx_hash": tx_hash, "result": result}),
-                    )
-
-                def _complete(status: str, error_hint: str | None) -> None:
-                    complete_path = f"/api/v1/oracle/tx-outbox/{task_id}/complete"
-                    client.post(
-                        complete_path,
-                        body_bytes=to_json_bytes(
-                            {
-                                "status": status,
-                                "error_hint": error_hint,
-                            }
-                        ),
-                    )
-
-                try:
-                    if task_type == "create_distribution":
-                        profit_month_id = str(payload.get("profit_month_id") or "")
-                        profit_month_value = int(payload.get("profit_month_value"))
-                        profit_sum = int(payload.get("profit_sum_micro_usdc"))
-                        tx_hash = existing_tx_hash or submit_create_distribution_tx(
-                            profit_month_value=profit_month_value,
-                            total_profit_micro_usdc=profit_sum,
-                        )
-                        # Persist early so we can resume after a crash.
-                        _update(tx_hash, {"stage": "submitted"})
-                        client.post(
-                            f"/api/v1/oracle/distributions/{profit_month_id}/create/record",
-                            body_bytes=to_json_bytes(
-                                {
-                                    "idempotency_key": idem,
-                                    "profit_sum_micro_usdc": profit_sum,
-                                    "tx_hash": tx_hash,
-                                }
-                            ),
-                        )
-                        _update(tx_hash, {"stage": "recorded"})
-                        _complete("succeeded", None)
-                        processed.append(
-                            {
-                                "task_id": task_id,
-                                "task_type": task_type,
-                                "status": "succeeded",
-                                "tx_hash": tx_hash,
-                            }
-                        )
-                        continue
-
-                    if task_type == "execute_distribution":
-                        profit_month_id = str(payload.get("profit_month_id") or "")
-                        profit_month_value = int(payload.get("profit_month_value"))
-                        stakers = list(payload.get("stakers") or [])
-                        staker_shares = list(payload.get("staker_shares") or [])
-                        authors = list(payload.get("authors") or [])
-                        author_shares = list(payload.get("author_shares") or [])
-                        total_profit = int(payload.get("total_profit_micro_usdc"))
-                        stakers_count = int(payload.get("stakers_count"))
-                        authors_count = int(payload.get("authors_count"))
-
-                        tx_hash = existing_tx_hash or submit_execute_distribution_tx(
-                            profit_month_value=profit_month_value,
-                            stakers=stakers,
-                            staker_shares=staker_shares,
-                            authors=authors,
-                            author_shares=author_shares,
-                        )
-                        _update(tx_hash, {"stage": "submitted"})
-                        client.post(
-                            f"/api/v1/oracle/distributions/{profit_month_id}/execute/record",
-                            body_bytes=to_json_bytes(
-                                {
-                                    "idempotency_key": idem,
-                                    "tx_hash": tx_hash,
-                                    "total_profit_micro_usdc": total_profit,
-                                    "stakers_count": stakers_count,
-                                    "authors_count": authors_count,
-                                }
-                            ),
-                        )
-                        _update(tx_hash, {"stage": "recorded"})
-                        _complete("succeeded", None)
-                        processed.append(
-                            {
-                                "task_id": task_id,
-                                "task_type": task_type,
-                                "status": "succeeded",
-                                "tx_hash": tx_hash,
-                            }
-                        )
-                        continue
-
-                    if task_type == "deposit_profit":
-                        profit_month_id = str(payload.get("profit_month_id") or "")
-                        amount = int(payload.get("amount_micro_usdc"))
-                        to_address = str(payload.get("to_address") or "")
-
-                        tx_hash = existing_tx_hash or submit_usdc_transfer_tx(
-                            to_address=to_address,
-                            amount_micro_usdc=amount,
-                        )
-                        _update(tx_hash, {"stage": "submitted"})
-                        # No additional record endpoint needed; reconciliation is the source of truth.
-                        _update(tx_hash, {"stage": "submitted_only"})
-                        _complete("succeeded", None)
-                        processed.append(
-                            {
-                                "task_id": task_id,
-                                "task_type": task_type,
-                                "status": "succeeded",
-                                "tx_hash": tx_hash,
-                                "profit_month_id": profit_month_id,
-                                "amount_micro_usdc": amount,
-                            }
-                        )
-                        continue
-
-                    _complete("failed", "unknown_task_type")
-                    processed.append(
-                        {
-                            "task_id": task_id,
-                            "task_type": task_type,
-                            "status": "failed",
-                            "error_hint": "unknown_task_type",
-                        }
-                    )
-                except (BlockchainConfigError, BlockchainTxError) as exc:
-                    hint = getattr(exc, "error_hint", None) or "tx_error"
-                    _update(existing_tx_hash or None, {"stage": "failed", "error_hint": hint})
-                    _complete("failed", hint)
-                    processed.append(
-                        {
-                            "task_id": task_id,
-                            "task_type": task_type,
-                            "status": "failed",
-                            "error_hint": hint,
-                        }
-                    )
-
-            if json_mode:
-                _print_json({"success": True, "command": command, "status": "ok", "processed": processed})
-            else:
-                _print_progress("tx_worker", "ok", detail=f"processed={len(processed)}")
-            return 0
+                # Loop mode: avoid unbounded memory growth.
+                processed.clear()
+                if processed_this_loop == 0:
+                    time.sleep(sleep_seconds)
 
         parser.error("Unknown command")
     except OracleRunnerError as exc:
