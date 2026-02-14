@@ -29,6 +29,17 @@ Scope (MVP):
 - Verify:
   - `owner()` returns `SAFE_OWNER_ADDRESS`.
 
+Script (Hardhat):
+
+```bash
+cd contracts
+export BASE_SEPOLIA_RPC_URL=...
+export ORACLE_SIGNER_PRIVATE_KEY=...
+export DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS=0x...
+export SAFE_OWNER_ADDRESS=0x...
+npx hardhat run scripts/transfer-dividend-distributor-ownership.js --network baseSepolia
+```
+
 3) Update backend configuration
 
 - Remove any implicit assumption that backend key is the on-chain owner.
@@ -49,4 +60,3 @@ Scope (MVP):
 - Once tx-outbox worker exists, Safe can be integrated as:
   - direct Safe tx submission (propose), or
   - backend becomes pure observer + payload generator, Safe executes.
-
