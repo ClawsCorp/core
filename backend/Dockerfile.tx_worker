@@ -1,0 +1,21 @@
+FROM python:3.11-slim
+
+WORKDIR /app/backend
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends nodejs npm \
+    && rm -rf /var/lib/apt/lists/*
+
+# `tx-worker` executes small Node scripts (ethers) from `CONTRACTS_DIR` as cwd.
+RUN mkdir -p /app/contracts
+COPY contracts/package.json contracts/package-lock.json /app/contracts/
+RUN npm ci --prefix /app/contracts --omit=dev \
+    && npm install --prefix /app/contracts --no-save ethers@6
+
+COPY backend/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY backend/src ./src
+
+CMD ["sh", "-c", "PYTHONPATH=src python -m oracle_runner tx-worker --loop --max-tasks ${TX_WORKER_MAX_TASKS:-10} --sleep-seconds ${TX_WORKER_SLEEP_SECONDS:-5}"]
+

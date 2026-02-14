@@ -62,6 +62,9 @@ class OracleClient:
     def __init__(self, config: OracleClientConfig):
         self._config = config
 
+    def get(self, path: str) -> OracleHttpResponse:
+        return self._request(method="GET", path=path, body_bytes=b"", idempotency_key=None)
+
     def post(
         self,
         path: str,
@@ -69,7 +72,9 @@ class OracleClient:
         body_bytes: bytes,
         idempotency_key: str | None = None,
     ) -> OracleHttpResponse:
-        method = "POST"
+        return self._request(method="POST", path=path, body_bytes=body_bytes, idempotency_key=idempotency_key)
+
+    def _request(self, *, method: str, path: str, body_bytes: bytes, idempotency_key: str | None) -> OracleHttpResponse:
         timestamp = str(int(time.time()))
         request_id = str(uuid4())
         body_hash = hashlib.sha256(body_bytes).hexdigest()
@@ -91,7 +96,7 @@ class OracleClient:
 
         req = request.Request(
             url=f"{self._config.base_url}{path}",
-            data=body_bytes,
+            data=(body_bytes if method != "GET" else None),
             headers=headers,
             method=method,
         )

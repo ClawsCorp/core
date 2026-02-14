@@ -59,6 +59,7 @@ PYTHONPATH=src python -m oracle_runner run-month --execute-payload auto
 PYTHONPATH=src python -m oracle_runner run-month --month 202601 --execute-payload /path/execute.json
 PYTHONPATH=src python -m oracle_runner tx-worker --max-tasks 10
 PYTHONPATH=src python -m oracle_runner tx-worker --loop --max-tasks 10
+PYTHONPATH=src python -m oracle_runner autonomy-loop --loop
 PYTHONPATH=src python -m oracle_runner --json reconcile --month 202601
 PYTHONPATH=src python -m oracle_runner --json reconcile-project-capital --project-id proj_...
 PYTHONPATH=src python -m oracle_runner --json project-reconcile --project-id proj_...

@@ -1,0 +1,80 @@
+from __future__ import annotations
+
+import json
+
+from src.oracle_runner import cli
+
+
+class _FakeClientAutonomy:
+    def __init__(self, _config: object):
+        # Minimal happy-path responses.
+        self._post_responses: dict[str, dict] = {
+            "/api/v1/oracle/project-capital-events/sync": {
+                "transfers_seen": 1,
+                "capital_events_inserted": 1,
+                "projects_with_treasury_count": 1,
+            },
+            "/api/v1/oracle/billing/sync": {
+                "transfers_seen": 0,
+                "billing_events_inserted": 0,
+                "revenue_events_inserted": 0,
+            },
+            "/api/v1/oracle/projects/proj_1/capital/reconciliation": {"ready": True, "delta_micro_usdc": 0},
+            "/api/v1/oracle/projects/proj_1/revenue/reconciliation": {"ready": True, "delta_micro_usdc": 0},
+            "/api/v1/oracle/settlement/202501": {"status": "ok"},
+            "/api/v1/oracle/reconciliation/202501": {"ready": True, "delta_micro_usdc": 0},
+            "/api/v1/oracle/settlement/202501/deposit-profit": {
+                "profit_month_id": "202501",
+                "status": "submitted",
+                "tx_hash": "0xdep",
+                "blocked_reason": None,
+                "idempotency_key": "deposit_profit:202501:123",
+                "task_id": "txo_1",
+                "amount_micro_usdc": 123,
+            },
+            "/api/v1/oracle/distributions/202501/create": {"status": "submitted", "tx_hash": "0xcreate"},
+            "/api/v1/oracle/distributions/202501/execute/payload": {
+                "status": "ok",
+                "stakers": ["0x1"],
+                "staker_shares": [1],
+                "authors": ["0x2"],
+                "author_shares": [1],
+            },
+            "/api/v1/oracle/distributions/202501/execute": {"status": "submitted", "tx_hash": "0xexec"},
+            "/api/v1/oracle/payouts/202501/confirm": {"status": "confirmed", "tx_hash": "0xconfirm"},
+        }
+
+    def get(self, path: str):
+        if path.startswith("/api/v1/projects"):
+            return type(
+                "Resp",
+                (),
+                {"data": {"success": True, "data": {"items": [{"project_id": "proj_1"}], "limit": 100, "offset": 0, "total": 1}}},
+            )()
+        raise AssertionError(f"unexpected GET path {path}")
+
+    def post(self, path: str, *, body_bytes: bytes, idempotency_key: str | None = None):
+        data = self._post_responses.get(path)
+        if data is None:
+            raise AssertionError(f"unexpected POST path {path}")
+        return type("Resp", (), {"data": {"data": data}})()
+
+
+def test_autonomy_loop_once_prints_single_json(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(cli, "load_config_from_env", lambda: object())
+    monkeypatch.setattr(cli, "OracleClient", _FakeClientAutonomy)
+    monkeypatch.setenv("ORACLE_AUTO_MONTH", "202501")
+
+    exit_code = cli.run(["autonomy-loop", "--sync-project-capital", "--billing-sync", "--reconcile-projects", "--reconcile-project-revenue", "--run-month"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    lines = [line for line in captured.out.splitlines() if line.strip()]
+    assert len(lines) == 1
+    payload = json.loads(lines[0])
+    assert payload["command"] == "autonomy-loop"
+    assert payload["month"] == "202501"
+    assert payload["success"] is True
+    assert "run_month" in payload
+    assert payload["run_month"]["success"] is True
+
