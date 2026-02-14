@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 import json
-import secrets
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from src.api.v1.dependencies import require_oracle_hmac
 from src.core.audit import record_audit
 from src.core.database import get_db
-from src.core.db_utils import insert_or_get_by_unique
+from src.core.tx_outbox import enqueue_tx_outbox_task
 from src.core.security import hash_body
 from src.models.tx_outbox import TxOutbox
 from src.schemas.tx_outbox import (
@@ -20,6 +20,7 @@ from src.schemas.tx_outbox import (
     TxOutboxCompleteRequest,
     TxOutboxCompleteResponse,
     TxOutboxEnqueueRequest,
+    TxOutboxPendingResponse,
     TxOutboxTask,
     TxOutboxTaskResponse,
 )
@@ -43,15 +44,6 @@ def _to_task(row: TxOutbox) -> TxOutboxTask:
     )
 
 
-def _new_task_id(db: Session) -> str:
-    for _ in range(5):
-        candidate = f"txo_{secrets.token_hex(8)}"
-        exists = db.query(TxOutbox.id).filter(TxOutbox.task_id == candidate).first()
-        if not exists:
-            return candidate
-    raise RuntimeError("Failed to generate unique task id")
-
-
 @router.post("", response_model=TxOutboxTaskResponse)
 async def enqueue_task(
     payload: TxOutboxEnqueueRequest,
@@ -61,27 +53,12 @@ async def enqueue_task(
 ) -> TxOutboxTaskResponse:
     body_hash = hash_body(await request.body())
 
-    row = TxOutbox(
-        task_id=_new_task_id(db),
-        idempotency_key=payload.idempotency_key,
+    row = enqueue_tx_outbox_task(
+        db,
         task_type=payload.task_type,
-        payload_json=json.dumps(payload.payload, separators=(",", ":"), sort_keys=True),
-        status="pending",
-        attempts=0,
-        last_error_hint=None,
-        locked_at=None,
-        locked_by=None,
+        payload=payload.payload,
+        idempotency_key=payload.idempotency_key,
     )
-    if payload.idempotency_key:
-        row, _created = insert_or_get_by_unique(
-            db,
-            instance=row,
-            model=TxOutbox,
-            unique_filter={"idempotency_key": payload.idempotency_key},
-        )
-    else:
-        db.add(row)
-        db.flush()
 
     record_audit(
         db,
@@ -99,6 +76,89 @@ async def enqueue_task(
     db.refresh(row)
 
     return TxOutboxTaskResponse(success=True, data=_to_task(row))
+
+@router.get("/pending", response_model=TxOutboxPendingResponse)
+def list_pending(
+    limit: int = 20,
+    _: str = Depends(require_oracle_hmac),
+    db: Session = Depends(get_db),
+) -> TxOutboxPendingResponse:
+    limit = max(1, min(int(limit), 100))
+    rows = (
+        db.query(TxOutbox)
+        .filter(TxOutbox.status == "pending")
+        .order_by(TxOutbox.id.asc())
+        .limit(limit)
+        .all()
+    )
+    return TxOutboxPendingResponse(success=True, data={"items": [_to_task(r) for r in rows], "limit": limit})
+
+
+@router.post("/claim-next", response_model=TxOutboxClaimResponse)
+async def claim_next(
+    payload: TxOutboxClaimRequest,
+    request: Request,
+    _: str = Depends(require_oracle_hmac),
+    db: Session = Depends(get_db),
+) -> TxOutboxClaimResponse:
+    body_hash = hash_body(await request.body())
+
+    candidate = (
+        db.query(TxOutbox)
+        .filter(TxOutbox.status == "pending")
+        .order_by(TxOutbox.id.asc())
+        .first()
+    )
+    if candidate is None:
+        record_audit(
+            db,
+            actor_type="oracle",
+            agent_id=None,
+            method=request.method,
+            path=request.url.path,
+            idempotency_key=request.headers.get("Idempotency-Key"),
+            body_hash=body_hash,
+            signature_status=getattr(request.state, "signature_status", "none"),
+            request_id=request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID"),
+            commit=False,
+        )
+        db.commit()
+        return TxOutboxClaimResponse(success=False, data=TxOutboxClaimData(task=None, blocked_reason="no_tasks"))
+
+    now = datetime.now(timezone.utc)
+    stmt = (
+        update(TxOutbox)
+        .where(TxOutbox.id == candidate.id, TxOutbox.status == "pending", TxOutbox.locked_at.is_(None))
+        .values(
+            status="processing",
+            locked_at=now,
+            locked_by=payload.worker_id,
+            attempts=int(candidate.attempts or 0) + 1,
+        )
+    )
+    result = db.execute(stmt)
+    if getattr(result, "rowcount", 0) != 1:
+        db.rollback()
+        return TxOutboxClaimResponse(success=False, data=TxOutboxClaimData(task=None, blocked_reason="race_lost"))
+
+    record_audit(
+        db,
+        actor_type="oracle",
+        agent_id=None,
+        method=request.method,
+        path=request.url.path,
+        idempotency_key=request.headers.get("Idempotency-Key"),
+        body_hash=body_hash,
+        signature_status=getattr(request.state, "signature_status", "none"),
+        request_id=request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID"),
+        commit=False,
+    )
+    db.commit()
+
+    row = db.query(TxOutbox).filter(TxOutbox.id == candidate.id).first()
+    if not row:
+        return TxOutboxClaimResponse(success=False, data=TxOutboxClaimData(task=None, blocked_reason="not_found"))
+    return TxOutboxClaimResponse(success=True, data=TxOutboxClaimData(task=_to_task(row), blocked_reason=None))
 
 
 @router.get("/{task_id}", response_model=TxOutboxTaskResponse)
@@ -188,4 +248,3 @@ async def complete_task(
     db.refresh(row)
 
     return TxOutboxCompleteResponse(success=True, data=_to_task(row))
-

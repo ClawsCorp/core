@@ -19,7 +19,16 @@ Optional warning/ops context variables:
 
 Server-side only (not used directly by the runner):
 
-- `ORACLE_SIGNER_PRIVATE_KEY` must be configured on backend for tx submission paths.
+- If the backend submits tx inline (legacy mode), it requires `ORACLE_SIGNER_PRIVATE_KEY`.
+- If `TX_OUTBOX_ENABLED=true` on the backend, tx submission is expected to run out-of-band via `tx-worker` (see below).
+
+`tx-worker` environment variables (runs locally, sends tx):
+
+- `BASE_SEPOLIA_RPC_URL`
+- `USDC_ADDRESS`
+- `DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS`
+- `ORACLE_SIGNER_PRIVATE_KEY`
+- `CONTRACTS_DIR` (optional)
 
 ## Commands
 
@@ -40,6 +49,7 @@ PYTHONPATH=src python -m oracle_runner execute-distribution --month 202601 --pay
 PYTHONPATH=src python -m oracle_runner confirm-payout --month 202601 [--tx-hash 0x...]
 PYTHONPATH=src python -m oracle_runner sync-payout --month 202601 [--tx-hash 0x...]
 PYTHONPATH=src python -m oracle_runner run-month --month 202601 --execute-payload /path/execute.json
+PYTHONPATH=src python -m oracle_runner tx-worker --max-tasks 10
 PYTHONPATH=src python -m oracle_runner --json reconcile --month 202601
 PYTHONPATH=src python -m oracle_runner --json reconcile-project-capital --project-id proj_...
 PYTHONPATH=src python -m oracle_runner --json project-reconcile --project-id proj_...

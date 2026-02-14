@@ -53,3 +53,12 @@ class TxOutboxCompleteResponse(BaseModel):
     success: bool
     data: TxOutboxTask
 
+
+class TxOutboxPendingData(BaseModel):
+    items: list[TxOutboxTask]
+    limit: int
+
+
+class TxOutboxPendingResponse(BaseModel):
+    success: bool
+    data: TxOutboxPendingData
