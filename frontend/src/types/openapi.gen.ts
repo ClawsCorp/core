@@ -85,6 +85,13 @@ export interface paths {
     /** Verify Domain Endpoint */
     post: operations["verify_domain_endpoint_api_v1_agent_projects__project_id__domains__domain_id__verify_post"];
   };
+  "/api/v1/agent/marketplace/proposals/{proposal_id}/generate": {
+    /**
+     * Generate milestones and bounties for a proposal (agent)
+     * @description MVP marketplace generator: creates deterministic milestone + bounty records linked to proposal.
+     */
+    post: operations["generate_marketplace_items_api_v1_agent_marketplace_proposals__proposal_id__generate_post"];
+  };
   "/api/v1/projects/capital/leaderboard": {
     /** Project capital leaderboard */
     get: operations["project_capital_leaderboard_api_v1_projects_capital_leaderboard_get"];
@@ -500,6 +507,8 @@ export interface components {
       funding_source?: components["schemas"]["BountyFundingSource"] | null;
       /** Origin Proposal Id */
       origin_proposal_id?: string | null;
+      /** Origin Milestone Id */
+      origin_milestone_id?: string | null;
       /** Title */
       title: string;
       /** Description Md */
@@ -598,6 +607,8 @@ export interface components {
       project_id: string | null;
       /** Origin Proposal Id */
       origin_proposal_id?: string | null;
+      /** Origin Milestone Id */
+      origin_milestone_id?: string | null;
       funding_source: components["schemas"]["BountyFundingSource"];
       /** Title */
       title: string;
@@ -979,6 +990,57 @@ export interface components {
       /** Detail */
       detail?: components["schemas"]["ValidationError"][];
     };
+    /** MarketplaceGenerateData */
+    MarketplaceGenerateData: {
+      /** Proposal Id */
+      proposal_id: string;
+      /** Created Milestones Count */
+      created_milestones_count: number;
+      /** Created Bounties Count */
+      created_bounties_count: number;
+    };
+    /** MarketplaceGenerateRequest */
+    MarketplaceGenerateRequest: {
+      /** Idempotency Key */
+      idempotency_key?: string | null;
+    };
+    /** MarketplaceGenerateResponse */
+    MarketplaceGenerateResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["MarketplaceGenerateData"];
+    };
+    /** MilestonePublic */
+    MilestonePublic: {
+      /** Milestone Id */
+      milestone_id: string;
+      /** Proposal Id */
+      proposal_id: string;
+      /** Title */
+      title: string;
+      /** Description Md */
+      description_md: string | null;
+      status: components["schemas"]["MilestoneStatus"];
+      /** Priority */
+      priority?: string | null;
+      /** Deadline At */
+      deadline_at?: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string;
+    };
+    /**
+     * MilestoneStatus
+     * @enum {string}
+     */
+    MilestoneStatus: "planned" | "in_progress" | "done";
     /** PayoutConfirmData */
     PayoutConfirmData: {
       /** Profit Month Id */
@@ -1615,6 +1677,8 @@ export interface components {
       vote_summary: components["schemas"]["VoteSummary"];
       /** Related Bounties */
       related_bounties?: components["schemas"]["BountyPublic"][];
+      /** Milestones */
+      milestones?: components["schemas"]["MilestonePublic"][];
     };
     /** ProposalDetailResponse */
     ProposalDetailResponse: {
@@ -2336,6 +2400,7 @@ export interface operations {
         status?: components["schemas"]["BountyStatus"] | null;
         project_id?: string | null;
         origin_proposal_id?: string | null;
+        origin_milestone_id?: string | null;
         limit?: number;
         offset?: number;
       };
@@ -2584,6 +2649,39 @@ export interface operations {
       200: {
         content: {
           "application/json": components["schemas"]["ProjectDomainVerifyResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /**
+   * Generate milestones and bounties for a proposal (agent)
+   * @description MVP marketplace generator: creates deterministic milestone + bounty records linked to proposal.
+   */
+  generate_marketplace_items_api_v1_agent_marketplace_proposals__proposal_id__generate_post: {
+    parameters: {
+      header?: {
+        "X-API-Key"?: string | null;
+      };
+      path: {
+        proposal_id: string;
+      };
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["MarketplaceGenerateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["MarketplaceGenerateResponse"];
         };
       };
       /** @description Validation Error */

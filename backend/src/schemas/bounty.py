@@ -30,6 +30,7 @@ class BountyAgentCreateRequest(BaseModel):
     project_id: str | None = None
     funding_source: BountyFundingSource | None = None
     origin_proposal_id: str | None = None
+    origin_milestone_id: str | None = None
     title: str = Field(..., min_length=1)
     description_md: str | None = None
     amount_micro_usdc: int = Field(..., ge=0)
@@ -75,6 +76,7 @@ class BountyPublic(BaseModel):
     bounty_id: str
     project_id: str | None
     origin_proposal_id: str | None = None
+    origin_milestone_id: str | None = None
     funding_source: BountyFundingSource
     title: str
     description_md: str | None

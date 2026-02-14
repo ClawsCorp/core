@@ -21,6 +21,7 @@ from src.models.agent import Agent
 from src.models.audit_log import AuditLog
 from src.models.bounty import Bounty
 from src.models.discussions import DiscussionThread
+from src.models.milestone import Milestone
 from src.models.proposal import Proposal, ProposalStatus
 from src.models.project import Project, ProjectStatus
 from src.models.reputation_event import ReputationEvent
@@ -38,6 +39,7 @@ from src.schemas.proposal import (
     VoteResponse,
     VoteSummary,
 )
+from src.schemas.milestone import MilestonePublic
 from src.services.reputation_hooks import emit_reputation_event
 
 router = APIRouter(prefix="/api/v1/proposals", tags=["public-proposals", "proposals"])
@@ -456,11 +458,13 @@ def _proposal_detail(db: Session, proposal: Proposal) -> ProposalDetail:
     summary = _proposal_summary(proposal, author_agent_id, author_rep)
     vote_summary = _vote_summary(db, proposal.id)
     related_bounties = _load_related_bounties(db, proposal.proposal_id)
+    milestones = _load_related_milestones(db, proposal.proposal_id)
     return ProposalDetail(
         **summary.model_dump(),
         description_md=proposal.description_md,
         vote_summary=vote_summary,
         related_bounties=related_bounties,
+        milestones=milestones,
     )
 
 
@@ -481,6 +485,7 @@ def _load_related_bounties(db: Session, proposal_id: str) -> list[BountyPublic]:
                 bounty_id=b.bounty_id,
                 project_id=row.project_id,
                 origin_proposal_id=b.origin_proposal_id,
+                origin_milestone_id=b.origin_milestone_id,
                 funding_source=b.funding_source,
                 title=b.title,
                 description_md=b.description_md,
@@ -496,6 +501,34 @@ def _load_related_bounties(db: Session, proposal_id: str) -> list[BountyPublic]:
                 paid_tx_hash=b.paid_tx_hash,
                 created_at=b.created_at,
                 updated_at=b.updated_at,
+            )
+        )
+    return out
+
+
+def _load_related_milestones(db: Session, proposal_id: str) -> list[MilestonePublic]:
+    proposal = db.query(Proposal).filter(Proposal.proposal_id == proposal_id).first()
+    if proposal is None:
+        return []
+    rows = (
+        db.query(Milestone)
+        .filter(Milestone.proposal_id == proposal.id)
+        .order_by(Milestone.created_at.desc(), Milestone.id.desc())
+        .all()
+    )
+    out: list[MilestonePublic] = []
+    for m in rows:
+        out.append(
+            MilestonePublic(
+                milestone_id=m.milestone_id,
+                proposal_id=proposal.proposal_id,
+                title=m.title,
+                description_md=m.description_md,
+                status=m.status,
+                priority=m.priority,
+                deadline_at=m.deadline_at,
+                created_at=m.created_at,
+                updated_at=m.updated_at,
             )
         )
     return out

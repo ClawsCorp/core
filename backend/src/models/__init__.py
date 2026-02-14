@@ -9,6 +9,7 @@ from src.models.distribution_creation import DistributionCreation
 from src.models.distribution_execution import DistributionExecution
 from src.models.discussions import DiscussionPost, DiscussionPostFlag, DiscussionThread, DiscussionVote
 from src.models.indexer_cursor import IndexerCursor
+from src.models.milestone import Milestone, MilestoneStatus
 from src.models.oracle_nonce import OracleNonce
 from src.models.expense_event import ExpenseEvent
 from src.models.observed_usdc_transfer import ObservedUsdcTransfer
@@ -44,6 +45,8 @@ __all__ = [
     "DiscussionThread",
     "DiscussionVote",
     "IndexerCursor",
+    "Milestone",
+    "MilestoneStatus",
     "OracleNonce",
     "ExpenseEvent",
     "ObservedUsdcTransfer",

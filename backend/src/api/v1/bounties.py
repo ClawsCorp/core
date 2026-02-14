@@ -17,6 +17,7 @@ from src.models.agent import Agent
 from src.models.bounty import Bounty, BountyFundingSource, BountyStatus
 from src.models.expense_event import ExpenseEvent
 from src.models.project_capital_event import ProjectCapitalEvent
+from src.models.milestone import Milestone
 from src.models.proposal import Proposal
 from src.models.project import Project
 from src.services.project_capital import (
@@ -71,6 +72,7 @@ def list_bounties(
     status: BountyStatusSchema | None = Query(None),
     project_id: str | None = Query(None),
     origin_proposal_id: str | None = Query(None),
+    origin_milestone_id: str | None = Query(None),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
@@ -84,6 +86,8 @@ def list_bounties(
         query = query.filter(Project.project_id == project_id)
     if origin_proposal_id is not None:
         query = query.filter(Bounty.origin_proposal_id == origin_proposal_id)
+    if origin_milestone_id is not None:
+        query = query.filter(Bounty.origin_milestone_id == origin_milestone_id)
     total = query.count()
     rows = (
         query.order_by(Bounty.created_at.desc()).offset(offset).limit(limit).all()
@@ -97,7 +101,7 @@ def list_bounties(
         data=BountyListData(items=items, limit=limit, offset=offset, total=total),
     )
     response.headers["Cache-Control"] = "public, max-age=30"
-    response.headers["ETag"] = f'W/"bounties:{status or "all"}:{project_id or "all"}:{origin_proposal_id or "all"}:{offset}:{limit}:{total}:{page_max_updated_at}"'
+    response.headers["ETag"] = f'W/"bounties:{status or "all"}:{project_id or "all"}:{origin_proposal_id or "all"}:{origin_milestone_id or "all"}:{offset}:{limit}:{total}:{page_max_updated_at}"'
     return result
 
 
@@ -190,6 +194,11 @@ async def create_bounty_agent(
         if exists is None:
             raise HTTPException(status_code=404, detail="Proposal not found")
 
+    if payload.origin_milestone_id:
+        exists = db.query(Milestone).filter(Milestone.milestone_id == payload.origin_milestone_id).first()
+        if exists is None:
+            raise HTTPException(status_code=404, detail="Milestone not found")
+
     requested_source = (
         BountyFundingSource(payload.funding_source.value) if payload.funding_source else None
     )
@@ -207,6 +216,7 @@ async def create_bounty_agent(
         idempotency_key=idempotency_key,
         project_id=project.id if project else None,
         origin_proposal_id=payload.origin_proposal_id,
+        origin_milestone_id=payload.origin_milestone_id,
         funding_source=funding_source,
         title=payload.title,
         description_md=payload.description_md,
@@ -575,6 +585,7 @@ def _bounty_public(
         bounty_id=bounty.bounty_id,
         project_id=project_id,
         origin_proposal_id=bounty.origin_proposal_id,
+        origin_milestone_id=bounty.origin_milestone_id,
         funding_source=bounty.funding_source,
         title=bounty.title,
         description_md=bounty.description_md,

@@ -46,6 +46,7 @@ class Bounty(Base):
     __table_args__ = (
         CheckConstraint("amount_micro_usdc >= 0", name="ck_bounties_amount_nonneg"),
         Index("ix_bounties_origin_proposal_id", "origin_proposal_id"),
+        Index("ix_bounties_origin_milestone_id", "origin_milestone_id"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -56,6 +57,8 @@ class Bounty(Base):
     )
     # Public proposal_id (string), used to link marketplace bounties to governance proposals.
     origin_proposal_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Public milestone_id (string), optional link for marketplace pipeline.
+    origin_milestone_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     funding_source: Mapped[BountyFundingSource] = mapped_column(
         SqlEnum(BountyFundingSource, name="bounty_funding_source"),
         nullable=False,
