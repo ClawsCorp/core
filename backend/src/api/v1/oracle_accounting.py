@@ -13,6 +13,7 @@ from src.core.audit import record_audit
 from src.core.database import get_db
 from src.models.expense_event import ExpenseEvent
 from src.models.project import Project
+from src.services.project_spend_policy import check_spend_allowed
 from src.models.revenue_event import RevenueEvent
 from src.schemas.accounting import (
     ExpenseEventCreateRequest,
@@ -88,6 +89,16 @@ async def create_expense_event(
     body_hash = request.state.body_hash
     try:
         project = _project_by_public_id(db, payload.project_id)
+        if project is not None:
+            blocked_reason = check_spend_allowed(
+                db,
+                project=project,
+                profit_month_id=payload.profit_month_id,
+                amount_micro_usdc=int(payload.amount_micro_usdc),
+            )
+            if blocked_reason is not None:
+                _record_oracle_audit(request, db, body_hash, request_id, payload.idempotency_key)
+                raise HTTPException(status_code=409, detail=blocked_reason)
         event = ExpenseEvent(
             event_id=_generate_event_id(db, ExpenseEvent, "exp_"),
             profit_month_id=payload.profit_month_id,
