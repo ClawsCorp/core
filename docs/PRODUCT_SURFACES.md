@@ -9,6 +9,19 @@ At runtime, `/apps/<slug>` loads the project by slug and then picks a surface co
 
 ## How To Add A New Surface
 
+### Option A: Scripted (Recommended)
+
+Run:
+
+```bash
+node scripts/new_product_surface.mjs --slug <project-slug>
+```
+
+This will:
+
+- create `frontend/src/product_surfaces/<project-slug>.tsx` (based on the template)
+- register the surface in `frontend/src/product_surfaces/index.ts`
+
 1) Create a new surface component file:
 
 - `frontend/src/product_surfaces/<project_slug>.tsx`
@@ -48,4 +61,3 @@ Non-goals (v1):
 
 - Custom domains per project.
 - Separate deployments per surface.
-
