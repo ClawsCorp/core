@@ -54,6 +54,7 @@ class Settings:
     governance_voting_hours: int
     project_capital_reconciliation_max_age_seconds: int
     project_revenue_reconciliation_max_age_seconds: int
+    tx_outbox_lock_ttl_seconds: int
     discussions_create_thread_max_per_minute: int
     discussions_create_post_max_per_minute: int
     discussions_create_thread_max_per_day: int
@@ -98,6 +99,7 @@ def get_settings() -> Settings:
     project_revenue_reconciliation_max_age_seconds = int(
         os.getenv("PROJECT_REVENUE_RECONCILIATION_MAX_AGE_SECONDS", "3600")
     )
+    tx_outbox_lock_ttl_seconds = int(os.getenv("TX_OUTBOX_LOCK_TTL_SECONDS", "300"))
     discussions_create_thread_max_per_minute = int(
         os.getenv("DISCUSSIONS_CREATE_THREAD_MAX_PER_MINUTE", "5")
     )
@@ -132,6 +134,7 @@ def get_settings() -> Settings:
         governance_voting_hours=governance_voting_hours,
         project_capital_reconciliation_max_age_seconds=project_capital_reconciliation_max_age_seconds,
         project_revenue_reconciliation_max_age_seconds=project_revenue_reconciliation_max_age_seconds,
+        tx_outbox_lock_ttl_seconds=tx_outbox_lock_ttl_seconds,
         discussions_create_thread_max_per_minute=discussions_create_thread_max_per_minute,
         discussions_create_post_max_per_minute=discussions_create_post_max_per_minute,
         discussions_create_thread_max_per_day=discussions_create_thread_max_per_day,

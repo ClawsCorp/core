@@ -270,6 +270,10 @@ export interface paths {
     /** Complete Task */
     post: operations["complete_task_api_v1_oracle_tx_outbox__task_id__complete_post"];
   };
+  "/api/v1/oracle/tx-outbox/{task_id}/update": {
+    /** Update Task */
+    post: operations["update_task_api_v1_oracle_tx_outbox__task_id__update_post"];
+  };
   "/api/v1/settlement/months": {
     /**
      * List settlement months
@@ -1748,6 +1752,12 @@ export interface components {
       status: string;
       /** Error Hint */
       error_hint?: string | null;
+      /** Tx Hash */
+      tx_hash?: string | null;
+      /** Result */
+      result?: {
+        [key: string]: unknown;
+      } | null;
     };
     /** TxOutboxCompleteResponse */
     TxOutboxCompleteResponse: {
@@ -1791,6 +1801,12 @@ export interface components {
       payload: {
         [key: string]: unknown;
       };
+      /** Tx Hash */
+      tx_hash?: string | null;
+      /** Result */
+      result?: {
+        [key: string]: unknown;
+      } | null;
       /** Status */
       status: string;
       /** Attempts */
@@ -1817,6 +1833,15 @@ export interface components {
       /** Success */
       success: boolean;
       data: components["schemas"]["TxOutboxTask"];
+    };
+    /** TxOutboxUpdateRequest */
+    TxOutboxUpdateRequest: {
+      /** Tx Hash */
+      tx_hash?: string | null;
+      /** Result */
+      result?: {
+        [key: string]: unknown;
+      } | null;
     };
     /** ValidationError */
     ValidationError: {
@@ -3341,6 +3366,33 @@ export interface operations {
       200: {
         content: {
           "application/json": components["schemas"]["TxOutboxCompleteResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Update Task */
+  update_task_api_v1_oracle_tx_outbox__task_id__update_post: {
+    parameters: {
+      path: {
+        task_id: string;
+      };
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["TxOutboxUpdateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["TxOutboxTaskResponse"];
         };
       };
       /** @description Validation Error */
