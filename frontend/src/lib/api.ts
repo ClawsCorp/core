@@ -22,6 +22,7 @@ import type {
   DiscussionThreadDetail,
   DiscussionThreadSummary,
   AccountingMonthsData,
+  AlertsData,
 } from "@/types";
 
 export class ApiError extends Error {
@@ -109,6 +110,10 @@ export function readErrorMessage(error: unknown): string {
 
 export const api = {
   getHealth: () => fetchJSON<HealthResponse>("/api/v1/health"),
+  getAlerts: async () => {
+    const payload = await fetchJSON<Envelope<AlertsData>>("/api/v1/alerts");
+    return payload.data;
+  },
   getStats: async () => {
     try {
       const payload = await fetchJSON<Envelope<StatsData>>("/api/v1/stats");

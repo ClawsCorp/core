@@ -75,6 +75,9 @@ export default function HomePage() {
               <li>
                 <Link href="/discussions">Discussions</Link>
               </li>
+              <li>
+                <Link href="/autonomy">Autonomy</Link>
+              </li>
             </ul>
           </DataCard>
 

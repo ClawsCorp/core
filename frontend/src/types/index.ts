@@ -17,6 +17,19 @@ export interface StatsData {
   project_revenue_reconciliation_max_age_seconds?: number;
 }
 
+export interface AlertItem {
+  alert_type: string;
+  severity: "info" | "warning" | "critical" | string;
+  message: string;
+  ref?: string | null;
+  data?: Record<string, unknown> | null;
+  observed_at: string; // ISO 8601 datetime
+}
+
+export interface AlertsData {
+  items: AlertItem[];
+}
+
 export interface AccountingMonthSummary {
   profit_month_id: string;
   revenue_sum_micro_usdc: number;
