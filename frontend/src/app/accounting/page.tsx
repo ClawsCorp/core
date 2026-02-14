@@ -9,21 +9,47 @@ import { api, readErrorMessage } from "@/lib/api";
 import { formatMicroUsdc } from "@/lib/format";
 import type { AccountingMonthSummary } from "@/types";
 
+function parseFiltersFromSearch(search: string): { projectId: string; profitMonthId: string } {
+  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  return {
+    projectId: params.get("project_id") ?? "",
+    profitMonthId: params.get("profit_month_id") ?? "",
+  };
+}
+
+function buildSearchFromFilters(filters: { projectId: string; profitMonthId: string }): string {
+  const params = new URLSearchParams();
+  if (filters.projectId.trim()) {
+    params.set("project_id", filters.projectId.trim());
+  }
+  if (filters.profitMonthId.trim()) {
+    params.set("profit_month_id", filters.profitMonthId.trim());
+  }
+  const query = params.toString();
+  return query ? `?${query}` : "";
+}
+
 export default function AccountingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<AccountingMonthSummary[]>([]);
 
-  const [projectId, setProjectId] = useState("");
-  const [profitMonthId, setProfitMonthId] = useState("");
+  const initialFilters =
+    typeof window === "undefined"
+      ? { projectId: "", profitMonthId: "" }
+      : parseFiltersFromSearch(window.location.search);
 
-  const load = useCallback(async () => {
+  const [draftProjectId, setDraftProjectId] = useState(initialFilters.projectId);
+  const [draftProfitMonthId, setDraftProfitMonthId] = useState(initialFilters.profitMonthId);
+  const [appliedFilters, setAppliedFilters] = useState(initialFilters);
+
+  const load = useCallback(async (filters: { projectId: string; profitMonthId: string }) => {
     setLoading(true);
     setError(null);
     try {
       const result = await api.getAccountingMonths({
-        projectId: projectId.trim() ? projectId.trim() : undefined,
-        profitMonthId: profitMonthId.trim() ? profitMonthId.trim() : undefined,
+        projectId: filters.projectId.trim() ? filters.projectId.trim() : undefined,
+        profitMonthId: filters.profitMonthId.trim() ? filters.profitMonthId.trim() : undefined,
         limit: 24,
         offset: 0,
       });
@@ -33,11 +59,50 @@ export default function AccountingPage() {
     } finally {
       setLoading(false);
     }
-  }, [projectId, profitMonthId]);
+  }, []);
+
+  const syncFromUrl = useCallback(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const parsed = parseFiltersFromSearch(window.location.search);
+    setDraftProjectId(parsed.projectId);
+    setDraftProfitMonthId(parsed.profitMonthId);
+    setAppliedFilters(parsed);
+    void load(parsed);
+  }, [load]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    syncFromUrl();
+    if (typeof window === "undefined") {
+      return;
+    }
+    const onPop = () => syncFromUrl();
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [syncFromUrl]);
+
+  const apply = () => {
+    const next = { projectId: draftProjectId, profitMonthId: draftProfitMonthId };
+    setAppliedFilters(next);
+    if (typeof window !== "undefined") {
+      const search = buildSearchFromFilters(next);
+      const url = `${window.location.pathname}${search}`;
+      window.history.pushState({}, "", url);
+    }
+    void load(next);
+  };
+
+  const reset = () => {
+    setDraftProjectId("");
+    setDraftProfitMonthId("");
+    const next = { projectId: "", profitMonthId: "" };
+    setAppliedFilters(next);
+    if (typeof window !== "undefined") {
+      window.history.pushState({}, "", window.location.pathname);
+    }
+    void load(next);
+  };
 
   return (
     <PageContainer title="Accounting">
@@ -46,8 +111,8 @@ export default function AccountingPage() {
           <label>
             project_id:{" "}
             <input
-              value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
+              value={draftProjectId}
+              onChange={(e) => setDraftProjectId(e.target.value)}
               placeholder="prj_..."
               style={{ padding: 6, minWidth: 220 }}
             />
@@ -55,20 +120,28 @@ export default function AccountingPage() {
           <label>
             profit_month_id:{" "}
             <input
-              value={profitMonthId}
-              onChange={(e) => setProfitMonthId(e.target.value)}
+              value={draftProfitMonthId}
+              onChange={(e) => setDraftProfitMonthId(e.target.value)}
               placeholder="YYYYMM"
               style={{ padding: 6, minWidth: 140 }}
             />
           </label>
-          <button type="button" onClick={() => void load()}>
+          <button type="button" onClick={apply}>
             Apply
           </button>
+          <button type="button" onClick={reset}>
+            Reset
+          </button>
         </div>
+        {appliedFilters.projectId.trim() || appliedFilters.profitMonthId.trim() ? (
+          <p style={{ marginTop: 8 }}>
+            Applied: project_id={appliedFilters.projectId.trim() || "—"} profit_month_id={appliedFilters.profitMonthId.trim() || "—"}
+          </p>
+        ) : null}
       </DataCard>
 
       {loading ? <Loading message="Loading accounting..." /> : null}
-      {!loading && error ? <ErrorState message={error} onRetry={load} /> : null}
+      {!loading && error ? <ErrorState message={error} onRetry={() => load(appliedFilters)} /> : null}
       {!loading && !error && items.length === 0 ? <EmptyState message="No accounting months found." /> : null}
       {!loading && !error && items.length > 0 ? (
         <DataCard title="Months">
@@ -84,4 +157,3 @@ export default function AccountingPage() {
     </PageContainer>
   );
 }
-
