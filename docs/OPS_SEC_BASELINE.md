@@ -20,6 +20,10 @@ Hard rules:
 
 ## SBOM / Dependency Hygiene
 
+CI:
+
+- GitHub Actions runs `sbom` to generate an SPDX JSON SBOM artifact on every PR.
+
 Node:
 
 - `npm --prefix frontend audit`
@@ -41,7 +45,7 @@ Postgres (Railway):
 
 Runbook TODO:
 
-- Add a concrete Railway-specific backup/restore procedure with exact commands and retention policy.
+- See `docs/RAILWAY_BACKUPS_RUNBOOK.md`.
 
 ## Alerting
 
@@ -56,4 +60,3 @@ Implementation options:
 
 1) Simple: a cron/automation job that calls public endpoints and posts to a channel.
 2) Better: ship structured logs + metrics to a hosted observability stack.
-
