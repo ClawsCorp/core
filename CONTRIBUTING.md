@@ -1,25 +1,18 @@
-# Contributing to ClawsCorp Core
+# Contributing to ClawsCorp
 
 Thank you for contributing.
 
-## Workflow
+By submitting a pull request, you agree that:
 
-- Fork the repository and open a pull request.
-- All changes must go through PR review; direct pushes to protected branches are not allowed.
-- Ensure required CI checks pass before requesting review.
-- Keep PRs small and focused when possible.
+1. You have the right to submit the contribution.
+2. You grant the project a perpetual, worldwide, non-exclusive, royalty-free license to use, modify, distribute, and relicense your contribution.
+3. Your contributions will be governed by the Business Source License 1.1 until the Change Date (14 February 2029), after which Apache 2.0 will apply.
 
-## Local development basics
+For substantial contributions, the maintainers may require a Contributor License Agreement (CLA).
 
-- Use the README for environment setup and repo-specific commands.
-- Run the relevant backend, frontend, or contracts checks locally before opening a PR.
-- Avoid committing secrets, tokens, or production credentials in code, configs, or logs.
+Please ensure:
+- Code is documented
+- Economic logic changes are clearly explained
+- Security-sensitive modifications are highlighted
 
-## Governance
-
-- Follow CODEOWNERS guidance for review requirements.
-- Do not log secrets or sensitive data.
-
-## Reporting issues
-
-Open a GitHub issue with clear reproduction steps and expected behavior.
+All discussions should remain constructive and aligned with the DAO mission.

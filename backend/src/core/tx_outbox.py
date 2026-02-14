@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: BSL-1.1
+
 from __future__ import annotations
 
 import json
@@ -48,4 +50,3 @@ def enqueue_tx_outbox_task(
         db.flush()
 
     return row
-

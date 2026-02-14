@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: BSL-1.1
+
 from __future__ import annotations
 
 from collections.abc import Generator

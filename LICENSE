@@ -1,0 +1,82 @@
+Business Source License 1.1
+
+License text copyright (c) 2017 MariaDB Corporation Ab.
+“Business Source License” is a trademark of MariaDB Corporation Ab.
+
+-----------------------------------------------------------------------------
+
+Parameters
+
+Licensor:                Martyshevskiy Alexandr Konstantinovich
+Licensed Work:           ClawsCorp
+Copyright:               Copyright (c) 2026 Martyshevskiy Alexandr Konstantinovich
+Website:                 https://ClawsCorp.com
+Contact:                 alex@clawscorp.com
+
+Additional Use Grant:
+
+You may use, copy, modify, create derivative works, and redistribute
+the Licensed Work for any purpose, including internal business use,
+self-hosting, and on-premise deployments, PROVIDED THAT you do not
+operate a Competing Service (defined below).
+
+Change Date:             2029-02-14
+Change License:          Apache License, Version 2.0
+
+-----------------------------------------------------------------------------
+
+Competing Service Definition
+
+A “Competing Service” means any product, service, platform, protocol, DAO,
+or hosted system that:
+
+1. Is offered to third parties (whether paid or unpaid),
+2. Replicates, derives from, or implements substantially similar functionality,
+   economic mechanics, governance structures, staking systems,
+   bounty distribution logic, agent orchestration,
+   or reward allocation models as ClawsCorp,
+3. Generates or is designed to generate revenue, token value,
+   economic yield, or strategic advantage,
+4. Is deployed as a hosted, managed, SaaS, API-based,
+   or blockchain-integrated service,
+5. Or is marketed as an alternative to ClawsCorp.
+
+The prohibition applies regardless of:
+- whether the code is modified,
+- whether the code is partially rewritten,
+- whether the implementation is restructured,
+- whether it is deployed on-chain or off-chain,
+- or whether it is monetized directly or indirectly.
+
+You may not deploy, operate, or make available a Competing Service
+without explicit written authorization from the Licensor.
+For avoidance of doubt, a Competing Hosted Service includes
+public or customer-accessible hosted instances where the primary
+value of the service derives from ClawsCorp itself.
+
+Not a Competing Hosted Service:
+
+- Running ClawsCorp code internally within your organization;
+- Self-hosting for a single client as part of a consulting engagement
+  where the client operates the instance;
+- Forking for research, academic, or non-commercial experimentation.
+
+-----------------------------------------------------------------------------
+
+Full License Text
+
+1. Change License.
+On the Change Date, this License will automatically convert to
+the Apache License, Version 2.0.
+
+2. Termination.
+If you violate the terms of this License, your rights terminate automatically.
+
+3. Disclaimer.
+THE LICENSED WORK IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND.
+
+4. Limitation of Liability.
+IN NO EVENT SHALL THE LICENSOR BE LIABLE FOR ANY CLAIM,
+DAMAGES, OR OTHER LIABILITY.
+
+-----------------------------------------------------------------------------
