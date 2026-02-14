@@ -280,6 +280,31 @@ export interface SettlementDetailData {
   ready: boolean;
 }
 
+export interface ProjectSettlementPublic {
+  project_id: string;
+  profit_month_id: string;
+  revenue_sum_micro_usdc: number;
+  expense_sum_micro_usdc: number;
+  profit_sum_micro_usdc: number;
+  profit_nonnegative: boolean;
+  note: string | null;
+  computed_at: string;
+}
+
+export interface ConsolidatedSettlementProjectsSums {
+  projects_revenue_sum_micro_usdc: number;
+  projects_expense_sum_micro_usdc: number;
+  projects_profit_sum_micro_usdc: number;
+  projects_with_settlement_count: number;
+}
+
+export interface ConsolidatedSettlementData {
+  profit_month_id: string;
+  platform: SettlementDetailData;
+  projects: ProjectSettlementPublic[];
+  sums: ConsolidatedSettlementProjectsSums;
+}
+
 export type DiscussionScope = "global" | "project";
 
 export interface DiscussionThreadSummary {
