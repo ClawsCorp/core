@@ -12,7 +12,7 @@ import { api, readErrorMessage } from "@/lib/api";
 import { getAgentApiKey } from "@/lib/agentKey";
 import { getExplorerBaseUrl } from "@/lib/env";
 import { formatMicroUsdc } from "@/lib/format";
-import type { AccountingMonthSummary, BountyFundingSource, BountyPublic, ProjectCapitalSummary, ProjectDetail, StatsData } from "@/types";
+import type { AccountingMonthSummary, BountyFundingSource, BountyPublic, ProjectCapitalSummary, ProjectDetail, ProjectDomainPublic, StatsData } from "@/types";
 
 export default function ProjectDetailPage({ params }: { params: { id: string } }) {
   const [loading, setLoading] = useState(true);
@@ -22,6 +22,11 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
   const [bounties, setBounties] = useState<BountyPublic[]>([]);
   const [stats, setStats] = useState<StatsData | null>(null);
   const [accountingMonths, setAccountingMonths] = useState<AccountingMonthSummary[]>([]);
+  const [domains, setDomains] = useState<ProjectDomainPublic[]>([]);
+
+  const [domainValue, setDomainValue] = useState("");
+  const [domainBusy, setDomainBusy] = useState(false);
+  const [domainMessage, setDomainMessage] = useState<string | null>(null);
 
   const [createAmount, setCreateAmount] = useState("1000000");
   const [createTitle, setCreateTitle] = useState("");
@@ -34,18 +39,20 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
     setLoading(true);
     setError(null);
     try {
-      const [projectResult, capitalResult, bountiesResult, statsResult, accountingResult] = await Promise.all([
+      const [projectResult, capitalResult, bountiesResult, statsResult, accountingResult, domainsResult] = await Promise.all([
         api.getProject(params.id),
         api.getProjectCapitalSummary(params.id),
         api.getBounties({ projectId: params.id }),
         api.getStats().catch(() => null),
         api.getAccountingMonths({ projectId: params.id, limit: 6, offset: 0 }).catch(() => null),
+        api.getProjectDomains(params.id).catch(() => ({ items: [] })),
       ]);
       setProject(projectResult);
       setCapital(capitalResult);
       setBounties(bountiesResult.items);
       setStats(statsResult);
       setAccountingMonths(accountingResult?.items ?? []);
+      setDomains(domainsResult.items ?? []);
     } catch (err) {
       setError(readErrorMessage(err));
     } finally {
@@ -165,6 +172,47 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
     }
   };
 
+  const onAddDomain = async () => {
+    setDomainMessage(null);
+    const apiKey = getAgentApiKey();
+    if (!apiKey) {
+      setDomainMessage("Missing agent key. Save X-API-Key above, then retry.");
+      return;
+    }
+    if (!domainValue.trim()) {
+      setDomainMessage("Enter a domain.");
+      return;
+    }
+    setDomainBusy(true);
+    try {
+      await api.createProjectDomain(apiKey, params.id, domainValue.trim());
+      setDomainValue("");
+      await load();
+    } catch (err) {
+      setDomainMessage(readErrorMessage(err));
+    } finally {
+      setDomainBusy(false);
+    }
+  };
+
+  const onVerifyDomain = async (domainId: string) => {
+    setDomainMessage(null);
+    const apiKey = getAgentApiKey();
+    if (!apiKey) {
+      setDomainMessage("Missing agent key. Save X-API-Key above, then retry.");
+      return;
+    }
+    setDomainBusy(true);
+    try {
+      await api.verifyProjectDomain(apiKey, params.id, domainId);
+      await load();
+    } catch (err) {
+      setDomainMessage(readErrorMessage(err));
+    } finally {
+      setDomainBusy(false);
+    }
+  };
+
   return (
     <PageContainer title={`Project ${params.id}`}>
       <AgentKeyPanel />
@@ -247,6 +295,41 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
             <p>
               Runbook: <Link href="/runbook">/runbook</Link>
             </p>
+          </DataCard>
+
+          <DataCard title="Domains (v1)">
+            <p>Connect a domain by setting a DNS TXT record, then verifying.</p>
+            <p>TXT record name format: <code>_clawscorp.&lt;your-domain&gt;</code></p>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <input
+                value={domainValue}
+                onChange={(e) => setDomainValue(e.target.value)}
+                placeholder="example.com"
+                style={{ minWidth: 260, padding: 6 }}
+              />
+              <button type="button" onClick={() => void onAddDomain()} disabled={domainBusy}>
+                {domainBusy ? "Working..." : "Add domain"}
+              </button>
+            </div>
+            {domainMessage ? <p>{domainMessage}</p> : null}
+            {domains.length === 0 ? (
+              <p>No domains connected yet.</p>
+            ) : (
+              <ul>
+                {domains.map((d) => (
+                  <li key={d.domain_id}>
+                    <strong>{d.domain}</strong> status={d.status}{" "}
+                    <button type="button" onClick={() => void onVerifyDomain(d.domain_id)} disabled={domainBusy}>
+                      verify
+                    </button>
+                    <div style={{ opacity: 0.8 }}>
+                      TXT: <code>{d.dns_txt_name}</code> = <code>{d.dns_txt_token}</code>
+                    </div>
+                    {d.last_check_error ? <div style={{ color: "#b91c1c" }}>last_error: {d.last_check_error}</div> : null}
+                  </li>
+                ))}
+              </ul>
+            )}
           </DataCard>
 
           <DataCard title="Fund this project (USDC)">

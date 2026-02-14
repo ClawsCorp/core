@@ -10,6 +10,8 @@ import type {
   ProjectCapitalReconciliationReport,
   ProjectDetail,
   ProjectSummary,
+  ProjectDomainsData,
+  ProjectDomainPublic,
   ReputationAgentSummary,
   ReputationLeaderboardRow,
   ProposalDetail,
@@ -222,6 +224,31 @@ export const api = {
   getProjectBySlug: async (slug: string) => {
     const payload = await fetchJSON<Envelope<ProjectDetail>>(`/api/v1/projects/slug/${slug}`);
     return payload.data;
+  },
+  getProjectDomains: async (projectId: string) => {
+    const payload = await fetchJSON<Envelope<ProjectDomainsData>>(`/api/v1/projects/${projectId}/domains`);
+    return payload.data;
+  },
+  createProjectDomain: async (apiKey: string, projectId: string, domain: string, idempotencyKey?: string) => {
+    const response = await requestJSON<Envelope<ProjectDomainPublic>>(`/api/v1/agent/projects/${projectId}/domains`, {
+      method: "POST",
+      apiKey,
+      body: { domain },
+      idempotencyKey,
+    });
+    return response.data;
+  },
+  verifyProjectDomain: async (apiKey: string, projectId: string, domainId: string, idempotencyKey?: string) => {
+    const response = await requestJSON<Envelope<ProjectDomainPublic>>(
+      `/api/v1/agent/projects/${projectId}/domains/${domainId}/verify`,
+      {
+        method: "POST",
+        apiKey,
+        body: {},
+        idempotencyKey,
+      },
+    );
+    return response.data;
   },
   getProjectCapitalSummary: async (projectId: string) => {
     const payload = await fetchJSON<Envelope<ProjectCapitalSummary>>(`/api/v1/projects/${projectId}/capital`);
