@@ -17,6 +17,7 @@ import type {
   ReputationLeaderboardRow,
   ProposalDetail,
   ProposalSummary,
+  ConsolidatedSettlementData,
   SettlementDetailData,
   SettlementMonthSummary,
   StatsData,
@@ -151,6 +152,12 @@ export const api = {
   getSettlementDetail: async (profitMonthId: string) => {
     const payload = await fetchJSON<Envelope<SettlementDetailData>>(
       `/api/v1/settlement/${profitMonthId}`,
+    );
+    return payload.data;
+  },
+  getSettlementConsolidated: async (profitMonthId: string) => {
+    const payload = await fetchJSON<Envelope<ConsolidatedSettlementData>>(
+      `/api/v1/settlement/${profitMonthId}/consolidated`,
     );
     return payload.data;
   },
