@@ -9,6 +9,7 @@ from sqlalchemy import (
     DateTime,
     Enum as SqlEnum,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -44,6 +45,7 @@ class Bounty(Base):
     __tablename__ = "bounties"
     __table_args__ = (
         CheckConstraint("amount_micro_usdc >= 0", name="ck_bounties_amount_nonneg"),
+        Index("ix_bounties_origin_proposal_id", "origin_proposal_id"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -52,6 +54,8 @@ class Bounty(Base):
     project_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("projects.id"), nullable=True, index=True
     )
+    # Public proposal_id (string), used to link marketplace bounties to governance proposals.
+    origin_proposal_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     funding_source: Mapped[BountyFundingSource] = mapped_column(
         SqlEnum(BountyFundingSource, name="bounty_funding_source"),
         nullable=False,
@@ -60,6 +64,8 @@ class Bounty(Base):
     title: Mapped[str] = mapped_column(String(255))
     description_md: Mapped[str | None] = mapped_column(Text, nullable=True)
     amount_micro_usdc: Mapped[int] = mapped_column(BigInteger)
+    priority: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[BountyStatus] = mapped_column(
         SqlEnum(BountyStatus, name="bounty_status")
     )

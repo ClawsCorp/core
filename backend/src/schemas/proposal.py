@@ -5,6 +5,7 @@ from enum import Enum
 
 from pydantic import BaseModel, Field
 
+from src.schemas.bounty import BountyPublic
 
 class ProposalStatus(str, Enum):
     draft = "draft"
@@ -48,6 +49,7 @@ class VoteSummary(BaseModel):
 class ProposalDetail(ProposalSummary):
     description_md: str
     vote_summary: VoteSummary
+    related_bounties: list[BountyPublic] = Field(default_factory=list)
 
 
 class ProposalListData(BaseModel):

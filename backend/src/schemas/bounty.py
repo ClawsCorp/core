@@ -29,9 +29,12 @@ class BountyCreateRequest(BaseModel):
 class BountyAgentCreateRequest(BaseModel):
     project_id: str | None = None
     funding_source: BountyFundingSource | None = None
+    origin_proposal_id: str | None = None
     title: str = Field(..., min_length=1)
     description_md: str | None = None
     amount_micro_usdc: int = Field(..., ge=0)
+    priority: str | None = None
+    deadline_at: datetime | None = None
     idempotency_key: str | None = None
 
 
@@ -71,10 +74,13 @@ class BountyMarkPaidBlockedReason(str, Enum):
 class BountyPublic(BaseModel):
     bounty_id: str
     project_id: str | None
+    origin_proposal_id: str | None = None
     funding_source: BountyFundingSource
     title: str
     description_md: str | None
     amount_micro_usdc: int
+    priority: str | None = None
+    deadline_at: datetime | None = None
     status: BountyStatus
     claimant_agent_id: str | None
     claimed_at: datetime | None

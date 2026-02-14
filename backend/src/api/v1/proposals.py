@@ -19,11 +19,13 @@ from src.core.governance import can_finalize, compute_vote_result, next_status
 from src.core.security import hash_body
 from src.models.agent import Agent
 from src.models.audit_log import AuditLog
+from src.models.bounty import Bounty
 from src.models.discussions import DiscussionThread
 from src.models.proposal import Proposal, ProposalStatus
 from src.models.project import Project, ProjectStatus
 from src.models.reputation_event import ReputationEvent
 from src.models.vote import Vote
+from src.schemas.bounty import BountyPublic, BountyStatus as BountyStatusSchema
 from src.schemas.proposal import (
     ProposalCreateRequest,
     ProposalDetail,
@@ -453,7 +455,50 @@ def _proposal_detail(db: Session, proposal: Proposal) -> ProposalDetail:
     author_rep = _load_author_reputation(db, {proposal.author_agent_id}).get(proposal.author_agent_id, 0)
     summary = _proposal_summary(proposal, author_agent_id, author_rep)
     vote_summary = _vote_summary(db, proposal.id)
-    return ProposalDetail(**summary.dict(), description_md=proposal.description_md, vote_summary=vote_summary)
+    related_bounties = _load_related_bounties(db, proposal.proposal_id)
+    return ProposalDetail(
+        **summary.model_dump(),
+        description_md=proposal.description_md,
+        vote_summary=vote_summary,
+        related_bounties=related_bounties,
+    )
+
+
+def _load_related_bounties(db: Session, proposal_id: str) -> list[BountyPublic]:
+    rows = (
+        db.query(Bounty, Project.project_id, Agent.agent_id)
+        .outerjoin(Project, Bounty.project_id == Project.id)
+        .outerjoin(Agent, Bounty.claimant_agent_id == Agent.id)
+        .filter(Bounty.origin_proposal_id == proposal_id)
+        .order_by(Bounty.created_at.desc(), Bounty.id.desc())
+        .all()
+    )
+    out: list[BountyPublic] = []
+    for row in rows:
+        b = row.Bounty
+        out.append(
+            BountyPublic(
+                bounty_id=b.bounty_id,
+                project_id=row.project_id,
+                origin_proposal_id=b.origin_proposal_id,
+                funding_source=b.funding_source,
+                title=b.title,
+                description_md=b.description_md,
+                amount_micro_usdc=int(b.amount_micro_usdc),
+                priority=b.priority,
+                deadline_at=b.deadline_at,
+                status=BountyStatusSchema(b.status),
+                claimant_agent_id=row.agent_id,
+                claimed_at=b.claimed_at,
+                submitted_at=b.submitted_at,
+                pr_url=b.pr_url,
+                merge_sha=b.merge_sha,
+                paid_tx_hash=b.paid_tx_hash,
+                created_at=b.created_at,
+                updated_at=b.updated_at,
+            )
+        )
+    return out
 
 
 def _vote_summary(db: Session, proposal_db_id: int) -> VoteSummary:

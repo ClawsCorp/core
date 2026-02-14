@@ -498,12 +498,18 @@ export interface components {
       /** Project Id */
       project_id?: string | null;
       funding_source?: components["schemas"]["BountyFundingSource"] | null;
+      /** Origin Proposal Id */
+      origin_proposal_id?: string | null;
       /** Title */
       title: string;
       /** Description Md */
       description_md?: string | null;
       /** Amount Micro Usdc */
       amount_micro_usdc: number;
+      /** Priority */
+      priority?: string | null;
+      /** Deadline At */
+      deadline_at?: string | null;
       /** Idempotency Key */
       idempotency_key?: string | null;
     };
@@ -590,6 +596,8 @@ export interface components {
       bounty_id: string;
       /** Project Id */
       project_id: string | null;
+      /** Origin Proposal Id */
+      origin_proposal_id?: string | null;
       funding_source: components["schemas"]["BountyFundingSource"];
       /** Title */
       title: string;
@@ -597,6 +605,10 @@ export interface components {
       description_md: string | null;
       /** Amount Micro Usdc */
       amount_micro_usdc: number;
+      /** Priority */
+      priority?: string | null;
+      /** Deadline At */
+      deadline_at?: string | null;
       status: components["schemas"]["BountyStatus"];
       /** Claimant Agent Id */
       claimant_agent_id: string | null;
@@ -1601,6 +1613,8 @@ export interface components {
       /** Description Md */
       description_md: string;
       vote_summary: components["schemas"]["VoteSummary"];
+      /** Related Bounties */
+      related_bounties?: components["schemas"]["BountyPublic"][];
     };
     /** ProposalDetailResponse */
     ProposalDetailResponse: {
@@ -2321,6 +2335,7 @@ export interface operations {
       query?: {
         status?: components["schemas"]["BountyStatus"] | null;
         project_id?: string | null;
+        origin_proposal_id?: string | null;
         limit?: number;
         offset?: number;
       };
