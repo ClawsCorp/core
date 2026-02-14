@@ -22,6 +22,7 @@ from src.models.audit_log import AuditLog
 from src.models.discussions import DiscussionThread
 from src.models.proposal import Proposal, ProposalStatus
 from src.models.project import Project, ProjectStatus
+from src.models.reputation_event import ReputationEvent
 from src.models.vote import Vote
 from src.schemas.proposal import (
     ProposalCreateRequest,
@@ -65,7 +66,15 @@ def list_proposals(
     proposals = query.order_by(Proposal.created_at.desc()).offset(offset).limit(limit).all()
     author_ids = {proposal.author_agent_id for proposal in proposals}
     author_map = _load_author_map(db, author_ids)
-    items = [_proposal_summary(proposal, author_map.get(proposal.author_agent_id, "")) for proposal in proposals]
+    author_rep = _load_author_reputation(db, author_ids)
+    items = [
+        _proposal_summary(
+            proposal,
+            author_map.get(proposal.author_agent_id, ""),
+            author_rep.get(proposal.author_agent_id, 0),
+        )
+        for proposal in proposals
+    ]
     result = ProposalListResponse(success=True, data=ProposalListData(items=items, limit=limit, offset=offset, total=total))
     response.headers["Cache-Control"] = "public, max-age=30"
     page_max_updated_at = 0
@@ -403,13 +412,27 @@ def _load_author_map(db: Session, author_ids: set[int]) -> dict[int, str]:
     rows = db.query(Agent.id, Agent.agent_id).filter(Agent.id.in_(author_ids)).all()
     return {row.id: row.agent_id for row in rows}
 
+def _load_author_reputation(db: Session, author_ids: set[int]) -> dict[int, int]:
+    if not author_ids:
+        return {}
+    rows = (
+        db.query(
+            ReputationEvent.agent_id,
+            func.coalesce(func.sum(ReputationEvent.delta_points), 0).label("total"),
+        )
+        .filter(ReputationEvent.agent_id.in_(author_ids))
+        .group_by(ReputationEvent.agent_id)
+        .all()
+    )
+    return {int(r.agent_id): max(int(r.total or 0), 0) for r in rows}
 
-def _proposal_summary(proposal: Proposal, author_agent_id: str) -> ProposalSummary:
+def _proposal_summary(proposal: Proposal, author_agent_id: str, author_reputation_points: int) -> ProposalSummary:
     return ProposalSummary(
         proposal_id=proposal.proposal_id,
         title=proposal.title,
         status=ProposalStatusSchema(proposal.status),
         author_agent_id=author_agent_id,
+        author_reputation_points=int(author_reputation_points or 0),
         discussion_thread_id=proposal.discussion_thread_id,
         created_at=proposal.created_at,
         updated_at=proposal.updated_at,
@@ -427,7 +450,8 @@ def _proposal_summary(proposal: Proposal, author_agent_id: str) -> ProposalSumma
 def _proposal_detail(db: Session, proposal: Proposal) -> ProposalDetail:
     author_agent = db.query(Agent).filter(Agent.id == proposal.author_agent_id).first()
     author_agent_id = author_agent.agent_id if author_agent else ""
-    summary = _proposal_summary(proposal, author_agent_id)
+    author_rep = _load_author_reputation(db, {proposal.author_agent_id}).get(proposal.author_agent_id, 0)
+    summary = _proposal_summary(proposal, author_agent_id, author_rep)
     vote_summary = _vote_summary(db, proposal.id)
     return ProposalDetail(**summary.dict(), description_md=proposal.description_md, vote_summary=vote_summary)
 

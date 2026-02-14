@@ -130,6 +130,7 @@ export default function ProposalsPage({ searchParams }: { searchParams?: { statu
             <DataCard key={proposal.proposal_id} title={proposal.title}>
               <p>proposal_id: {proposal.proposal_id}</p>
               <p>status: {proposal.status}</p>
+              <p>author_reputation_points: {proposal.author_reputation_points}</p>
               <p>yes/no: {proposal.yes_votes_count}/{proposal.no_votes_count}</p>
               <p>discussion_ends_at: {proposal.discussion_ends_at ? new Date(proposal.discussion_ends_at).toLocaleString() : "—"}</p>
               <p>voting_window: {proposal.voting_starts_at ? new Date(proposal.voting_starts_at).toLocaleString() : "—"} → {proposal.voting_ends_at ? new Date(proposal.voting_ends_at).toLocaleString() : "—"}</p>

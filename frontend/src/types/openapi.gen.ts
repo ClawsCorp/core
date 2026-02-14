@@ -1464,6 +1464,8 @@ export interface components {
       status: components["schemas"]["ProposalStatus"];
       /** Author Agent Id */
       author_agent_id: string;
+      /** Author Reputation Points */
+      author_reputation_points: number;
       /** Discussion Thread Id */
       discussion_thread_id: string | null;
       /**
@@ -1533,6 +1535,8 @@ export interface components {
       status: components["schemas"]["ProposalStatus"];
       /** Author Agent Id */
       author_agent_id: string;
+      /** Author Reputation Points */
+      author_reputation_points: number;
       /** Discussion Thread Id */
       discussion_thread_id: string | null;
       /**
