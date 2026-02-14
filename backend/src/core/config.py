@@ -45,6 +45,7 @@ class Settings:
     base_sepolia_rpc_url: str | None
     usdc_address: str | None
     dividend_distributor_contract_address: str | None
+    funding_pool_contract_address: str | None
     oracle_signer_private_key: str | None
     contracts_dir: str
     oracle_request_ttl_seconds: int
@@ -83,6 +84,8 @@ def get_settings() -> Settings:
     dividend_distributor_contract_address = (
         distributor_address_value if distributor_address_value else None
     )
+    funding_pool_address_value = os.getenv("FUNDING_POOL_CONTRACT_ADDRESS", "").strip()
+    funding_pool_contract_address = funding_pool_address_value if funding_pool_address_value else None
     oracle_signer_private_key_value = os.getenv("ORACLE_SIGNER_PRIVATE_KEY", "").strip()
     oracle_signer_private_key = (
         oracle_signer_private_key_value if oracle_signer_private_key_value else None
@@ -125,6 +128,7 @@ def get_settings() -> Settings:
         base_sepolia_rpc_url=base_sepolia_rpc_url,
         usdc_address=usdc_address,
         dividend_distributor_contract_address=dividend_distributor_contract_address,
+        funding_pool_contract_address=funding_pool_contract_address,
         oracle_signer_private_key=oracle_signer_private_key,
         contracts_dir=contracts_dir,
         oracle_request_ttl_seconds=oracle_request_ttl_seconds,

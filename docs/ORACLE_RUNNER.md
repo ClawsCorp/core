@@ -27,6 +27,7 @@ Server-side only (not used directly by the runner):
 - `BASE_SEPOLIA_RPC_URL`
 - `USDC_ADDRESS`
 - `DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS`
+- `FUNDING_POOL_CONTRACT_ADDRESS` (optional; enables staker recipient generation from observed transfers)
 - `ORACLE_SIGNER_PRIVATE_KEY`
 - `CONTRACTS_DIR` (optional)
 
