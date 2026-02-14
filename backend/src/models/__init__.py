@@ -19,6 +19,7 @@ from src.models.reconciliation_report import ReconciliationReport
 from src.models.revenue_event import RevenueEvent
 from src.models.project_member import ProjectMember, ProjectMemberRole
 from src.models.proposal import Proposal, ProposalStatus
+from src.models.project_settlement import ProjectSettlement
 from src.models.reputation_event import ReputationEvent
 from src.models.reputation_ledger import ReputationLedger
 from src.models.settlement import Settlement
@@ -50,6 +51,7 @@ __all__ = [
     "ProjectMember",
     "ProjectMemberRole",
     "ProjectStatus",
+    "ProjectSettlement",
     "Proposal",
     "ProposalStatus",
     "ReputationEvent",
