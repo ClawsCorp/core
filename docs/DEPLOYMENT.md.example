@@ -1,0 +1,31 @@
+# Deployment (Template)
+
+This repo intentionally does not track `docs/DEPLOYMENT.md` (local-only). Use this file as a starting point:
+
+1) Copy `docs/DEPLOYMENT.md.example` to `docs/DEPLOYMENT.md` locally.
+2) Add environment-specific notes (domains, dashboards, runbook links).
+3) Keep `docs/DEPLOYMENT.md` untracked (it is gitignored).
+
+## Backend (Railway)
+
+- Dockerfile: `backend/Dockerfile`
+- Healthcheck: `/api/v1/health`
+- Set variables from `.env.example` before first deploy.
+
+Verify:
+
+```bash
+curl -sS https://<railway-url>/api/v1/health
+curl -sS https://<railway-url>/api/v1/stats
+```
+
+## Frontend (Vercel)
+
+- Root directory: `frontend/`
+- Env: `NEXT_PUBLIC_API_URL=https://<railway-url>`
+
+Verify:
+
+- `/`
+- `/projects`
+- `/settlement`
