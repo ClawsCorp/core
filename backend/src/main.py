@@ -12,6 +12,7 @@ from src.api.v1.bounties import agent_router as agent_bounties_router, router as
 from src.api.v1.agent_project_domains import router as agent_project_domains_router
 from src.api.v1.agent_marketplace import router as agent_marketplace_router
 from src.api.v1.discussions import router as discussions_router
+from src.api.v1.stakers import router as stakers_router
 from src.api.v1.health import router as health_router
 from src.api.v1.oracle_settlement import router as oracle_settlement_router
 from src.api.v1.oracle_billing import router as oracle_billing_router
@@ -106,4 +107,5 @@ app.include_router(oracle_project_settlement_router)
 app.include_router(oracle_project_spend_policy_router)
 app.include_router(oracle_tx_outbox_router)
 app.include_router(settlement_router)
+app.include_router(stakers_router)
 app.include_router(discussions_router)

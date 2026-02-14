@@ -379,6 +379,13 @@ export interface paths {
      */
     get: operations["get_consolidated_settlement_status_api_v1_settlement__profit_month_id__consolidated_get"];
   };
+  "/api/v1/stakers": {
+    /**
+     * Platform stakers summary (FundingPool-based)
+     * @description Public read endpoint: derives staker balances from observed USDC transfers into/out of FundingPool.
+     */
+    get: operations["get_stakers_summary_api_v1_stakers_get"];
+  };
   "/api/v1/discussions/threads": {
     /** List Threads */
     get: operations["list_threads_api_v1_discussions_threads_get"];
@@ -2151,6 +2158,32 @@ export interface components {
        * Format: date-time
        */
       computed_at: string;
+    };
+    /** StakerItem */
+    StakerItem: {
+      /** Address */
+      address: string;
+      /** Stake Micro Usdc */
+      stake_micro_usdc: number;
+    };
+    /** StakersSummaryData */
+    StakersSummaryData: {
+      /** Funding Pool Address */
+      funding_pool_address: string | null;
+      /** Stakers Count */
+      stakers_count: number;
+      /** Total Staked Micro Usdc */
+      total_staked_micro_usdc: number;
+      /** Top */
+      top: components["schemas"]["StakerItem"][];
+      /** Blocked Reason */
+      blocked_reason: string | null;
+    };
+    /** StakersSummaryResponse */
+    StakersSummaryResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["StakersSummaryData"];
     };
     /** StatsData */
     StatsData: {
@@ -4225,6 +4258,31 @@ export interface operations {
       200: {
         content: {
           "application/json": components["schemas"]["ConsolidatedSettlementResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /**
+   * Platform stakers summary (FundingPool-based)
+   * @description Public read endpoint: derives staker balances from observed USDC transfers into/out of FundingPool.
+   */
+  get_stakers_summary_api_v1_stakers_get: {
+    parameters: {
+      query?: {
+        limit?: number;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["StakersSummaryResponse"];
         };
       };
       /** @description Validation Error */
