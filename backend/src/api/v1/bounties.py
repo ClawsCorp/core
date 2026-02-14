@@ -17,6 +17,7 @@ from src.models.agent import Agent
 from src.models.bounty import Bounty, BountyFundingSource, BountyStatus
 from src.models.expense_event import ExpenseEvent
 from src.models.project_capital_event import ProjectCapitalEvent
+from src.models.proposal import Proposal
 from src.models.project import Project
 from src.services.project_capital import (
     get_latest_project_capital_reconciliation,
@@ -69,6 +70,7 @@ def list_bounties(
     response: Response,
     status: BountyStatusSchema | None = Query(None),
     project_id: str | None = Query(None),
+    origin_proposal_id: str | None = Query(None),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
@@ -80,6 +82,8 @@ def list_bounties(
         query = query.filter(Bounty.status == BountyStatus(status))
     if project_id is not None:
         query = query.filter(Project.project_id == project_id)
+    if origin_proposal_id is not None:
+        query = query.filter(Bounty.origin_proposal_id == origin_proposal_id)
     total = query.count()
     rows = (
         query.order_by(Bounty.created_at.desc()).offset(offset).limit(limit).all()
@@ -93,7 +97,7 @@ def list_bounties(
         data=BountyListData(items=items, limit=limit, offset=offset, total=total),
     )
     response.headers["Cache-Control"] = "public, max-age=30"
-    response.headers["ETag"] = f'W/"bounties:{status or "all"}:{project_id or "all"}:{offset}:{limit}:{total}:{page_max_updated_at}"'
+    response.headers["ETag"] = f'W/"bounties:{status or "all"}:{project_id or "all"}:{origin_proposal_id or "all"}:{offset}:{limit}:{total}:{page_max_updated_at}"'
     return result
 
 
@@ -181,6 +185,11 @@ async def create_bounty_agent(
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
 
+    if payload.origin_proposal_id:
+        exists = db.query(Proposal).filter(Proposal.proposal_id == payload.origin_proposal_id).first()
+        if exists is None:
+            raise HTTPException(status_code=404, detail="Proposal not found")
+
     requested_source = (
         BountyFundingSource(payload.funding_source.value) if payload.funding_source else None
     )
@@ -197,10 +206,13 @@ async def create_bounty_agent(
         bounty_id=_generate_bounty_id(db),
         idempotency_key=idempotency_key,
         project_id=project.id if project else None,
+        origin_proposal_id=payload.origin_proposal_id,
         funding_source=funding_source,
         title=payload.title,
         description_md=payload.description_md,
         amount_micro_usdc=payload.amount_micro_usdc,
+        priority=payload.priority,
+        deadline_at=payload.deadline_at,
         status=BountyStatus.open,
     )
 
@@ -562,10 +574,13 @@ def _bounty_public(
     return BountyPublic(
         bounty_id=bounty.bounty_id,
         project_id=project_id,
+        origin_proposal_id=bounty.origin_proposal_id,
         funding_source=bounty.funding_source,
         title=bounty.title,
         description_md=bounty.description_md,
         amount_micro_usdc=bounty.amount_micro_usdc,
+        priority=bounty.priority,
+        deadline_at=bounty.deadline_at,
         status=BountyStatusSchema(bounty.status),
         claimant_agent_id=claimant_agent_id,
         claimed_at=bounty.claimed_at,
