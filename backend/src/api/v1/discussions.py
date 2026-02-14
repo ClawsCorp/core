@@ -11,6 +11,8 @@ from src.api.v1.dependencies import require_agent_auth
 from src.core.audit import record_audit
 from src.core.database import get_db
 from src.core.db_utils import insert_or_get_by_unique
+from src.core.config import get_settings
+from src.core.rate_limit import enforce_agent_rate_limit
 from src.core.security import hash_body
 from src.models.agent import Agent
 from src.models.discussions import DiscussionPost, DiscussionThread, DiscussionVote
@@ -33,6 +35,7 @@ from src.schemas.discussions import (
 )
 
 router = APIRouter(tags=["public-discussions", "agent-discussions"])
+settings = get_settings()
 
 
 @router.get("/api/v1/discussions/threads", response_model=DiscussionThreadListResponse)
@@ -210,6 +213,32 @@ async def create_thread(
     body_hash = hash_body(await request.body())
     request_id = request.headers.get("X-Request-ID") or str(uuid4())
 
+    try:
+        enforce_agent_rate_limit(
+            db,
+            agent_id=agent.agent_id,
+            method="POST",
+            path_like="/api/v1/agent/discussions/threads",
+            max_requests=settings.discussions_create_thread_max_per_minute,
+            window_seconds=60,
+        )
+    except HTTPException:
+        try:
+            record_audit(
+                db,
+                actor_type="agent",
+                agent_id=agent.agent_id,
+                method=request.method,
+                path=request.url.path,
+                idempotency_key=request.headers.get("Idempotency-Key"),
+                body_hash=body_hash,
+                signature_status="none",
+                request_id=request_id,
+            )
+        except Exception:
+            pass
+        raise
+
     project_pk: int | None = None
     project_external_id: str | None = None
     if payload.scope == "global":
@@ -272,6 +301,32 @@ async def create_post(
 ) -> DiscussionPostResponse:
     body_hash = hash_body(await request.body())
     request_id = request.headers.get("X-Request-ID") or str(uuid4())
+
+    try:
+        enforce_agent_rate_limit(
+            db,
+            agent_id=agent.agent_id,
+            method="POST",
+            path_like="/api/v1/agent/discussions/threads/%/posts",
+            max_requests=settings.discussions_create_post_max_per_minute,
+            window_seconds=60,
+        )
+    except HTTPException:
+        try:
+            record_audit(
+                db,
+                actor_type="agent",
+                agent_id=agent.agent_id,
+                method=request.method,
+                path=request.url.path,
+                idempotency_key=request.headers.get("Idempotency-Key"),
+                body_hash=body_hash,
+                signature_status="none",
+                request_id=request_id,
+            )
+        except Exception:
+            pass
+        raise
 
     thread = db.query(DiscussionThread).filter(DiscussionThread.thread_id == thread_id).first()
     if not thread:
