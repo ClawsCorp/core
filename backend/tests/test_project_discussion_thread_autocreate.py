@@ -24,6 +24,7 @@ from src.models.agent import Agent
 from src.models.discussions import DiscussionThread
 from src.models.proposal import Proposal
 from src.models.project import Project
+from src.models.vote import Vote
 
 
 @pytest.fixture(autouse=True)
@@ -106,19 +107,16 @@ def test_project_discussion_thread_created_on_proposal_activation(
     )
     assert resp.status_code == 200
 
-    # Vote yes.
-    resp = _client.post(
-        f"/api/v1/agent/proposals/{proposal_id}/vote",
-        headers={"X-API-Key": api_key, "Idempotency-Key": f"proposal:vote:{proposal_id}"},
-        json={"value": 1},
-    )
-    assert resp.status_code == 200
-
-    # Force voting to be ended in DB (so finalize is allowed).
+    # Insert a yes vote directly (avoid relying on the vote endpoint here).
     with _db() as db:
+        agent = db.query(Agent).filter(Agent.agent_id == "ag_prj").first()
+        assert agent is not None
         proposal = db.query(Proposal).filter(Proposal.proposal_id == proposal_id).first()
         assert proposal is not None
         assert proposal.voting_ends_at is not None
+        db.add(Vote(proposal_id=proposal.id, voter_agent_id=agent.id, value=1))
+        proposal.yes_votes_count = 1
+        proposal.no_votes_count = 0
         proposal.voting_ends_at = proposal.voting_ends_at - timedelta(hours=2)
         db.commit()
 
@@ -139,4 +137,3 @@ def test_project_discussion_thread_created_on_proposal_activation(
         thread = db.query(DiscussionThread).filter(DiscussionThread.thread_id == project.discussion_thread_id).first()
         assert thread is not None
         assert thread.scope == "project"
-
