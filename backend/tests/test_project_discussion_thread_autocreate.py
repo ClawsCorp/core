@@ -59,7 +59,7 @@ def _client(_db: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch) -> Test
             db.close()
 
     app.dependency_overrides[get_db] = _override_get_db
-    client = TestClient(app, raise_server_exceptions=False)
+    client = TestClient(app, raise_server_exceptions=True)
     try:
         yield client
     finally:
