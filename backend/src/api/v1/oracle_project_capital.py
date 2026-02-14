@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import secrets
+from datetime import timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -13,18 +14,26 @@ from src.core.audit import record_audit
 from src.core.config import get_settings
 from src.core.database import get_db
 from src.core.db_utils import insert_or_get_by_unique
+from src.models.observed_usdc_transfer import ObservedUsdcTransfer
 from src.models.project import Project
 from src.models.project_capital_event import ProjectCapitalEvent
 from src.models.project_capital_reconciliation_report import ProjectCapitalReconciliationReport
 from src.schemas.oracle_projects import (
     ProjectCapitalReconciliationRunResponse,
+    ProjectCapitalSyncData,
+    ProjectCapitalSyncResponse,
     ProjectTreasurySetData,
     ProjectTreasurySetRequest,
     ProjectTreasurySetResponse,
 )
 from src.schemas.project import ProjectCapitalEventCreateRequest, ProjectCapitalEventDetailResponse, ProjectCapitalEventPublic
 from src.schemas.project import ProjectCapitalReconciliationReportPublic
-from src.services.blockchain import BlockchainConfigError, BlockchainReadError, get_usdc_balance_micro_usdc
+from src.services.blockchain import (
+    BlockchainConfigError,
+    BlockchainReadError,
+    get_usdc_balance_micro_usdc,
+    read_block_timestamp_utc,
+)
 from src.services.project_capital import get_latest_project_capital_reconciliation, is_reconciliation_fresh
 
 router = APIRouter(prefix="/api/v1/oracle", tags=["oracle-project-capital"])
@@ -101,6 +110,106 @@ async def create_project_capital_event(
     db.commit()
     db.refresh(event)
     return ProjectCapitalEventDetailResponse(success=True, data=_public(project.project_id, event), blocked_reason=None)
+
+
+@router.post("/project-capital-events/sync", response_model=ProjectCapitalSyncResponse)
+async def sync_project_capital_from_observed_usdc_transfers(
+    request: Request,
+    _: str = Depends(require_oracle_hmac),
+    db: Session = Depends(get_db),
+) -> ProjectCapitalSyncResponse:
+    """
+    MVP automation helper: turn observed on-chain USDC transfers into project treasury addresses into append-only
+    `project_capital_events` (capital inflows).
+
+    Safe to run repeatedly: idempotent per (chain_id, tx_hash, log_index, project_id).
+    """
+    request_id = request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID") or str(uuid4())
+    body_hash = request.state.body_hash
+    sync_idem = request.headers.get("Idempotency-Key") or f"project_capital_sync:{request_id}"
+
+    projects = (
+        db.query(Project.id, Project.project_id, Project.treasury_address)
+        .filter(Project.treasury_address.isnot(None))
+        .all()
+    )
+    addr_to_project: dict[str, tuple[int, str]] = {}
+    for pid, public_id, addr in projects:
+        if addr:
+            addr_to_project[str(addr).lower()] = (int(pid), str(public_id))
+
+    if not addr_to_project:
+        _record_oracle_audit(request, db, body_hash, request_id, sync_idem, commit=True)
+        return ProjectCapitalSyncResponse(
+            success=True,
+            data=ProjectCapitalSyncData(
+                transfers_seen=0,
+                capital_events_inserted=0,
+                projects_with_treasury_count=0,
+            ),
+        )
+
+    transfers = (
+        db.query(ObservedUsdcTransfer)
+        .filter(ObservedUsdcTransfer.to_address.in_(list(addr_to_project.keys())))
+        .order_by(ObservedUsdcTransfer.block_number.desc(), ObservedUsdcTransfer.log_index.desc())
+        .limit(1000)
+        .all()
+    )
+
+    block_ts_cache: dict[int, str] = {}
+    transfers_seen = 0
+    inserted = 0
+
+    for t in transfers:
+        dest = str(t.to_address).lower()
+        if dest not in addr_to_project:
+            continue
+        project_db_id, project_public_id = addr_to_project[dest]
+        transfers_seen += 1
+
+        # Best-effort block timestamp (cache per block). If it fails, fall back to observed_at.
+        bn = int(t.block_number)
+        if bn in block_ts_cache:
+            profit_month_id = block_ts_cache[bn]
+        else:
+            try:
+                ts = read_block_timestamp_utc(bn)
+                profit_month_id = ts.astimezone(timezone.utc).strftime("%Y%m")
+            except BlockchainReadError:
+                profit_month_id = t.observed_at.astimezone(timezone.utc).strftime("%Y%m")
+            block_ts_cache[bn] = profit_month_id
+
+        idem = f"pcap:deposit:{int(t.chain_id)}:{t.tx_hash}:{int(t.log_index)}:to:{project_public_id}"
+        event = ProjectCapitalEvent(
+            event_id=_generate_event_id(db),
+            idempotency_key=idem,
+            profit_month_id=profit_month_id,
+            project_id=project_db_id,
+            delta_micro_usdc=int(t.amount_micro_usdc),
+            source="treasury_usdc_deposit",
+            evidence_tx_hash=str(t.tx_hash),
+            evidence_url=f"usdc_transfer:{t.tx_hash}#log:{int(t.log_index)};to:{project_public_id}",
+        )
+        _row, created = insert_or_get_by_unique(
+            db,
+            instance=event,
+            model=ProjectCapitalEvent,
+            unique_filter={"idempotency_key": idem},
+        )
+        if created:
+            inserted += 1
+
+    _record_oracle_audit(request, db, body_hash, request_id, sync_idem, commit=False)
+    db.commit()
+    return ProjectCapitalSyncResponse(
+        success=True,
+        data=ProjectCapitalSyncData(
+            transfers_seen=transfers_seen,
+            capital_events_inserted=inserted,
+            projects_with_treasury_count=len(addr_to_project),
+        ),
+    )
 
 
 @router.post("/projects/{project_id}/treasury", response_model=ProjectTreasurySetResponse)

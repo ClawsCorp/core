@@ -160,6 +160,12 @@ def build_parser() -> argparse.ArgumentParser:
     project_reconcile.add_argument("--project-id", required=True)
     project_reconcile.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
 
+    sync_project_capital = subparsers.add_parser(
+        "sync-project-capital",
+        help="Sync observed USDC treasury deposits into append-only project capital events (oracle HMAC protected).",
+    )
+    sync_project_capital.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
+
     project_capital_event = subparsers.add_parser(
         "project-capital-event",
         help="Append a project capital ledger event (oracle HMAC protected).",
@@ -302,6 +308,14 @@ def run(argv: list[str] | None = None) -> int:
                 _print_json(data)
             else:
                 _print_fields(data, ["ready", "blocked_reason", "delta_micro_usdc", "onchain_balance_micro_usdc", "ledger_balance_micro_usdc", "computed_at"])
+            return 0
+
+        if args.command == "sync-project-capital":
+            data = _post_action(client, "/api/v1/oracle/project-capital-events/sync", b"")
+            if json_mode:
+                _print_json(data)
+            else:
+                _print_fields(data, ["projects_with_treasury_count", "transfers_seen", "capital_events_inserted"])
             return 0
 
         if args.command == "project-capital-event":
