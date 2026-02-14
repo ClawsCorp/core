@@ -88,6 +88,7 @@ export interface ProjectSummary {
   proposal_id: string | null;
   origin_proposal_id: string | null;
   originator_agent_id: number | null;
+  discussion_thread_id: string | null;
   treasury_wallet_address: string | null;
   treasury_address: string | null;
   revenue_wallet_address: string | null;

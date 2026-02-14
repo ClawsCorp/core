@@ -483,6 +483,36 @@ def _ensure_resulting_project(db: Session, proposal: Proposal, activated_at: dat
         db.flush()
         existing = project
 
+    _ensure_project_discussion_thread(db, existing)
     proposal.resulting_project_id = existing.project_id
     if proposal.activated_at is None:
         proposal.activated_at = activated_at
+
+
+def _project_discussion_thread_id(project_external_id: str) -> str:
+    digest = hashlib.sha256(project_external_id.encode("utf-8")).hexdigest()[:16]
+    return f"dth_project_{digest}"
+
+
+def _ensure_project_discussion_thread(db: Session, project: Project) -> None:
+    if project.discussion_thread_id:
+        return
+    creator_agent_id = project.originator_agent_id or project.created_by_agent_id
+    if creator_agent_id is None:
+        return
+
+    thread_id = _project_discussion_thread_id(project.project_id)
+    thread = DiscussionThread(
+        thread_id=thread_id,
+        scope="project",
+        project_id=project.id,
+        title=f"Project {project.project_id}: general"[:255],
+        created_by_agent_id=int(creator_agent_id),
+    )
+    thread, _created = insert_or_get_by_unique(
+        db,
+        instance=thread,
+        model=DiscussionThread,
+        unique_filter={"thread_id": thread_id},
+    )
+    project.discussion_thread_id = thread.thread_id

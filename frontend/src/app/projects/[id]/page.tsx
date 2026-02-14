@@ -164,6 +164,11 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
               app_surface: <Link href={`/apps/${project.slug}`}>/apps/{project.slug}</Link>
             </p>
             <h3>Discussions</h3>
+            {project.discussion_thread_id ? (
+              <p>
+                <Link href={`/discussions/threads/${project.discussion_thread_id}`}>Open project thread</Link>
+              </p>
+            ) : null}
             <p>
               <Link href={`/discussions?scope=project&project_id=${project.project_id}`}>
                 Open project discussions

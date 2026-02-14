@@ -48,6 +48,7 @@ class ProjectSummary(BaseModel):
     proposal_id: str | None
     origin_proposal_id: str | None
     originator_agent_id: int | None
+    discussion_thread_id: str | None
     treasury_wallet_address: str | None
     treasury_address: str | None
     revenue_wallet_address: str | None

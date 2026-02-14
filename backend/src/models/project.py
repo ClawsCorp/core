@@ -31,6 +31,11 @@ class Project(Base):
     proposal_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     origin_proposal_id: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True, index=True)
     originator_agent_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("agents.id"), nullable=True, index=True)
+    # Optional link to the canonical "general" project discussion thread.
+    # Stored as the public thread_id (not the internal PK) to keep API/UI wiring simple.
+    discussion_thread_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, unique=True, index=True
+    )
     treasury_wallet_address: Mapped[str | None] = mapped_column(
         String(255), nullable=True
     )
