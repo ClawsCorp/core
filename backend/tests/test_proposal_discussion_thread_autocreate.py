@@ -113,4 +113,5 @@ def test_submit_autocreates_discussion_thread(_client: TestClient, _db: sessionm
     with _db() as db:
         threads = db.query(DiscussionThread).filter(DiscussionThread.thread_id == submitted["discussion_thread_id"]).all()
         assert len(threads) == 1
-
+        assert threads[0].ref_type == "proposal"
+        assert threads[0].ref_id == proposal_id

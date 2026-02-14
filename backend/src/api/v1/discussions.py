@@ -16,7 +16,9 @@ from src.core.config import get_settings
 from src.core.rate_limit import enforce_agent_rate_limit
 from src.core.security import hash_body
 from src.models.agent import Agent
+from src.models.bounty import Bounty
 from src.models.discussions import DiscussionPost, DiscussionPostFlag, DiscussionThread, DiscussionVote
+from src.models.proposal import Proposal
 from src.models.project import Project
 from src.schemas.discussions import (
     DiscussionPostCreateRequest,
@@ -37,6 +39,7 @@ from src.schemas.discussions import (
     DiscussionThreadListData,
     DiscussionThreadListResponse,
     DiscussionThreadSummary,
+    DiscussionThreadRefType,
     DiscussionVoteRequest,
 )
 
@@ -47,6 +50,7 @@ router = APIRouter(tags=["public-discussions", "agent-discussions"])
 def list_threads(
     scope: DiscussionScope,
     project_id: str | None = None,
+    ref_type: DiscussionThreadRefType | None = None,
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
@@ -62,6 +66,9 @@ def list_threads(
             raise HTTPException(status_code=400, detail="project_id is required for project scope")
         query = query.filter(DiscussionThread.scope == "project", Project.project_id == project_id)
 
+    if ref_type:
+        query = query.filter(DiscussionThread.ref_type == ref_type)
+
     total = query.count()
     rows = query.order_by(DiscussionThread.created_at.desc()).offset(offset).limit(limit).all()
 
@@ -74,6 +81,8 @@ def list_threads(
                     scope=row.DiscussionThread.scope,
                     project_id=row.project_id,
                     title=row.DiscussionThread.title,
+                    ref_type=row.DiscussionThread.ref_type,
+                    ref_id=row.DiscussionThread.ref_id,
                     created_by_agent_id=row.agent_id,
                     created_at=row.DiscussionThread.created_at,
                 )
@@ -115,6 +124,8 @@ def get_thread(thread_id: str, db: Session = Depends(get_db)) -> DiscussionThrea
             scope=row.DiscussionThread.scope,
             project_id=row.project_id,
             title=row.DiscussionThread.title,
+            ref_type=row.DiscussionThread.ref_type,
+            ref_id=row.DiscussionThread.ref_id,
             created_by_agent_id=row.agent_id,
             created_at=row.DiscussionThread.created_at,
             posts_count=int(counts.posts_count or 0),
@@ -259,6 +270,210 @@ async def create_thread(
 
     project_pk: int | None = None
     project_external_id: str | None = None
+
+    # Optional canonical linkage (proposal/project/bounty). For proposal/project we enforce
+    # determinism and return the canonical thread rather than creating ad-hoc duplicates.
+    if (payload.ref_type is None) != (payload.ref_id is None):
+        raise HTTPException(status_code=400, detail="ref_type and ref_id must be provided together")
+
+    if payload.ref_type == "proposal":
+        proposal = db.query(Proposal).filter(Proposal.proposal_id == payload.ref_id).first()
+        if not proposal:
+            raise HTTPException(status_code=404, detail="Proposal not found")
+        if payload.scope != "global" or payload.project_id is not None:
+            raise HTTPException(status_code=400, detail="proposal threads must use global scope")
+        thread_id = f"dth_proposal_{proposal.proposal_id}"[:64]
+        thread = DiscussionThread(
+            thread_id=thread_id,
+            ref_type="proposal",
+            ref_id=proposal.proposal_id,
+            scope="global",
+            project_id=None,
+            title=f"Proposal {proposal.proposal_id}: {proposal.title}"[:255],
+            created_by_agent_id=agent.id,
+        )
+        thread, _ = insert_or_get_by_unique(
+            db,
+            instance=thread,
+            model=DiscussionThread,
+            unique_filter={"thread_id": thread_id},
+        )
+        # We do not mutate proposal.discussion_thread_id here; proposal submit owns that linkage.
+        record_audit(
+            db,
+            actor_type="agent",
+            agent_id=agent.agent_id,
+            method=request.method,
+            path=request.url.path,
+            idempotency_key=request.headers.get("Idempotency-Key"),
+            body_hash=body_hash,
+            signature_status="none",
+            request_id=request_id,
+            commit=False,
+        )
+        db.commit()
+        db.refresh(thread)
+        return DiscussionThreadCreateResponse(
+            success=True,
+            data=DiscussionThreadSummary(
+                thread_id=thread.thread_id,
+                scope=thread.scope,
+                project_id=None,
+                title=thread.title,
+                ref_type=thread.ref_type,
+                ref_id=thread.ref_id,
+                created_by_agent_id=agent.agent_id,
+                created_at=thread.created_at,
+            ),
+        )
+
+    if payload.ref_type == "project":
+        project = db.query(Project).filter(Project.project_id == payload.ref_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        if payload.scope != "project":
+            raise HTTPException(status_code=400, detail="project threads must use project scope")
+        if payload.project_id is not None and payload.project_id != project.project_id:
+            raise HTTPException(status_code=400, detail="project_id must match ref_id for project threads")
+        project_pk = project.id
+        project_external_id = project.project_id
+        thread_id = f"dth_project_{secrets.token_hex(8)}"
+        # Prefer existing canonical project thread when present.
+        if project.discussion_thread_id:
+            existing = db.query(DiscussionThread).filter(DiscussionThread.thread_id == project.discussion_thread_id).first()
+            if existing:
+                try:
+                    record_audit(
+                        db,
+                        actor_type="agent",
+                        agent_id=agent.agent_id,
+                        method=request.method,
+                        path=request.url.path,
+                        idempotency_key=request.headers.get("Idempotency-Key"),
+                        body_hash=body_hash,
+                        signature_status="none",
+                        request_id=request_id,
+                    )
+                except Exception:
+                    pass
+                return DiscussionThreadCreateResponse(
+                    success=True,
+                    data=DiscussionThreadSummary(
+                        thread_id=existing.thread_id,
+                        scope=existing.scope,
+                        project_id=project_external_id,
+                        title=existing.title,
+                        ref_type=existing.ref_type,
+                        ref_id=existing.ref_id,
+                        created_by_agent_id=agent.agent_id,
+                        created_at=existing.created_at,
+                    ),
+                )
+        # Fall back to creating a canonical-like linked thread (unique on ref prevents duplicates).
+        thread = DiscussionThread(
+            thread_id=thread_id,
+            ref_type="project",
+            ref_id=project.project_id,
+            scope="project",
+            project_id=project_pk,
+            title=payload.title,
+            created_by_agent_id=agent.id,
+        )
+        thread, _ = insert_or_get_by_unique(
+            db,
+            instance=thread,
+            model=DiscussionThread,
+            unique_filter={"ref_type": "project", "ref_id": project.project_id},
+        )
+        record_audit(
+            db,
+            actor_type="agent",
+            agent_id=agent.agent_id,
+            method=request.method,
+            path=request.url.path,
+            idempotency_key=request.headers.get("Idempotency-Key"),
+            body_hash=body_hash,
+            signature_status="none",
+            request_id=request_id,
+            commit=False,
+        )
+        db.commit()
+        db.refresh(thread)
+        return DiscussionThreadCreateResponse(
+            success=True,
+            data=DiscussionThreadSummary(
+                thread_id=thread.thread_id,
+                scope=thread.scope,
+                project_id=project_external_id,
+                title=thread.title,
+                ref_type=thread.ref_type,
+                ref_id=thread.ref_id,
+                created_by_agent_id=agent.agent_id,
+                created_at=thread.created_at,
+            ),
+        )
+
+    if payload.ref_type == "bounty":
+        bounty = db.query(Bounty).filter(Bounty.bounty_id == payload.ref_id).first()
+        if not bounty:
+            raise HTTPException(status_code=404, detail="Bounty not found")
+        if bounty.project_id is None:
+            if payload.scope != "global" or payload.project_id is not None:
+                raise HTTPException(status_code=400, detail="platform bounties must use global scope")
+        else:
+            project = db.query(Project).filter(Project.id == bounty.project_id).first()
+            if not project:
+                raise HTTPException(status_code=500, detail="Bounty project missing")
+            if payload.scope != "project":
+                raise HTTPException(status_code=400, detail="project bounties must use project scope")
+            if payload.project_id != project.project_id:
+                raise HTTPException(status_code=400, detail="project_id must match bounty project")
+            project_pk = project.id
+            project_external_id = project.project_id
+
+        thread = DiscussionThread(
+            thread_id=_generate_thread_id(db),
+            ref_type="bounty",
+            ref_id=bounty.bounty_id,
+            scope=payload.scope,
+            project_id=project_pk,
+            title=payload.title,
+            created_by_agent_id=agent.id,
+        )
+        thread, _ = insert_or_get_by_unique(
+            db,
+            instance=thread,
+            model=DiscussionThread,
+            unique_filter={"ref_type": "bounty", "ref_id": bounty.bounty_id},
+        )
+        record_audit(
+            db,
+            actor_type="agent",
+            agent_id=agent.agent_id,
+            method=request.method,
+            path=request.url.path,
+            idempotency_key=request.headers.get("Idempotency-Key"),
+            body_hash=body_hash,
+            signature_status="none",
+            request_id=request_id,
+            commit=False,
+        )
+        db.commit()
+        db.refresh(thread)
+        return DiscussionThreadCreateResponse(
+            success=True,
+            data=DiscussionThreadSummary(
+                thread_id=thread.thread_id,
+                scope=thread.scope,
+                project_id=project_external_id,
+                title=thread.title,
+                ref_type=thread.ref_type,
+                ref_id=thread.ref_id,
+                created_by_agent_id=agent.agent_id,
+                created_at=thread.created_at,
+            ),
+        )
+
     if payload.scope == "global":
         if payload.project_id is not None:
             raise HTTPException(status_code=400, detail="project_id must be null for global scope")
@@ -301,8 +516,53 @@ async def create_thread(
             scope=thread.scope,
             project_id=project_external_id,
             title=thread.title,
+            ref_type=thread.ref_type,
+            ref_id=thread.ref_id,
             created_by_agent_id=agent.agent_id,
             created_at=thread.created_at,
+        ),
+    )
+
+
+@router.get("/api/v1/discussions/proposal-threads", response_model=DiscussionThreadListResponse)
+def list_proposal_threads(
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+) -> DiscussionThreadListResponse:
+    # Stable ordering for autonomy: newest proposals first, with a deterministic tie-breaker.
+    query = (
+        db.query(DiscussionThread, Agent.agent_id, Proposal.created_at)
+        .join(Proposal, Proposal.discussion_thread_id == DiscussionThread.thread_id)
+        .join(Agent, DiscussionThread.created_by_agent_id == Agent.id)
+        .filter(DiscussionThread.ref_type == "proposal")
+    )
+    total = query.count()
+    rows = (
+        query.order_by(Proposal.created_at.desc(), Proposal.proposal_id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    return DiscussionThreadListResponse(
+        success=True,
+        data=DiscussionThreadListData(
+            items=[
+                DiscussionThreadSummary(
+                    thread_id=row.DiscussionThread.thread_id,
+                    scope=row.DiscussionThread.scope,
+                    project_id=None,
+                    title=row.DiscussionThread.title,
+                    ref_type=row.DiscussionThread.ref_type,
+                    ref_id=row.DiscussionThread.ref_id,
+                    created_by_agent_id=row.agent_id,
+                    created_at=row.DiscussionThread.created_at,
+                )
+                for row in rows
+            ],
+            limit=limit,
+            offset=offset,
+            total=total,
         ),
     )
 
