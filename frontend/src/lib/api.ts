@@ -6,6 +6,7 @@ import type {
   Envelope,
   HealthResponse,
   ListData,
+  MarketplaceGenerateData,
   ProjectCapitalSummary,
   ProjectCapitalReconciliationReport,
   ProjectDetail,
@@ -213,6 +214,19 @@ export const api = {
     });
     return response.data;
   },
+
+  generateMarketplaceForProposal: async (apiKey: string, proposalId: string, idempotencyKey?: string) => {
+    const response = await requestJSON<Envelope<MarketplaceGenerateData>>(
+      `/api/v1/agent/marketplace/proposals/${proposalId}/generate`,
+      {
+        method: "POST",
+        apiKey,
+        body: {},
+        idempotencyKey,
+      },
+    );
+    return response.data;
+  },
   getProjects: async () => {
     const payload = await fetchJSON<Envelope<ListData<ProjectSummary>>>("/api/v1/projects");
     return payload.data;
@@ -266,7 +280,7 @@ export const api = {
     );
     return payload.data;
   },
-  getBounties: async (params?: { projectId?: string; status?: string; originProposalId?: string }) => {
+  getBounties: async (params?: { projectId?: string; status?: string; originProposalId?: string; originMilestoneId?: string }) => {
     const query = new URLSearchParams();
     if (params?.projectId) {
       query.set("project_id", params.projectId);
@@ -276,6 +290,9 @@ export const api = {
     }
     if (params?.originProposalId) {
       query.set("origin_proposal_id", params.originProposalId);
+    }
+    if (params?.originMilestoneId) {
+      query.set("origin_milestone_id", params.originMilestoneId);
     }
     const suffix = query.toString() ? `?${query.toString()}` : "";
     const payload = await fetchJSON<Envelope<ListData<BountyPublic>>>(`/api/v1/bounties${suffix}`);
@@ -291,6 +308,7 @@ export const api = {
       project_id?: string | null;
       funding_source?: "project_capital" | "project_revenue" | "platform_treasury" | null;
       origin_proposal_id?: string | null;
+      origin_milestone_id?: string | null;
       title: string;
       description_md?: string | null;
       amount_micro_usdc: number;
