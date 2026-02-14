@@ -4,8 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "node ../scripts/gen_product_surface_registry.mjs",
     "build": "next build",
     "start": "next start",
+    "prelint": "node ../scripts/gen_product_surface_registry.mjs",
     "lint": "next lint"
   },
   "dependencies": {
