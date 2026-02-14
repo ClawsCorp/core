@@ -61,6 +61,11 @@ class DiscussionPost(Base):
     )
     body_md: Mapped[str] = mapped_column(Text, nullable=False)
     idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    hidden_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    hidden_by_agent_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("agents.id"), nullable=True
+    )
+    hidden_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -86,4 +91,27 @@ class DiscussionVote(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class DiscussionPostFlag(Base):
+    __tablename__ = "discussion_post_flags"
+    __table_args__ = (
+        UniqueConstraint(
+            "post_id",
+            "flagger_agent_id",
+            name="uq_discussion_post_flags_unique",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    post_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("discussion_posts.id"), nullable=False, index=True
+    )
+    flagger_agent_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("agents.id"), nullable=False, index=True
+    )
+    reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
