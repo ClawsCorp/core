@@ -210,6 +210,25 @@ def build_parser() -> argparse.ArgumentParser:
     project_capital_event.add_argument("--idempotency-key")
     project_capital_event.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
 
+    open_funding_round = subparsers.add_parser(
+        "open-funding-round",
+        help="Open a project funding round (oracle HMAC protected).",
+    )
+    open_funding_round.add_argument("--project-id", required=True)
+    open_funding_round.add_argument("--title")
+    open_funding_round.add_argument("--cap-micro-usdc", type=int)
+    open_funding_round.add_argument("--idempotency-key")
+    open_funding_round.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
+
+    close_funding_round = subparsers.add_parser(
+        "close-funding-round",
+        help="Close a project funding round (oracle HMAC protected).",
+    )
+    close_funding_round.add_argument("--project-id", required=True)
+    close_funding_round.add_argument("--round-id", required=True)
+    close_funding_round.add_argument("--idempotency-key")
+    close_funding_round.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
+
     run_project_month = subparsers.add_parser(
         "run-project-month",
         help="Project month orchestration (MVP): refresh project capital reconciliation and report readiness.",
@@ -610,6 +629,61 @@ def run(argv: list[str] | None = None) -> int:
             else:
                 # API returns the public event shape under data.
                 _print_fields(data, ["event_id", "project_id", "delta_micro_usdc", "source", "profit_month_id"])
+            return 0
+
+        if args.command == "open-funding-round":
+            project_id = str(args.project_id).strip()
+            if not project_id:
+                raise OracleRunnerError("--project-id is required.")
+
+            payload: dict[str, Any] = {
+                "idempotency_key": args.idempotency_key or "",
+                "title": (str(args.title).strip() if args.title is not None else None),
+                "cap_micro_usdc": (int(args.cap_micro_usdc) if args.cap_micro_usdc is not None else None),
+            }
+            payload = {k: v for k, v in payload.items() if v is not None}
+            if not payload.get("idempotency_key"):
+                derived = dict(payload)
+                derived.pop("idempotency_key", None)
+                payload["idempotency_key"] = _derive_idempotency_key(f"open_funding_round:{project_id}", derived)
+
+            body_bytes = json.dumps(payload, separators=(",", ":"), ensure_ascii=True, sort_keys=True).encode("utf-8")
+            data = _post_action(
+                client,
+                f"/api/v1/oracle/projects/{project_id}/funding-rounds",
+                body_bytes,
+                idempotency_key=str(payload["idempotency_key"]),
+            )
+            if json_mode:
+                _print_json(data)
+            else:
+                # API returns round under data when success.
+                _print_fields(data, ["round_id", "status", "cap_micro_usdc"])
+            return 0
+
+        if args.command == "close-funding-round":
+            project_id = str(args.project_id).strip()
+            if not project_id:
+                raise OracleRunnerError("--project-id is required.")
+            round_id = str(args.round_id).strip()
+            if not round_id:
+                raise OracleRunnerError("--round-id is required.")
+
+            payload: dict[str, Any] = {"idempotency_key": args.idempotency_key or ""}
+            if not payload.get("idempotency_key"):
+                payload["idempotency_key"] = _derive_idempotency_key(f"close_funding_round:{project_id}:{round_id}", {})
+
+            body_bytes = json.dumps(payload, separators=(",", ":"), ensure_ascii=True, sort_keys=True).encode("utf-8")
+            data = _post_action(
+                client,
+                f"/api/v1/oracle/projects/{project_id}/funding-rounds/{round_id}/close",
+                body_bytes,
+                idempotency_key=str(payload["idempotency_key"]),
+            )
+            if json_mode:
+                _print_json(data)
+            else:
+                _print_fields(data, ["round_id", "status"])
             return 0
 
         if args.command == "run-project-month":
