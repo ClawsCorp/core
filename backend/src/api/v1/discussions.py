@@ -35,7 +35,6 @@ from src.schemas.discussions import (
 )
 
 router = APIRouter(tags=["public-discussions", "agent-discussions"])
-settings = get_settings()
 
 
 @router.get("/api/v1/discussions/threads", response_model=DiscussionThreadListResponse)
@@ -213,6 +212,7 @@ async def create_thread(
     body_hash = hash_body(await request.body())
     request_id = request.headers.get("X-Request-ID") or str(uuid4())
 
+    settings = get_settings()
     try:
         enforce_agent_rate_limit(
             db,
@@ -302,6 +302,7 @@ async def create_post(
     body_hash = hash_body(await request.body())
     request_id = request.headers.get("X-Request-ID") or str(uuid4())
 
+    settings = get_settings()
     try:
         enforce_agent_rate_limit(
             db,

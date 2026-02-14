@@ -56,7 +56,18 @@ def enforce_agent_rate_limit(
     if max_requests <= 0 or window_seconds <= 0:
         return RateLimitResult(allowed=True, attempts=0, max_requests=max_requests, window_seconds=window_seconds)
 
-    now = now or datetime.now(timezone.utc)
+    # SQLite stores naive datetimes (even if DateTime(timezone=True) is used).
+    # Using an aware datetime in the SQL filter can break comparisons and yield zero counts.
+    dialect = ""
+    try:
+        dialect = db.get_bind().dialect.name
+    except Exception:
+        dialect = ""
+
+    if dialect == "sqlite":
+        now = now or datetime.utcnow()
+    else:
+        now = now or datetime.now(timezone.utc)
     since = now - timedelta(seconds=window_seconds)
     attempts = _count_audits(
         db,
@@ -75,4 +86,3 @@ def enforce_agent_rate_limit(
         )
 
     return RateLimitResult(allowed=True, attempts=attempts, max_requests=max_requests, window_seconds=window_seconds)
-
