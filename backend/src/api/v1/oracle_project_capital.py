@@ -192,37 +192,53 @@ async def sync_project_capital_from_observed_usdc_transfers(
         project_db_id, project_public_id = addr_to_project[dest]
         transfers_seen += 1
 
-        # Best-effort block timestamp (cache per block). If it fails, fall back to observed_at.
-        bn = int(t.block_number)
-        if bn in block_ts_cache:
-            profit_month_id = block_ts_cache[bn]
-        else:
-            try:
-                ts = read_block_timestamp_utc(bn)
-                profit_month_id = ts.astimezone(timezone.utc).strftime("%Y%m")
-            except BlockchainReadError:
-                profit_month_id = t.observed_at.astimezone(timezone.utc).strftime("%Y%m")
-            block_ts_cache[bn] = profit_month_id
+        # Extra safety: if this on-chain transfer has already been accounted for in the ledger
+        # (e.g. manual oracle ingestion using the tx hash as evidence), skip inserting a duplicate
+        # capital event even if the idempotency key differs.
+        #
+        # This prevents double-counting when `ObservedUsdcTransfer` arrives late (indexer lag) but
+        # a capital inflow has already been recorded append-only via another path.
+        already_accounted = (
+            db.query(ProjectCapitalEvent.id)
+            .filter(
+                ProjectCapitalEvent.project_id == project_db_id,
+                ProjectCapitalEvent.evidence_tx_hash == str(t.tx_hash).lower(),
+                ProjectCapitalEvent.delta_micro_usdc == int(t.amount_micro_usdc),
+            )
+            .first()
+        )
+        if already_accounted is None:
+            # Best-effort block timestamp (cache per block). If it fails, fall back to observed_at.
+            bn = int(t.block_number)
+            if bn in block_ts_cache:
+                profit_month_id = block_ts_cache[bn]
+            else:
+                try:
+                    ts = read_block_timestamp_utc(bn)
+                    profit_month_id = ts.astimezone(timezone.utc).strftime("%Y%m")
+                except BlockchainReadError:
+                    profit_month_id = t.observed_at.astimezone(timezone.utc).strftime("%Y%m")
+                block_ts_cache[bn] = profit_month_id
 
-        idem = f"pcap:deposit:{int(t.chain_id)}:{t.tx_hash}:{int(t.log_index)}:to:{project_public_id}"
-        event = ProjectCapitalEvent(
-            event_id=_generate_event_id(db),
-            idempotency_key=idem,
-            profit_month_id=profit_month_id,
-            project_id=project_db_id,
-            delta_micro_usdc=int(t.amount_micro_usdc),
-            source="treasury_usdc_deposit",
-            evidence_tx_hash=str(t.tx_hash),
-            evidence_url=f"usdc_transfer:{t.tx_hash}#log:{int(t.log_index)};to:{project_public_id}",
-        )
-        _row, created = insert_or_get_by_unique(
-            db,
-            instance=event,
-            model=ProjectCapitalEvent,
-            unique_filter={"idempotency_key": idem},
-        )
-        if created:
-            inserted += 1
+            idem = f"pcap:deposit:{int(t.chain_id)}:{t.tx_hash}:{int(t.log_index)}:to:{project_public_id}"
+            event = ProjectCapitalEvent(
+                event_id=_generate_event_id(db),
+                idempotency_key=idem,
+                profit_month_id=profit_month_id,
+                project_id=project_db_id,
+                delta_micro_usdc=int(t.amount_micro_usdc),
+                source="treasury_usdc_deposit",
+                evidence_tx_hash=str(t.tx_hash),
+                evidence_url=f"usdc_transfer:{t.tx_hash}#log:{int(t.log_index)};to:{project_public_id}",
+            )
+            _row, created = insert_or_get_by_unique(
+                db,
+                instance=event,
+                model=ProjectCapitalEvent,
+                unique_filter={"idempotency_key": idem},
+            )
+            if created:
+                inserted += 1
 
         dep = ProjectFundingDeposit(
             deposit_id=f"pfdep_{secrets.token_hex(8)}",
