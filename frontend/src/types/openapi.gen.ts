@@ -116,6 +116,10 @@ export interface paths {
     /** Get project capital summary */
     get: operations["get_project_capital_api_v1_projects__project_id__capital_get"];
   };
+  "/api/v1/projects/{project_id}/funding": {
+    /** Get project funding summary */
+    get: operations["get_project_funding_summary_api_v1_projects__project_id__funding_get"];
+  };
   "/api/v1/projects/{project_id}/capital/reconciliation/latest": {
     /** Get latest project capital reconciliation report */
     get: operations["get_project_capital_reconciliation_latest_api_v1_projects__project_id__capital_reconciliation_latest_get"];
@@ -302,6 +306,14 @@ export interface paths {
      * Safe to run repeatedly: idempotent per (chain_id, tx_hash, log_index, project_id).
      */
     post: operations["sync_project_capital_from_observed_usdc_transfers_api_v1_oracle_project_capital_events_sync_post"];
+  };
+  "/api/v1/oracle/projects/{project_id}/funding-rounds": {
+    /** Open Project Funding Round */
+    post: operations["open_project_funding_round_api_v1_oracle_projects__project_id__funding_rounds_post"];
+  };
+  "/api/v1/oracle/projects/{project_id}/funding-rounds/{round_id}/close": {
+    /** Close Project Funding Round */
+    post: operations["close_project_funding_round_api_v1_oracle_projects__project_id__funding_rounds__round_id__close_post"];
   };
   "/api/v1/oracle/projects/{project_id}/treasury": {
     /** Set Project Treasury Address */
@@ -1473,6 +1485,82 @@ export interface components {
       /** Success */
       success: boolean;
       data: components["schemas"]["ProjectDomainsData"];
+    };
+    /** ProjectFundingContributor */
+    ProjectFundingContributor: {
+      /** Address */
+      address: string;
+      /** Amount Micro Usdc */
+      amount_micro_usdc: number;
+    };
+    /** ProjectFundingRoundCloseRequest */
+    ProjectFundingRoundCloseRequest: {
+      /** Idempotency Key */
+      idempotency_key: string;
+    };
+    /** ProjectFundingRoundCreateRequest */
+    ProjectFundingRoundCreateRequest: {
+      /** Idempotency Key */
+      idempotency_key: string;
+      /** Title */
+      title?: string | null;
+      /** Cap Micro Usdc */
+      cap_micro_usdc?: number | null;
+    };
+    /** ProjectFundingRoundCreateResponse */
+    ProjectFundingRoundCreateResponse: {
+      /** Success */
+      success: boolean;
+      data?: components["schemas"]["ProjectFundingRoundPublic"] | null;
+      /** Blocked Reason */
+      blocked_reason?: string | null;
+    };
+    /** ProjectFundingRoundPublic */
+    ProjectFundingRoundPublic: {
+      /** Round Id */
+      round_id: string;
+      /** Project Id */
+      project_id: string;
+      /** Title */
+      title: string | null;
+      /** Status */
+      status: string;
+      /** Cap Micro Usdc */
+      cap_micro_usdc: number | null;
+      /**
+       * Opened At
+       * Format: date-time
+       */
+      opened_at: string;
+      /** Closed At */
+      closed_at: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+    };
+    /** ProjectFundingSummary */
+    ProjectFundingSummary: {
+      /** Project Id */
+      project_id: string;
+      open_round: components["schemas"]["ProjectFundingRoundPublic"] | null;
+      /** Open Round Raised Micro Usdc */
+      open_round_raised_micro_usdc: number;
+      /** Total Raised Micro Usdc */
+      total_raised_micro_usdc: number;
+      /** Contributors */
+      contributors: components["schemas"]["ProjectFundingContributor"][];
+      /** Contributors Total Count */
+      contributors_total_count: number;
+      /** Last Deposit At */
+      last_deposit_at: string | null;
+    };
+    /** ProjectFundingSummaryResponse */
+    ProjectFundingSummaryResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["ProjectFundingSummary"];
     };
     /** ProjectListData */
     ProjectListData: {
@@ -2914,6 +3002,28 @@ export interface operations {
       };
     };
   };
+  /** Get project funding summary */
+  get_project_funding_summary_api_v1_projects__project_id__funding_get: {
+    parameters: {
+      path: {
+        project_id: string;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ProjectFundingSummaryResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   /** Get latest project capital reconciliation report */
   get_project_capital_reconciliation_latest_api_v1_projects__project_id__capital_reconciliation_latest_get: {
     parameters: {
@@ -3868,6 +3978,61 @@ export interface operations {
       200: {
         content: {
           "application/json": components["schemas"]["ProjectCapitalSyncResponse"];
+        };
+      };
+    };
+  };
+  /** Open Project Funding Round */
+  open_project_funding_round_api_v1_oracle_projects__project_id__funding_rounds_post: {
+    parameters: {
+      path: {
+        project_id: string;
+      };
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ProjectFundingRoundCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ProjectFundingRoundCreateResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Close Project Funding Round */
+  close_project_funding_round_api_v1_oracle_projects__project_id__funding_rounds__round_id__close_post: {
+    parameters: {
+      path: {
+        project_id: string;
+        round_id: string;
+      };
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ProjectFundingRoundCloseRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ProjectFundingRoundCreateResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
         };
       };
     };

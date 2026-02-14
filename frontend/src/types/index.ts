@@ -116,6 +116,32 @@ export interface ProjectCapitalSummary {
   last_event_at: string | null;
 }
 
+export interface ProjectFundingRoundPublic {
+  round_id: string;
+  project_id: string;
+  title: string | null;
+  status: string;
+  cap_micro_usdc: number | null;
+  opened_at: string;
+  closed_at: string | null;
+  created_at: string;
+}
+
+export interface ProjectFundingContributor {
+  address: string;
+  amount_micro_usdc: number;
+}
+
+export interface ProjectFundingSummary {
+  project_id: string;
+  open_round: ProjectFundingRoundPublic | null;
+  open_round_raised_micro_usdc: number;
+  total_raised_micro_usdc: number;
+  contributors: ProjectFundingContributor[];
+  contributors_total_count: number;
+  last_deposit_at: string | null;
+}
+
 export interface ProjectSummary {
   project_id: string;
   slug: string;

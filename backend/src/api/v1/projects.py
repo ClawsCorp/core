@@ -16,8 +16,16 @@ from src.models.agent import Agent
 from src.models.project import Project, ProjectStatus
 from src.models.project_capital_event import ProjectCapitalEvent
 from src.models.project_capital_reconciliation_report import ProjectCapitalReconciliationReport
+from src.models.project_funding_deposit import ProjectFundingDeposit
+from src.models.project_funding_round import ProjectFundingRound
 from src.models.project_revenue_reconciliation_report import ProjectRevenueReconciliationReport
 from src.models.project_member import ProjectMember
+from src.schemas.project_funding import (
+    ProjectFundingContributor,
+    ProjectFundingRoundPublic,
+    ProjectFundingSummary,
+    ProjectFundingSummaryResponse,
+)
 from src.schemas.project import (
     ProjectCapitalLeaderboardData,
     ProjectCapitalLeaderboardResponse,
@@ -145,6 +153,98 @@ def get_project_capital(project_id: str, db: Session = Depends(get_db)) -> Proje
             capital_sum_micro_usdc=int(row[0] or 0),
             events_count=int(row[1] or 0),
             last_event_at=row[2],
+        ),
+    )
+
+
+def _funding_round_public(project_id: str, row: ProjectFundingRound) -> ProjectFundingRoundPublic:
+    return ProjectFundingRoundPublic(
+        round_id=row.round_id,
+        project_id=project_id,
+        title=row.title,
+        status=row.status,
+        cap_micro_usdc=int(row.cap_micro_usdc) if row.cap_micro_usdc is not None else None,
+        opened_at=row.opened_at,
+        closed_at=row.closed_at,
+        created_at=row.created_at,
+    )
+
+
+@router.get("/{project_id}/funding", response_model=ProjectFundingSummaryResponse, summary="Get project funding summary")
+def get_project_funding_summary(project_id: str, db: Session = Depends(get_db)) -> ProjectFundingSummaryResponse:
+    project = db.query(Project).filter(Project.project_id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    open_round = (
+        db.query(ProjectFundingRound)
+        .filter(ProjectFundingRound.project_id == project.id, ProjectFundingRound.status == "open")
+        .order_by(ProjectFundingRound.opened_at.desc(), ProjectFundingRound.id.desc())
+        .first()
+    )
+
+    open_round_raised = 0
+    if open_round is not None:
+        open_round_raised = int(
+            db.query(func.coalesce(func.sum(ProjectFundingDeposit.amount_micro_usdc), 0))
+            .filter(ProjectFundingDeposit.project_id == project.id, ProjectFundingDeposit.funding_round_id == open_round.id)
+            .scalar()
+            or 0
+        )
+
+    total_raised = int(
+        db.query(func.coalesce(func.sum(ProjectFundingDeposit.amount_micro_usdc), 0))
+        .filter(ProjectFundingDeposit.project_id == project.id)
+        .scalar()
+        or 0
+    )
+
+    contributors_rows = (
+        db.query(
+            ProjectFundingDeposit.from_address,
+            func.coalesce(func.sum(ProjectFundingDeposit.amount_micro_usdc), 0).label("amount_micro_usdc"),
+        )
+        .filter(
+            ProjectFundingDeposit.project_id == project.id,
+            ProjectFundingDeposit.funding_round_id == (open_round.id if open_round is not None else None),
+        )
+        .group_by(ProjectFundingDeposit.from_address)
+        .order_by(desc("amount_micro_usdc"), ProjectFundingDeposit.from_address.asc())
+        .limit(20)
+        .all()
+        if open_round is not None
+        else []
+    )
+    contributors = [
+        ProjectFundingContributor(address=str(addr), amount_micro_usdc=int(amount or 0))
+        for addr, amount in contributors_rows
+    ]
+
+    contributors_total_count = 0
+    if open_round is not None:
+        contributors_total_count = int(
+            db.query(func.count(func.distinct(ProjectFundingDeposit.from_address)))
+            .filter(ProjectFundingDeposit.project_id == project.id, ProjectFundingDeposit.funding_round_id == open_round.id)
+            .scalar()
+            or 0
+        )
+
+    last_deposit_at = (
+        db.query(func.max(ProjectFundingDeposit.observed_at))
+        .filter(ProjectFundingDeposit.project_id == project.id)
+        .scalar()
+    )
+
+    return ProjectFundingSummaryResponse(
+        success=True,
+        data=ProjectFundingSummary(
+            project_id=project.project_id,
+            open_round=_funding_round_public(project.project_id, open_round) if open_round is not None else None,
+            open_round_raised_micro_usdc=open_round_raised,
+            total_raised_micro_usdc=total_raised,
+            contributors=contributors,
+            contributors_total_count=contributors_total_count,
+            last_deposit_at=last_deposit_at,
         ),
     )
 
