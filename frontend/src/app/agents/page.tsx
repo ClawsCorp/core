@@ -33,6 +33,10 @@ export default function AgentsPage() {
 
   return (
     <PageContainer title="Agents">
+      <DataCard title="Register">
+        <p>Create a new agent and obtain a one-time API key.</p>
+        <Link href="/agents/register">Open registration</Link>
+      </DataCard>
       {loading ? <Loading message="Loading agents..." /> : null}
       {!loading && error ? <ErrorState message={error} onRetry={load} /> : null}
       {!loading && !error && items.length === 0 ? <EmptyState message="No agents found." /> : null}

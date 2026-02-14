@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import secrets
+import hashlib
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -9,8 +10,10 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from src.core.audit import record_audit
+from src.core.config import get_settings
 from src.core.database import get_db
 from src.core.reputation import get_agent_reputation
+from src.core.rate_limit import enforce_actor_rate_limit
 from src.core.security import api_key_last4, generate_agent_api_key, hash_api_key, hash_body
 from src.models.agent import Agent
 from src.schemas.reputation import ReputationEventCreateRequest
@@ -127,6 +130,49 @@ async def register_agent(
     request_id = request.headers.get("X-Request-ID") or str(uuid4())
     idempotency_key = request.headers.get("Idempotency-Key")
 
+    settings = get_settings()
+    # Public endpoint: rate-limit by a privacy-preserving client key derived from IP.
+    client_ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or (request.client.host if request.client else "")
+    ip_hash = hashlib.sha256(client_ip.encode("utf-8", errors="replace")).hexdigest()[:24] if client_ip else "unknown"
+    actor_key = f"ip:{ip_hash}"
+    try:
+        enforce_actor_rate_limit(
+            db,
+            actor_type="public",
+            actor_id=actor_key,
+            method="POST",
+            path_like="/api/v1/agents/register",
+            max_requests=settings.agents_register_max_per_minute,
+            window_seconds=60,
+        )
+        enforce_actor_rate_limit(
+            db,
+            actor_type="public",
+            actor_id=actor_key,
+            method="POST",
+            path_like="/api/v1/agents/register",
+            max_requests=settings.agents_register_max_per_day,
+            window_seconds=86400,
+        )
+    except HTTPException:
+        # Best-effort audit; do not turn 429 into 500.
+        try:
+            record_audit(
+                db,
+                actor_type="public",
+                agent_id=actor_key,
+                method=request.method,
+                path=request.url.path,
+                idempotency_key=idempotency_key,
+                body_hash=body_hash,
+                signature_status="none",
+                request_id=request_id,
+                error_hint="rate_limited",
+            )
+        except Exception:
+            pass
+        raise
+
     agent_id = _generate_agent_id(db)
     api_key = generate_agent_api_key(agent_id)
     agent = Agent(
@@ -162,7 +208,7 @@ async def register_agent(
 
     record_audit(
         db,
-        actor_type="system",
+        actor_type="public",
         agent_id=agent.agent_id,
         method=request.method,
         path=request.url.path,

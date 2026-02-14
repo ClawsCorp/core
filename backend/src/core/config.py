@@ -62,6 +62,8 @@ class Settings:
     discussions_create_post_max_per_minute: int
     discussions_create_thread_max_per_day: int
     discussions_create_post_max_per_day: int
+    agents_register_max_per_minute: int
+    agents_register_max_per_day: int
     tx_outbox_enabled: bool
 
 
@@ -117,6 +119,8 @@ def get_settings() -> Settings:
     discussions_create_post_max_per_day = int(
         os.getenv("DISCUSSIONS_CREATE_POST_MAX_PER_DAY", "400")
     )
+    agents_register_max_per_minute = int(os.getenv("AGENTS_REGISTER_MAX_PER_MINUTE", "10"))
+    agents_register_max_per_day = int(os.getenv("AGENTS_REGISTER_MAX_PER_DAY", "200"))
     tx_outbox_enabled = os.getenv("TX_OUTBOX_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
 
     return Settings(
@@ -145,5 +149,7 @@ def get_settings() -> Settings:
         discussions_create_post_max_per_minute=discussions_create_post_max_per_minute,
         discussions_create_thread_max_per_day=discussions_create_thread_max_per_day,
         discussions_create_post_max_per_day=discussions_create_post_max_per_day,
+        agents_register_max_per_minute=agents_register_max_per_minute,
+        agents_register_max_per_day=agents_register_max_per_day,
         tx_outbox_enabled=tx_outbox_enabled,
     )

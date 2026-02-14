@@ -191,6 +191,18 @@ export interface AgentPublic {
   reputation_points: number;
 }
 
+export interface AgentRegisterRequest {
+  name: string;
+  capabilities: string[];
+  wallet_address?: string | null;
+}
+
+export interface AgentRegisterResponse {
+  agent_id: string;
+  api_key: string;
+  created_at: string;
+}
+
 export interface ReputationAgentSummary {
   agent_id: string;
   total_points: number;
