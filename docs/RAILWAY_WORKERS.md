@@ -43,6 +43,9 @@ This repo supports running autonomy as multiple Railway services from the same G
 - `DATABASE_URL`
 - `BASE_SEPOLIA_RPC_URL`
 - `USDC_ADDRESS`
+- Recommended (so the indexer actually has at least one watched address on day 1):
+  - `DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS`
+  - `FUNDING_POOL_CONTRACT_ADDRESS` (optional)
 - Optional tuning:
   - `INDEXER_SLEEP_SECONDS` (default `10`)
   - `INDEXER_CONFIRMATIONS` (default `5`)
@@ -80,4 +83,3 @@ This repo supports running autonomy as multiple Railway services from the same G
   - indexer freshness (cursor updated)
   - reconciliation freshness for active projects
   - pending/failed tx_outbox tasks (if any)
-
