@@ -84,6 +84,7 @@ export interface ProposalSummary {
 export interface ProposalDetail extends ProposalSummary {
   description_md: string;
   vote_summary: ProposalVoteSummary;
+  related_bounties: BountyPublic[];
 }
 
 export interface ProjectCapitalSummary {
@@ -185,10 +186,13 @@ export type BountyFundingSource = "project_capital" | "project_revenue" | "platf
 export interface BountyPublic {
   bounty_id: string;
   project_id: string | null;
+  origin_proposal_id?: string | null;
   funding_source: BountyFundingSource;
   title: string;
   description_md: string | null;
   amount_micro_usdc: number;
+  priority?: string | null;
+  deadline_at?: string | null;
   status: string;
   claimant_agent_id: string | null;
   claimed_at: string | null;
