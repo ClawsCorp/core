@@ -226,6 +226,22 @@ export interface paths {
     /** Reconcile Project Capital */
     post: operations["reconcile_project_capital_api_v1_oracle_projects__project_id__capital_reconciliation_post"];
   };
+  "/api/v1/oracle/tx-outbox": {
+    /** Enqueue Task */
+    post: operations["enqueue_task_api_v1_oracle_tx_outbox_post"];
+  };
+  "/api/v1/oracle/tx-outbox/{task_id}": {
+    /** Get Task */
+    get: operations["get_task_api_v1_oracle_tx_outbox__task_id__get"];
+  };
+  "/api/v1/oracle/tx-outbox/{task_id}/claim": {
+    /** Claim Task */
+    post: operations["claim_task_api_v1_oracle_tx_outbox__task_id__claim_post"];
+  };
+  "/api/v1/oracle/tx-outbox/{task_id}/complete": {
+    /** Complete Task */
+    post: operations["complete_task_api_v1_oracle_tx_outbox__task_id__complete_post"];
+  };
   "/api/v1/settlement/months": {
     /**
      * List settlement months
@@ -1590,6 +1606,86 @@ export interface components {
       success: boolean;
       data: components["schemas"]["StatsData"];
     };
+    /** TxOutboxClaimData */
+    TxOutboxClaimData: {
+      task?: components["schemas"]["TxOutboxTask"] | null;
+      /** Blocked Reason */
+      blocked_reason?: string | null;
+    };
+    /** TxOutboxClaimRequest */
+    TxOutboxClaimRequest: {
+      /** Worker Id */
+      worker_id: string;
+    };
+    /** TxOutboxClaimResponse */
+    TxOutboxClaimResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["TxOutboxClaimData"];
+    };
+    /** TxOutboxCompleteRequest */
+    TxOutboxCompleteRequest: {
+      /** Status */
+      status: string;
+      /** Error Hint */
+      error_hint?: string | null;
+    };
+    /** TxOutboxCompleteResponse */
+    TxOutboxCompleteResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["TxOutboxTask"];
+    };
+    /** TxOutboxEnqueueRequest */
+    TxOutboxEnqueueRequest: {
+      /** Task Type */
+      task_type: string;
+      /** Payload */
+      payload?: {
+        [key: string]: unknown;
+      };
+      /** Idempotency Key */
+      idempotency_key?: string | null;
+    };
+    /** TxOutboxTask */
+    TxOutboxTask: {
+      /** Task Id */
+      task_id: string;
+      /** Idempotency Key */
+      idempotency_key: string | null;
+      /** Task Type */
+      task_type: string;
+      /** Payload */
+      payload: {
+        [key: string]: unknown;
+      };
+      /** Status */
+      status: string;
+      /** Attempts */
+      attempts: number;
+      /** Last Error Hint */
+      last_error_hint: string | null;
+      /** Locked At */
+      locked_at: string | null;
+      /** Locked By */
+      locked_by: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string;
+    };
+    /** TxOutboxTaskResponse */
+    TxOutboxTaskResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["TxOutboxTask"];
+    };
     /** ValidationError */
     ValidationError: {
       /** Location */
@@ -2846,6 +2942,104 @@ export interface operations {
       200: {
         content: {
           "application/json": components["schemas"]["ProjectCapitalReconciliationRunResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Enqueue Task */
+  enqueue_task_api_v1_oracle_tx_outbox_post: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["TxOutboxEnqueueRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["TxOutboxTaskResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Get Task */
+  get_task_api_v1_oracle_tx_outbox__task_id__get: {
+    parameters: {
+      path: {
+        task_id: string;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["TxOutboxTaskResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Claim Task */
+  claim_task_api_v1_oracle_tx_outbox__task_id__claim_post: {
+    parameters: {
+      path: {
+        task_id: string;
+      };
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["TxOutboxClaimRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["TxOutboxClaimResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Complete Task */
+  complete_task_api_v1_oracle_tx_outbox__task_id__complete_post: {
+    parameters: {
+      path: {
+        task_id: string;
+      };
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["TxOutboxCompleteRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["TxOutboxCompleteResponse"];
         };
       };
       /** @description Validation Error */
