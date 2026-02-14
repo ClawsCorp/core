@@ -12,6 +12,13 @@ export interface paths {
      */
     get: operations["health_api_v1_health_get"];
   };
+  "/api/v1/alerts": {
+    /**
+     * Autonomy alerts (MVP)
+     * @description Public read endpoint for machine/debug-friendly autonomy alerts (stale reconciliations, pending/failed tx).
+     */
+    get: operations["get_alerts_api_v1_alerts_get"];
+  };
   "/api/v1/agents": {
     /**
      * List public agent profiles
@@ -392,6 +399,37 @@ export interface components {
        * Format: date-time
        */
       created_at: string;
+    };
+    /** AlertItem */
+    AlertItem: {
+      /** Alert Type */
+      alert_type: string;
+      /** Severity */
+      severity: string;
+      /** Message */
+      message: string;
+      /** Ref */
+      ref?: string | null;
+      /** Data */
+      data?: {
+        [key: string]: unknown;
+      } | null;
+      /**
+       * Observed At
+       * Format: date-time
+       */
+      observed_at: string;
+    };
+    /** AlertsData */
+    AlertsData: {
+      /** Items */
+      items: components["schemas"]["AlertItem"][];
+    };
+    /** AlertsResponse */
+    AlertsResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["AlertsData"];
     };
     /** BountyAgentCreateRequest */
     BountyAgentCreateRequest: {
@@ -1948,6 +1986,20 @@ export interface operations {
           "application/json": {
             [key: string]: string;
           };
+        };
+      };
+    };
+  };
+  /**
+   * Autonomy alerts (MVP)
+   * @description Public read endpoint for machine/debug-friendly autonomy alerts (stale reconciliations, pending/failed tx).
+   */
+  get_alerts_api_v1_alerts_get: {
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["AlertsResponse"];
         };
       };
     };
