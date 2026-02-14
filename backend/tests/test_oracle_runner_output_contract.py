@@ -56,10 +56,11 @@ def _setup_fake_runner(monkeypatch):
 
 def test_run_month_stdout_json_and_stderr_progress(monkeypatch, capsys, tmp_path: Path) -> None:
     _setup_fake_runner(monkeypatch)
+    monkeypatch.setenv("ORACLE_AUTO_MONTH", "202501")
     payload = tmp_path / "execute.json"
     payload.write_text(json.dumps({"stakers": ["0x1"], "staker_shares": [1], "authors": ["0x2"], "author_shares": [1]}))
 
-    exit_code = cli.run(["run-month", "--month", "202501", "--execute-payload", str(payload)])
+    exit_code = cli.run(["run-month", "--execute-payload", str(payload)])
 
     captured = capsys.readouterr()
     assert exit_code == 0
@@ -238,11 +239,12 @@ class _FakeClientReconcileBlocked(_FakeClient):
 def test_run_month_blocked_reconcile_still_prints_single_json(monkeypatch, capsys, tmp_path: Path) -> None:
     monkeypatch.setattr(cli, "load_config_from_env", lambda: object())
     monkeypatch.setattr(cli, "OracleClient", _FakeClientReconcileBlocked)
+    monkeypatch.setenv("ORACLE_AUTO_MONTH", "202501")
 
     payload = tmp_path / "execute.json"
     payload.write_text(json.dumps({"stakers": ["0x1"], "staker_shares": [1], "authors": ["0x2"], "author_shares": [1]}))
 
-    exit_code = cli.run(["run-month", "--month", "202501", "--execute-payload", str(payload)])
+    exit_code = cli.run(["run-month", "--execute-payload", str(payload)])
 
     captured = capsys.readouterr()
     assert exit_code == 4
