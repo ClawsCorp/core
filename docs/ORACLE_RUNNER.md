@@ -16,6 +16,7 @@ Optional warning/ops context variables:
 
 - `ORACLE_REQUEST_TTL_SECONDS`
 - `ORACLE_CLOCK_SKEW_SECONDS`
+- `ORACLE_AUTO_MONTH` (optional; if set, must be `YYYYMM` and overrides `--month auto` resolution)
 
 Server-side only (not used directly by the runner):
 
@@ -54,9 +55,10 @@ PYTHONPATH=src python -m oracle_runner execute-distribution --month 202601 --pay
 PYTHONPATH=src python -m oracle_runner execute-distribution --month 202601 --payload auto
 PYTHONPATH=src python -m oracle_runner confirm-payout --month 202601 [--tx-hash 0x...]
 PYTHONPATH=src python -m oracle_runner sync-payout --month 202601 [--tx-hash 0x...]
+PYTHONPATH=src python -m oracle_runner run-month --execute-payload auto
 PYTHONPATH=src python -m oracle_runner run-month --month 202601 --execute-payload /path/execute.json
-PYTHONPATH=src python -m oracle_runner run-month --month 202601 --execute-payload auto
 PYTHONPATH=src python -m oracle_runner tx-worker --max-tasks 10
+PYTHONPATH=src python -m oracle_runner tx-worker --loop --max-tasks 10
 PYTHONPATH=src python -m oracle_runner --json reconcile --month 202601
 PYTHONPATH=src python -m oracle_runner --json reconcile-project-capital --project-id proj_...
 PYTHONPATH=src python -m oracle_runner --json project-reconcile --project-id proj_...
@@ -67,6 +69,11 @@ PYTHONPATH=src python -m oracle_runner --json mark-bounty-paid --bounty-id bty_.
 ```
 
 `run-month` always prints exactly one JSON summary object to stdout (pipeline-friendly).
+
+`run-month` month selection:
+
+- default `--month auto` (previous month in UTC)
+- to override for deterministic runs/tests: set `ORACLE_AUTO_MONTH=YYYYMM`
 
 `execute-distribution` validates payload shape locally:
 

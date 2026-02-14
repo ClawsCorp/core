@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
@@ -284,6 +285,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--to-block", type=int, default=None)
     parser.add_argument("--lookback-blocks", type=int, default=500)
     parser.add_argument("--confirmations", type=int, default=5)
+    parser.add_argument("--loop", action="store_true", help="Run continuously until interrupted.")
+    parser.add_argument("--sleep-seconds", type=int, default=10, help="Sleep time between loop iterations.")
     args = parser.parse_args(argv)
 
     settings = get_settings()
@@ -297,63 +300,79 @@ def main(argv: list[str] | None = None) -> int:
     if SessionLocal is None:
         raise SystemExit("DB SessionLocal is not configured")
 
-    with SessionLocal() as db:
-        watched = _resolve_watched_addresses(db)
+    sleep_seconds = max(1, int(args.sleep_seconds))
+    while True:
+        try:
+            with SessionLocal() as db:
+                watched = _resolve_watched_addresses(db)
 
-        chain_hex = _rpc_call(settings.base_sepolia_rpc_url, "eth_chainId", [])
-        chain_id = _parse_hex_int(chain_hex) if isinstance(chain_hex, str) else None
-        if chain_id is None:
-            raise SystemExit("Unable to read chain id")
+                chain_hex = _rpc_call(settings.base_sepolia_rpc_url, "eth_chainId", [])
+                chain_id = _parse_hex_int(chain_hex) if isinstance(chain_hex, str) else None
+                if chain_id is None:
+                    raise SystemExit("Unable to read chain id")
 
-        latest_hex = _rpc_call(settings.base_sepolia_rpc_url, "eth_blockNumber", [])
-        latest = _parse_hex_int(latest_hex) if isinstance(latest_hex, str) else None
-        if latest is None:
-            raise SystemExit("Unable to read latest block")
+                latest_hex = _rpc_call(settings.base_sepolia_rpc_url, "eth_blockNumber", [])
+                latest = _parse_hex_int(latest_hex) if isinstance(latest_hex, str) else None
+                if latest is None:
+                    raise SystemExit("Unable to read latest block")
 
-        safe_tip = max(0, latest - int(args.confirmations))
+                safe_tip = max(0, latest - int(args.confirmations))
 
-        if args.to_block is not None:
-            to_block = int(args.to_block)
-        else:
-            to_block = safe_tip
+                if args.to_block is not None:
+                    to_block = int(args.to_block)
+                else:
+                    to_block = safe_tip
 
-        if args.from_block is not None:
-            from_block = int(args.from_block)
-        else:
-            cursor = _get_or_create_cursor(db, cursor_key=args.cursor_key, chain_id=chain_id)
-            last = int(cursor.last_block_number or 0)
-            from_block = max(0, last + 1)
-            if from_block > to_block:
-                from_block = max(0, to_block - int(args.lookback_blocks))
+                if args.from_block is not None:
+                    from_block = int(args.from_block)
+                else:
+                    cursor = _get_or_create_cursor(db, cursor_key=args.cursor_key, chain_id=chain_id)
+                    last = int(cursor.last_block_number or 0)
+                    from_block = max(0, last + 1)
+                    if from_block > to_block:
+                        from_block = max(0, to_block - int(args.lookback_blocks))
 
-        result = index_usdc_transfers(
-            db=db,
-            rpc_url=settings.base_sepolia_rpc_url,
-            usdc_address=settings.usdc_address.lower(),
-            cursor_key=args.cursor_key,
-            from_block=from_block,
-            to_block=to_block,
-            watched_addresses=watched,
-        )
+                result = index_usdc_transfers(
+                    db=db,
+                    rpc_url=settings.base_sepolia_rpc_url,
+                    usdc_address=settings.usdc_address.lower(),
+                    cursor_key=args.cursor_key,
+                    from_block=from_block,
+                    to_block=to_block,
+                    watched_addresses=watched,
+                )
 
-    print(
-        json.dumps(
-            {
-                "success": True,
-                "data": {
-                    "chain_id": result.chain_id,
-                    "from_block": result.from_block,
-                    "to_block": result.to_block,
-                    "cursor_key": result.cursor_key,
-                    "transfers_seen": result.transfers_seen,
-                    "transfers_inserted": result.transfers_inserted,
-                },
-            },
-            separators=(",", ":"),
-            sort_keys=True,
-        )
-    )
-    return 0
+            print(
+                json.dumps(
+                    {
+                        "success": True,
+                        "data": {
+                            "chain_id": result.chain_id,
+                            "from_block": result.from_block,
+                            "to_block": result.to_block,
+                            "cursor_key": result.cursor_key,
+                            "transfers_seen": result.transfers_seen,
+                            "transfers_inserted": result.transfers_inserted,
+                        },
+                    },
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+            )
+        except IndexerError as exc:
+            print(
+                json.dumps(
+                    {"success": False, "error": str(exc)},
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+            )
+            if not args.loop:
+                return 1
+
+        if not args.loop:
+            return 0
+        time.sleep(sleep_seconds)
 
 
 if __name__ == "__main__":
