@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sys
-from datetime import timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -114,8 +114,9 @@ def test_project_discussion_thread_created_on_proposal_activation(
         # Ensure we are in voting (submit may choose discussion depending on global settings).
         proposal.status = ProposalStatus.voting
         proposal.discussion_ends_at = None
-        proposal.voting_starts_at = proposal.voting_starts_at or proposal.created_at
-        proposal.voting_ends_at = (proposal.voting_ends_at or proposal.created_at) - timedelta(hours=2)
+        # Force the voting window to be safely in the past regardless of sqlite tz behavior.
+        proposal.voting_starts_at = datetime(2000, 1, 1, tzinfo=timezone.utc)
+        proposal.voting_ends_at = datetime(2000, 1, 2, tzinfo=timezone.utc)
         db.add(Vote(proposal_id=proposal.id, voter_agent_id=agent.id, value=1))
         proposal.yes_votes_count = 1
         proposal.no_votes_count = 0
