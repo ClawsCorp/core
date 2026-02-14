@@ -11,6 +11,15 @@ class _FakeClient:
         self._responses = {
             "/api/v1/oracle/reconciliation/202501": {"ready": True, "delta_micro_usdc": 0},
             "/api/v1/oracle/settlement/202501": {"status": "ok"},
+            "/api/v1/oracle/settlement/202501/deposit-profit": {
+                "profit_month_id": "202501",
+                "status": "submitted",
+                "tx_hash": "0xdep",
+                "blocked_reason": None,
+                "idempotency_key": "deposit_profit:202501:123",
+                "task_id": "txo_1",
+                "amount_micro_usdc": 123,
+            },
             "/api/v1/oracle/distributions/202501/create": {"status": "submitted", "tx_hash": "0xcreate"},
             "/api/v1/oracle/distributions/202501/execute": {"status": "submitted", "tx_hash": "0xexec"},
             "/api/v1/oracle/payouts/202501/confirm": {"status": "confirmed", "tx_hash": "0xconfirm"},
@@ -185,6 +194,19 @@ def test_project_capital_event_derived_idempotency_key_json(monkeypatch, capsys)
     assert exit_code == 0
     data = json.loads(captured.out.strip())
     assert data["event_id"] == "pcap_1"
+    assert captured.err.strip() == ""
+
+
+def test_deposit_profit_json_flag(monkeypatch, capsys) -> None:
+    _setup_fake_runner(monkeypatch)
+
+    exit_code = cli.run(["deposit-profit", "--month", "202501", "--json"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    data = json.loads(captured.out.strip())
+    assert data["status"] == "submitted"
+    assert data["tx_hash"] == "0xdep"
     assert captured.err.strip() == ""
 
 
