@@ -19,10 +19,12 @@ export default function BountiesPage() {
   const [items, setItems] = useState<BountyPublic[]>([]);
   const [projectIdFilter, setProjectIdFilter] = useState("");
   const [originProposalIdFilter, setOriginProposalIdFilter] = useState("");
+  const [originMilestoneIdFilter, setOriginMilestoneIdFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [initialized, setInitialized] = useState(false);
 
-  const fetchBounties = useCallback(async (filters: { projectId: string; status: string; originProposalId: string }) => {
+  const fetchBounties = useCallback(
+    async (filters: { projectId: string; status: string; originProposalId: string; originMilestoneId: string }) => {
     setLoading(true);
     setError(null);
     try {
@@ -30,6 +32,7 @@ export default function BountiesPage() {
         projectId: filters.projectId.trim() ? filters.projectId.trim() : undefined,
         status: filters.status.trim() ? filters.status.trim() : undefined,
         originProposalId: filters.originProposalId.trim() ? filters.originProposalId.trim() : undefined,
+        originMilestoneId: filters.originMilestoneId.trim() ? filters.originMilestoneId.trim() : undefined,
       });
       setItems(result.items);
     } catch (err) {
@@ -37,16 +40,19 @@ export default function BountiesPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+    },
+    [],
+  );
 
   const syncFromUrl = useCallback(() => {
     if (typeof window === "undefined") {
-      return { projectId: "", originProposalId: "", status: "" };
+      return { projectId: "", originProposalId: "", originMilestoneId: "", status: "" };
     }
     const params = new URLSearchParams(window.location.search);
     return {
       projectId: params.get("project_id") ?? "",
       originProposalId: params.get("origin_proposal_id") ?? "",
+      originMilestoneId: params.get("origin_milestone_id") ?? "",
       status: params.get("status") ?? "",
     };
   }, []);
@@ -56,6 +62,7 @@ export default function BountiesPage() {
     const fromUrl = syncFromUrl();
     setProjectIdFilter(fromUrl.projectId);
     setOriginProposalIdFilter(fromUrl.originProposalId);
+    setOriginMilestoneIdFilter(fromUrl.originMilestoneId);
     setStatusFilter(fromUrl.status);
     setInitialized(true);
     void fetchBounties(fromUrl);
@@ -69,6 +76,7 @@ export default function BountiesPage() {
       const fromUrl = syncFromUrl();
       setProjectIdFilter(fromUrl.projectId);
       setOriginProposalIdFilter(fromUrl.originProposalId);
+      setOriginMilestoneIdFilter(fromUrl.originMilestoneId);
       setStatusFilter(fromUrl.status);
       void fetchBounties(fromUrl);
     };
@@ -76,9 +84,10 @@ export default function BountiesPage() {
     return () => window.removeEventListener("popstate", onPopState);
   }, [fetchBounties, initialized, syncFromUrl]);
 
-  const applyFilters = (filters: { projectId: string; originProposalId: string; status: string }) => {
+  const applyFilters = (filters: { projectId: string; originProposalId: string; originMilestoneId: string; status: string }) => {
     setProjectIdFilter(filters.projectId);
     setOriginProposalIdFilter(filters.originProposalId);
+    setOriginMilestoneIdFilter(filters.originMilestoneId);
     setStatusFilter(filters.status);
     const query = new URLSearchParams();
     if (filters.projectId.trim()) {
@@ -86,6 +95,9 @@ export default function BountiesPage() {
     }
     if (filters.originProposalId.trim()) {
       query.set("origin_proposal_id", filters.originProposalId.trim());
+    }
+    if (filters.originMilestoneId.trim()) {
+      query.set("origin_milestone_id", filters.originMilestoneId.trim());
     }
     if (filters.status.trim()) {
       query.set("status", filters.status.trim());
@@ -95,9 +107,21 @@ export default function BountiesPage() {
     void fetchBounties(filters);
   };
 
-  const onApplyFilters = () => applyFilters({ projectId: projectIdFilter, originProposalId: originProposalIdFilter, status: statusFilter });
-  const onReset = () => applyFilters({ projectId: "", originProposalId: "", status: "" });
-  const onPreset = (status: string) => applyFilters({ projectId: projectIdFilter, originProposalId: originProposalIdFilter, status });
+  const onApplyFilters = () =>
+    applyFilters({
+      projectId: projectIdFilter,
+      originProposalId: originProposalIdFilter,
+      originMilestoneId: originMilestoneIdFilter,
+      status: statusFilter,
+    });
+  const onReset = () => applyFilters({ projectId: "", originProposalId: "", originMilestoneId: "", status: "" });
+  const onPreset = (status: string) =>
+    applyFilters({
+      projectId: projectIdFilter,
+      originProposalId: originProposalIdFilter,
+      originMilestoneId: originMilestoneIdFilter,
+      status,
+    });
 
   return (
     <PageContainer title="Bounties">
@@ -118,6 +142,15 @@ export default function BountiesPage() {
               value={originProposalIdFilter}
               onChange={(event) => setOriginProposalIdFilter(event.target.value)}
               placeholder="prp_..."
+              style={{ padding: 6, minWidth: 220 }}
+            />
+          </label>
+          <label>
+            origin_milestone_id:{" "}
+            <input
+              value={originMilestoneIdFilter}
+              onChange={(event) => setOriginMilestoneIdFilter(event.target.value)}
+              placeholder="mil_..."
               style={{ padding: 6, minWidth: 220 }}
             />
           </label>
@@ -152,7 +185,7 @@ export default function BountiesPage() {
       </DataCard>
 
       {loading ? <Loading message="Loading bounties..." /> : null}
-      {!loading && error ? <ErrorState message={error} onRetry={() => fetchBounties({ projectId: projectIdFilter, originProposalId: originProposalIdFilter, status: statusFilter })} /> : null}
+      {!loading && error ? <ErrorState message={error} onRetry={() => fetchBounties({ projectId: projectIdFilter, originProposalId: originProposalIdFilter, originMilestoneId: originMilestoneIdFilter, status: statusFilter })} /> : null}
       {!loading && !error && items.length === 0 ? <EmptyState message="No bounties found." /> : null}
       {!loading && !error && items.length > 0
         ? items.map((bounty) => (
@@ -160,6 +193,7 @@ export default function BountiesPage() {
               <p>bounty_id: {bounty.bounty_id}</p>
               <p>project_id: {bounty.project_id}</p>
               <p>origin_proposal_id: {bounty.origin_proposal_id ?? "—"}</p>
+              <p>origin_milestone_id: {bounty.origin_milestone_id ?? "—"}</p>
               <p>status: {bounty.status}</p>
               <p>amount: {formatMicroUsdc(bounty.amount_micro_usdc)}</p>
               <p>priority: {bounty.priority ?? "—"}</p>

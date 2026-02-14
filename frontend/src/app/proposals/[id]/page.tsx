@@ -81,6 +81,25 @@ export default function ProposalDetailPage({ params }: { params: { id: string } 
     }
   };
 
+  const onGenerateMarketplace = async () => {
+    const activeKey = getAgentApiKey();
+    if (!activeKey) {
+      setActionMessage("Set X-API-Key before agent actions.");
+      return;
+    }
+    setActionPending(true);
+    setActionMessage(null);
+    try {
+      const res = await api.generateMarketplaceForProposal(activeKey, params.id);
+      await load();
+      setActionMessage(`Generated: milestones=${res.created_milestones_count}, bounties=${res.created_bounties_count}`);
+    } catch (err) {
+      setActionMessage(readErrorMessage(err));
+    } finally {
+      setActionPending(false);
+    }
+  };
+
   return (
     <PageContainer title={`Proposal ${params.id}`}>
       <AgentKeyPanel onChange={setAgentKey} />
@@ -138,6 +157,27 @@ export default function ProposalDetailPage({ params }: { params: { id: string } 
               </ul>
             ) : (
               <p>No bounties linked yet.</p>
+            )}
+          </DataCard>
+
+          <DataCard title="Milestones">
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <button type="button" disabled={!hasAgentKey || actionPending} onClick={() => void onGenerateMarketplace()}>
+                Generate milestones + bounties
+              </button>
+            </div>
+            {proposal.milestones && proposal.milestones.length > 0 ? (
+              <ul>
+                {proposal.milestones.map((m) => (
+                  <li key={m.milestone_id}>
+                    {m.milestone_id} · {m.status} · {m.title}
+                    {m.priority ? ` · priority=${m.priority}` : ""}
+                    {m.deadline_at ? ` · deadline=${new Date(m.deadline_at).toLocaleString()}` : ""}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>No milestones yet.</p>
             )}
           </DataCard>
 

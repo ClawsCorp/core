@@ -182,6 +182,7 @@ export default function BountyDetailPage({ params }: { params: { id: string } })
           <DataCard title={bounty.title}>
             <p>project_id: {bounty.project_id ?? "—"}</p>
             <p>origin_proposal_id: {bounty.origin_proposal_id ?? "—"}</p>
+            <p>origin_milestone_id: {bounty.origin_milestone_id ?? "—"}</p>
             <p>status: {bounty.status}</p>
             <p>funding_source: {bounty.funding_source}</p>
             <p>amount: {formatMicroUsdc(bounty.amount_micro_usdc)}</p>

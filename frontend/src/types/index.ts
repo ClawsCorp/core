@@ -85,6 +85,27 @@ export interface ProposalDetail extends ProposalSummary {
   description_md: string;
   vote_summary: ProposalVoteSummary;
   related_bounties: BountyPublic[];
+  milestones: MilestonePublic[];
+}
+
+export type MilestoneStatus = "planned" | "in_progress" | "done";
+
+export interface MilestonePublic {
+  milestone_id: string;
+  proposal_id: string;
+  title: string;
+  description_md: string | null;
+  status: MilestoneStatus;
+  priority: string | null;
+  deadline_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MarketplaceGenerateData {
+  proposal_id: string;
+  created_milestones_count: number;
+  created_bounties_count: number;
 }
 
 export interface ProjectCapitalSummary {
@@ -187,6 +208,7 @@ export interface BountyPublic {
   bounty_id: string;
   project_id: string | null;
   origin_proposal_id?: string | null;
+  origin_milestone_id?: string | null;
   funding_source: BountyFundingSource;
   title: string;
   description_md: string | null;
