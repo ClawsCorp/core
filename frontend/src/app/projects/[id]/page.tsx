@@ -63,7 +63,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
 
   const fundingHint = useMemo(() => {
     if (fundingSource === "project_revenue") {
-      return "Paid from project revenue (accounted as an expense). No project_capital outflow is recorded.";
+      return "Paid from project revenue (accounted as an expense). Payout transitions can be blocked if revenue is insufficient or reconciliation is not fresh/strict-ready.";
     }
     return "Paid from project capital. Payout transitions can be blocked if capital is insufficient or reconciliation is not fresh/strict-ready.";
   }, [fundingSource]);
@@ -97,8 +97,38 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
           ? "RPC error"
           : "Mismatch";
 
+  const revenueLink = useMemo(() => {
+    if (!project?.revenue_address) {
+      return null;
+    }
+    const base = getExplorerBaseUrl().replace(/\/+$/, "");
+    const addressBase = base.endsWith("/tx") ? base.slice(0, -3) : base;
+    return `${addressBase}/address/${project.revenue_address}`;
+  }, [project?.revenue_address]);
+
+  const revenueReconciliation = project?.revenue_reconciliation;
+  const revenueMaxAgeSeconds = stats?.project_revenue_reconciliation_max_age_seconds ?? null;
+  const revenueAgeSeconds = revenueReconciliation?.computed_at
+    ? Math.floor((Date.now() - new Date(revenueReconciliation.computed_at).getTime()) / 1000)
+    : null;
+  const isRevenueReconciliationStale =
+    revenueAgeSeconds !== null && revenueMaxAgeSeconds !== null ? revenueAgeSeconds > revenueMaxAgeSeconds : null;
+
+  const revenueReconciliationBadge = !project?.revenue_address
+    ? "Missing (revenue_address not set)"
+    : !revenueReconciliation
+      ? "Missing"
+      : revenueReconciliation.ready && revenueReconciliation.delta_micro_usdc === 0
+        ? isRevenueReconciliationStale
+          ? "Stale"
+          : "Fresh"
+        : revenueReconciliation.blocked_reason === "rpc_error" || revenueReconciliation.blocked_reason === "rpc_not_configured"
+          ? "RPC error"
+          : "Mismatch";
+
   const treasuryAddress = project?.treasury_address ?? null;
   const projectReconcileCommand = `PYTHONPATH=src python -m oracle_runner project-reconcile --project-id ${params.id}`;
+  const projectRevenueReconcileCommand = `PYTHONPATH=src python -m oracle_runner reconcile-project-revenue --project-id ${params.id}`;
   const projectMonthCommand = `PYTHONPATH=src python -m oracle_runner run-project-month --project-id ${params.id}`;
 
   const onCreate = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -156,9 +186,23 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
               ) : null}
             </p>
             <p>
+              revenue: {project.revenue_address ? `${project.revenue_address.slice(0, 8)}...${project.revenue_address.slice(-6)}` : "—"}
+              {revenueLink ? (
+                <>
+                  {" "}
+                  <a href={revenueLink} target="_blank" rel="noreferrer">View explorer</a>
+                </>
+              ) : null}
+            </p>
+            <p>
               reconciliation: {reconciliationBadge}
               {maxAgeSeconds !== null ? <> (max_age_seconds={maxAgeSeconds})</> : null}
               {reconciliationAgeSeconds !== null ? <> (age={reconciliationAgeSeconds}s)</> : null}
+            </p>
+            <p>
+              revenue reconciliation: {revenueReconciliationBadge}
+              {revenueMaxAgeSeconds !== null ? <> (max_age_seconds={revenueMaxAgeSeconds})</> : null}
+              {revenueAgeSeconds !== null ? <> (age={revenueAgeSeconds}s)</> : null}
             </p>
             <p>
               app_surface: <Link href={`/apps/${project.slug}`}>/apps/{project.slug}</Link>
@@ -191,6 +235,10 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
             <p>
               Reconcile project capital: <code>{projectReconcileCommand}</code>{" "}
               <CopyButton value={projectReconcileCommand} label="Copy" />
+            </p>
+            <p>
+              Reconcile project revenue: <code>{projectRevenueReconcileCommand}</code>{" "}
+              <CopyButton value={projectRevenueReconcileCommand} label="Copy" />
             </p>
             <p>
               Run project month (MVP): <code>{projectMonthCommand}</code>{" "}
@@ -251,6 +299,15 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
             <p>delta: {formatMicroUsdc(reconciliation?.delta_micro_usdc)}</p>
             <p>computed_at: {reconciliation?.computed_at ? new Date(reconciliation.computed_at).toLocaleString() : "—"}</p>
             <Link href="/projects/capital">Open Project Capital leaderboard</Link>
+          </DataCard>
+
+          <DataCard title="Revenue">
+            <p>balance_micro_usdc (ledger): {formatMicroUsdc(revenueReconciliation?.ledger_balance_micro_usdc)}</p>
+            <h3>Reconciliation</h3>
+            <p>status: {revenueReconciliationBadge}</p>
+            <p>onchain_balance: {formatMicroUsdc(revenueReconciliation?.onchain_balance_micro_usdc)}</p>
+            <p>delta: {formatMicroUsdc(revenueReconciliation?.delta_micro_usdc)}</p>
+            <p>computed_at: {revenueReconciliation?.computed_at ? new Date(revenueReconciliation.computed_at).toLocaleString() : "—"}</p>
           </DataCard>
 
           <DataCard title="Bounties for this project">

@@ -14,6 +14,7 @@ export interface StatsData {
   total_registered_agents: number;
   server_time_utc: string;
   project_capital_reconciliation_max_age_seconds?: number;
+  project_revenue_reconciliation_max_age_seconds?: number;
 }
 
 export interface AccountingMonthSummary {
@@ -92,6 +93,7 @@ export interface ProjectSummary {
   treasury_wallet_address: string | null;
   treasury_address: string | null;
   revenue_wallet_address: string | null;
+  revenue_address: string | null;
   monthly_budget_micro_usdc: number | null;
   created_at: string;
   updated_at: string;
@@ -101,11 +103,23 @@ export interface ProjectSummary {
 export interface ProjectDetail extends ProjectSummary {
   members: Array<{ agent_id: string; name: string; role: string }>;
   capital_reconciliation: ProjectCapitalReconciliationReport | null;
+  revenue_reconciliation: ProjectRevenueReconciliationReport | null;
 }
 
 export interface ProjectCapitalReconciliationReport {
   project_id: string;
   treasury_address: string;
+  ledger_balance_micro_usdc: number | null;
+  onchain_balance_micro_usdc: number | null;
+  delta_micro_usdc: number | null;
+  ready: boolean;
+  blocked_reason: string | null;
+  computed_at: string;
+}
+
+export interface ProjectRevenueReconciliationReport {
+  project_id: string;
+  revenue_address: string;
   ledger_balance_micro_usdc: number | null;
   onchain_balance_micro_usdc: number | null;
   delta_micro_usdc: number | null;

@@ -26,6 +26,7 @@ class ProjectCreateRequest(BaseModel):
     proposal_id: str | None = None
     treasury_wallet_address: str | None = None
     revenue_wallet_address: str | None = None
+    revenue_address: str | None = None
     monthly_budget_micro_usdc: int | None = Field(default=None, ge=0)
 
 
@@ -52,6 +53,7 @@ class ProjectSummary(BaseModel):
     treasury_wallet_address: str | None
     treasury_address: str | None
     revenue_wallet_address: str | None
+    revenue_address: str | None
     monthly_budget_micro_usdc: int | None
     created_at: datetime
     updated_at: datetime
@@ -61,6 +63,7 @@ class ProjectSummary(BaseModel):
 class ProjectDetail(ProjectSummary):
     members: list[ProjectMemberInfo]
     capital_reconciliation: "ProjectCapitalReconciliationReportPublic | None" = None
+    revenue_reconciliation: "ProjectRevenueReconciliationReportPublic | None" = None
 
 
 class ProjectListData(BaseModel):
@@ -136,6 +139,22 @@ class ProjectCapitalReconciliationReportPublic(BaseModel):
 class ProjectCapitalReconciliationLatestResponse(BaseModel):
     success: bool
     data: ProjectCapitalReconciliationReportPublic | None
+
+
+class ProjectRevenueReconciliationReportPublic(BaseModel):
+    project_id: str
+    revenue_address: str
+    ledger_balance_micro_usdc: int | None
+    onchain_balance_micro_usdc: int | None
+    delta_micro_usdc: int | None
+    ready: bool
+    blocked_reason: str | None
+    computed_at: datetime
+
+
+class ProjectRevenueReconciliationLatestResponse(BaseModel):
+    success: bool
+    data: ProjectRevenueReconciliationReportPublic | None
 
 
 class ProjectCapitalLeaderboardData(BaseModel):

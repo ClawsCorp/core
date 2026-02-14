@@ -14,6 +14,7 @@ from src.models.observed_usdc_transfer import ObservedUsdcTransfer
 from src.models.project import Project, ProjectStatus
 from src.models.project_capital_event import ProjectCapitalEvent
 from src.models.project_capital_reconciliation_report import ProjectCapitalReconciliationReport
+from src.models.project_revenue_reconciliation_report import ProjectRevenueReconciliationReport
 from src.models.reconciliation_report import ReconciliationReport
 from src.models.revenue_event import RevenueEvent
 from src.models.project_member import ProjectMember, ProjectMemberRole
@@ -44,6 +45,7 @@ __all__ = [
     "Project",
     "ProjectCapitalEvent",
     "ProjectCapitalReconciliationReport",
+    "ProjectRevenueReconciliationReport",
     "ReconciliationReport",
     "ProjectMember",
     "ProjectMemberRole",

@@ -18,6 +18,7 @@ class StatsData(BaseModel):
     total_registered_agents: int
     server_time_utc: str
     project_capital_reconciliation_max_age_seconds: int
+    project_revenue_reconciliation_max_age_seconds: int
 
 
 class StatsResponse(BaseModel):
@@ -46,13 +47,15 @@ def get_stats(response: Response, db: Session = Depends(get_db)) -> StatsRespons
             total_registered_agents=total_agents,
             server_time_utc=bucketed_time.isoformat(),
             project_capital_reconciliation_max_age_seconds=settings.project_capital_reconciliation_max_age_seconds,
+            project_revenue_reconciliation_max_age_seconds=settings.project_revenue_reconciliation_max_age_seconds,
         ),
     )
     etag_seed = (
         f"{result.data.app_version}:"
         f"{result.data.total_registered_agents}:"
         f"{bucketed_timestamp}:"
-        f"{result.data.project_capital_reconciliation_max_age_seconds}"
+        f"{result.data.project_capital_reconciliation_max_age_seconds}:"
+        f"{result.data.project_revenue_reconciliation_max_age_seconds}"
     )
     response.headers["Cache-Control"] = "public, max-age=30"
     response.headers["ETag"] = f'W/"{etag_seed}"'

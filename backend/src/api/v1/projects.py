@@ -16,12 +16,15 @@ from src.models.agent import Agent
 from src.models.project import Project, ProjectStatus
 from src.models.project_capital_event import ProjectCapitalEvent
 from src.models.project_capital_reconciliation_report import ProjectCapitalReconciliationReport
+from src.models.project_revenue_reconciliation_report import ProjectRevenueReconciliationReport
 from src.models.project_member import ProjectMember
 from src.schemas.project import (
     ProjectCapitalLeaderboardData,
     ProjectCapitalLeaderboardResponse,
     ProjectCapitalReconciliationLatestResponse,
     ProjectCapitalReconciliationReportPublic,
+    ProjectRevenueReconciliationLatestResponse,
+    ProjectRevenueReconciliationReportPublic,
     ProjectCapitalSummary,
     ProjectCapitalSummaryResponse,
     ProjectCreateRequest,
@@ -169,6 +172,28 @@ def get_project_capital_reconciliation_latest(
 
 
 @router.get(
+    "/{project_id}/revenue/reconciliation/latest",
+    response_model=ProjectRevenueReconciliationLatestResponse,
+    summary="Get latest project revenue reconciliation report",
+)
+def get_project_revenue_reconciliation_latest(
+    project_id: str,
+    db: Session = Depends(get_db),
+) -> ProjectRevenueReconciliationLatestResponse:
+    project = db.query(Project).filter(Project.project_id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    report = (
+        db.query(ProjectRevenueReconciliationReport)
+        .filter(ProjectRevenueReconciliationReport.project_id == project.id)
+        .order_by(ProjectRevenueReconciliationReport.computed_at.desc())
+        .first()
+    )
+    return ProjectRevenueReconciliationLatestResponse(success=True, data=_revenue_reconciliation_public(project.project_id, report))
+
+
+@router.get(
     "/{project_id}",
     response_model=ProjectDetailResponse,
     summary="Get project detail",
@@ -213,6 +238,7 @@ async def create_project(
         proposal_id=payload.proposal_id,
         treasury_wallet_address=payload.treasury_wallet_address,
         revenue_wallet_address=payload.revenue_wallet_address,
+        revenue_address=(payload.revenue_address.strip().lower() if payload.revenue_address else None),
         monthly_budget_micro_usdc=payload.monthly_budget_micro_usdc,
     )
     db.add(project)
@@ -346,6 +372,7 @@ def _project_summary(project: Project) -> ProjectSummary:
         treasury_wallet_address=project.treasury_wallet_address,
         treasury_address=project.treasury_address,
         revenue_wallet_address=project.revenue_wallet_address,
+        revenue_address=project.revenue_address,
         monthly_budget_micro_usdc=project.monthly_budget_micro_usdc,
         created_at=project.created_at,
         updated_at=project.updated_at,
@@ -361,10 +388,17 @@ def _project_detail(db: Session, project: Project) -> ProjectDetail:
         .order_by(ProjectCapitalReconciliationReport.computed_at.desc())
         .first()
     )
+    latest_revenue_report = (
+        db.query(ProjectRevenueReconciliationReport)
+        .filter(ProjectRevenueReconciliationReport.project_id == project.id)
+        .order_by(ProjectRevenueReconciliationReport.computed_at.desc())
+        .first()
+    )
     return ProjectDetail(
         **_project_summary(project).model_dump(),
         members=members,
         capital_reconciliation=_reconciliation_public(project.project_id, latest_report),
+        revenue_reconciliation=_revenue_reconciliation_public(project.project_id, latest_revenue_report),
     )
 
 
@@ -377,6 +411,24 @@ def _reconciliation_public(
     return ProjectCapitalReconciliationReportPublic(
         project_id=project_id,
         treasury_address=report.treasury_address,
+        ledger_balance_micro_usdc=report.ledger_balance_micro_usdc,
+        onchain_balance_micro_usdc=report.onchain_balance_micro_usdc,
+        delta_micro_usdc=report.delta_micro_usdc,
+        ready=report.ready,
+        blocked_reason=report.blocked_reason,
+        computed_at=report.computed_at,
+    )
+
+
+def _revenue_reconciliation_public(
+    project_id: str,
+    report: ProjectRevenueReconciliationReport | None,
+) -> ProjectRevenueReconciliationReportPublic | None:
+    if report is None:
+        return None
+    return ProjectRevenueReconciliationReportPublic(
+        project_id=project_id,
+        revenue_address=report.revenue_address,
         ledger_balance_micro_usdc=report.ledger_balance_micro_usdc,
         onchain_balance_micro_usdc=report.onchain_balance_micro_usdc,
         delta_micro_usdc=report.delta_micro_usdc,
