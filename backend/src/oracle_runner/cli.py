@@ -304,12 +304,175 @@ def build_parser() -> argparse.ArgumentParser:
     tx_worker.add_argument("--sleep-seconds", type=int, default=5, help="Sleep time between loop iterations when idle.")
     tx_worker.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
 
+    autonomy_loop = subparsers.add_parser(
+        "autonomy-loop",
+        help="Continuously run sync + reconciliation + month orchestration (no human operator).",
+    )
+    autonomy_loop.add_argument("--loop", action="store_true", help="Run continuously until interrupted.")
+    autonomy_loop.add_argument("--sleep-seconds", type=int, default=60, help="Sleep time between loop iterations.")
+    autonomy_loop.add_argument(
+        "--month",
+        default="auto",
+        help="Target profit month in YYYYMM format, or 'auto' (previous month UTC).",
+    )
+    autonomy_loop.add_argument(
+        "--project-statuses",
+        default="active,fundraising",
+        help="Comma-separated project statuses to reconcile (public list filter).",
+    )
+    autonomy_loop.add_argument("--sync-project-capital", action="store_true", help="Call /oracle/project-capital-events/sync each loop.")
+    autonomy_loop.add_argument("--billing-sync", action="store_true", help="Call /oracle/billing/sync each loop.")
+    autonomy_loop.add_argument("--reconcile-projects", action="store_true", help="Refresh project capital reconciliation for active/fundraising projects.")
+    autonomy_loop.add_argument("--reconcile-project-revenue", action="store_true", help="Refresh project revenue reconciliation where configured.")
+    autonomy_loop.add_argument("--run-month", action="store_true", help="Run platform month flow each loop (idempotent).")
+    autonomy_loop.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout (one object for --once).")
+
     return parser
 
 
 def _post_action(client: OracleClient, path: str, body_bytes: bytes, idempotency_key: str | None = None) -> dict[str, Any]:
     response = client.post(path, body_bytes=body_bytes, idempotency_key=idempotency_key)
     return _extract_data(response.data)
+
+def _get_action(client: OracleClient, path: str) -> dict[str, Any]:
+    response = client.get(path)
+    return _extract_data(response.data)
+
+
+def _run_month_flow(
+    *,
+    client: OracleClient,
+    month: str,
+    execute_payload_arg: str,
+    idempotency_key: str | None,
+    emit_progress: bool,
+) -> tuple[int, dict[str, Any]]:
+    summary: dict[str, Any] = {"month": month, "success": False}
+
+    def prog(stage: str, status: str, detail: str | None = None) -> None:
+        if emit_progress:
+            _print_progress(stage, status, detail)
+
+    try:
+        prog("settlement", "start")
+        settlement = _post_action(client, f"/api/v1/oracle/settlement/{month}", b"")
+        summary["settlement"] = settlement
+        prog("settlement", "ok")
+    except OracleRunnerError as exc:
+        prog("settlement", "error", str(exc))
+        summary["failed_step"] = "settlement"
+        summary["error"] = str(exc)
+        return 2, summary
+
+    try:
+        prog("reconcile", "start")
+        rec = _post_action(client, f"/api/v1/oracle/reconciliation/{month}", b"")
+        summary["reconcile"] = rec
+    except OracleRunnerError as exc:
+        prog("reconcile", "error", str(exc))
+        summary["failed_step"] = "reconcile"
+        summary["error"] = str(exc)
+        return 3, summary
+
+    if not rec.get("ready"):
+        prog("reconcile", "blocked")
+        summary["failed_step"] = "reconcile"
+        return 4, summary
+    prog("reconcile", "ok")
+
+    try:
+        prog("deposit_profit", "start")
+        deposit = _post_action(client, f"/api/v1/oracle/settlement/{month}/deposit-profit", b"")
+        summary["deposit_profit"] = deposit
+        if deposit.get("status") == "blocked":
+            prog("deposit_profit", "blocked", str(deposit.get("blocked_reason") or "blocked"))
+        else:
+            prog("deposit_profit", "ok")
+    except OracleRunnerError as exc:
+        prog("deposit_profit", "error", str(exc))
+        summary["failed_step"] = "deposit_profit"
+        summary["error"] = str(exc)
+        return 4, summary
+
+    try:
+        prog("create_distribution", "start")
+        create = _post_action(client, f"/api/v1/oracle/distributions/{month}/create", b"")
+        summary["create_distribution"] = create
+    except OracleRunnerError as exc:
+        prog("create_distribution", "error", str(exc))
+        summary["failed_step"] = "create_distribution"
+        summary["error"] = str(exc)
+        return 5, summary
+
+    if create.get("status") == "blocked":
+        prog("create_distribution", "blocked")
+        summary["failed_step"] = "create_distribution"
+        return 6, summary
+    prog("create_distribution", "ok")
+
+    try:
+        if str(execute_payload_arg).strip().lower() == "auto":
+            prog("build_execute_payload", "start")
+            built = _post_action(client, f"/api/v1/oracle/distributions/{month}/execute/payload", b"{}")
+            summary["build_execute_payload"] = built
+            if built.get("status") != "ok":
+                prog("build_execute_payload", "blocked")
+                summary["failed_step"] = "build_execute_payload"
+                return 7, summary
+            prog("build_execute_payload", "ok")
+            execute_payload = {
+                "stakers": list(built.get("stakers") or []),
+                "staker_shares": list(built.get("staker_shares") or []),
+                "authors": list(built.get("authors") or []),
+                "author_shares": list(built.get("author_shares") or []),
+            }
+            _validate_execute_payload(execute_payload)
+            execute_body = json.dumps(
+                execute_payload, separators=(",", ":"), ensure_ascii=True, sort_keys=True
+            ).encode("utf-8")
+        else:
+            execute_body, execute_payload = _load_execute_payload(execute_payload_arg)
+
+        prog("execute_distribution", "start")
+        run_idempotency_key = idempotency_key or _derive_execute_idempotency_key(month, execute_payload)
+        execute = _post_action(
+            client,
+            f"/api/v1/oracle/distributions/{month}/execute",
+            execute_body,
+            idempotency_key=run_idempotency_key,
+        )
+        summary["execute_distribution"] = execute
+    except OracleRunnerError as exc:
+        prog("execute_distribution", "error", str(exc))
+        summary["failed_step"] = "execute_distribution"
+        summary["error"] = str(exc)
+        return 8, summary
+
+    if summary["execute_distribution"].get("status") == "blocked":
+        prog("execute_distribution", "blocked")
+        summary["failed_step"] = "execute_distribution"
+        return 9, summary
+    prog("execute_distribution", "ok")
+
+    try:
+        prog("confirm_payout", "start")
+        confirm = _post_action(
+            client,
+            f"/api/v1/oracle/payouts/{month}/confirm",
+            b"{}",
+        )
+        summary["confirm_payout"] = confirm
+    except OracleRunnerError as exc:
+        prog("confirm_payout", "error", str(exc))
+        summary["failed_step"] = "confirm_payout"
+        summary["error"] = str(exc)
+        return 9, summary
+
+    prog("confirm_payout", "pending" if confirm.get("status") == "pending" else "ok")
+    summary["success"] = True
+    if confirm.get("status") == "pending":
+        return 10, summary
+    return 0, summary
 
 
 def run(argv: list[str] | None = None) -> int:
@@ -612,125 +775,112 @@ def run(argv: list[str] | None = None) -> int:
 
         if args.command == "run-month":
             month = _resolve_month_arg(args.month)
-            summary: dict[str, Any] = {"month": month, "success": False}
-
-            try:
-                _print_progress("settlement", "start")
-                settlement = _post_action(client, f"/api/v1/oracle/settlement/{month}", b"")
-                summary["settlement"] = settlement
-                _print_progress("settlement", "ok")
-            except OracleRunnerError as exc:
-                _print_progress("settlement", "error", str(exc))
-                summary["failed_step"] = "settlement"
-                summary["error"] = str(exc)
-                _print_json(summary)
-                return 2
-
-            try:
-                _print_progress("reconcile", "start")
-                rec = _post_action(client, f"/api/v1/oracle/reconciliation/{month}", b"")
-                summary["reconcile"] = rec
-            except OracleRunnerError as exc:
-                _print_progress("reconcile", "error", str(exc))
-                summary["failed_step"] = "reconcile"
-                summary["error"] = str(exc)
-                _print_json(summary)
-                return 3
-
-            if not rec.get("ready"):
-                _print_progress("reconcile", "blocked")
-                summary["failed_step"] = "reconcile"
-                _print_json(summary)
-                return 4
-            _print_progress("reconcile", "ok")
-
-            try:
-                _print_progress("create_distribution", "start")
-                create = _post_action(client, f"/api/v1/oracle/distributions/{month}/create", b"")
-                summary["create_distribution"] = create
-            except OracleRunnerError as exc:
-                _print_progress("create_distribution", "error", str(exc))
-                summary["failed_step"] = "create_distribution"
-                summary["error"] = str(exc)
-                _print_json(summary)
-                return 5
-
-            if create.get("status") == "blocked":
-                _print_progress("create_distribution", "blocked")
-                summary["failed_step"] = "create_distribution"
-                _print_json(summary)
-                return 6
-            _print_progress("create_distribution", "ok")
-
-            try:
-                # Prepare payload (auto) or load from file.
-                if str(args.execute_payload).strip().lower() == "auto":
-                    _print_progress("build_execute_payload", "start")
-                    built = _post_action(client, f"/api/v1/oracle/distributions/{month}/execute/payload", b"{}")
-                    summary["build_execute_payload"] = built
-                    if built.get("status") != "ok":
-                        _print_progress("build_execute_payload", "blocked")
-                        summary["failed_step"] = "build_execute_payload"
-                        _print_json(summary)
-                        return 7
-                    _print_progress("build_execute_payload", "ok")
-                    execute_payload = {
-                        "stakers": list(built.get("stakers") or []),
-                        "staker_shares": list(built.get("staker_shares") or []),
-                        "authors": list(built.get("authors") or []),
-                        "author_shares": list(built.get("author_shares") or []),
-                    }
-                    _validate_execute_payload(execute_payload)
-                    execute_body = json.dumps(
-                        execute_payload, separators=(",", ":"), ensure_ascii=True, sort_keys=True
-                    ).encode("utf-8")
-                else:
-                    execute_body, execute_payload = _load_execute_payload(args.execute_payload)
-
-                _print_progress("execute_distribution", "start")
-                run_idempotency_key = args.idempotency_key or _derive_execute_idempotency_key(month, execute_payload)
-                execute = _post_action(
-                    client,
-                    f"/api/v1/oracle/distributions/{month}/execute",
-                    execute_body,
-                    idempotency_key=run_idempotency_key,
-                )
-                summary["execute_distribution"] = execute
-            except OracleRunnerError as exc:
-                _print_progress("execute_distribution", "error", str(exc))
-                summary["failed_step"] = "execute_distribution"
-                summary["error"] = str(exc)
-                _print_json(summary)
-                return 8
-
-            if execute.get("status") == "blocked":
-                _print_progress("execute_distribution", "blocked")
-                summary["failed_step"] = "execute_distribution"
-                _print_json(summary)
-                return 9
-            _print_progress("execute_distribution", "ok")
-
-            try:
-                _print_progress("confirm_payout", "start")
-                confirm = _post_action(
-                    client,
-                    f"/api/v1/oracle/payouts/{month}/confirm",
-                    b"{}",
-                )
-                summary["confirm_payout"] = confirm
-            except OracleRunnerError as exc:
-                _print_progress("confirm_payout", "error", str(exc))
-                summary["failed_step"] = "confirm_payout"
-                summary["error"] = str(exc)
-                _print_json(summary)
-                return 9
-            _print_progress("confirm_payout", "pending" if confirm.get("status") == "pending" else "ok")
-
-            summary["success"] = True
+            exit_code, summary = _run_month_flow(
+                client=client,
+                month=month,
+                execute_payload_arg=str(args.execute_payload),
+                idempotency_key=args.idempotency_key,
+                emit_progress=True,
+            )
             _print_json(summary)
-            if confirm.get("status") == "pending":
-                return 10
-            return 0
+            return exit_code
+
+        if args.command == "autonomy-loop":
+            if bool(args.loop) and json_mode:
+                raise OracleRunnerError("--loop is not compatible with --json (streaming mode).")
+
+            sleep_seconds = max(1, int(args.sleep_seconds))
+            month = _resolve_month_arg(getattr(args, "month", "auto"))
+
+            # Default to "do everything" if user didn't specify any actions.
+            wants_any = any(
+                [
+                    bool(args.sync_project_capital),
+                    bool(args.billing_sync),
+                    bool(args.reconcile_projects),
+                    bool(args.reconcile_project_revenue),
+                    bool(args.run_month),
+                ]
+            )
+            if not wants_any:
+                args.sync_project_capital = True
+                args.billing_sync = True
+                args.reconcile_projects = True
+                args.reconcile_project_revenue = True
+                args.run_month = True
+
+            while True:
+                cycle: dict[str, Any] = {
+                    "success": True,
+                    "command": command,
+                    "month": month,
+                }
+
+                try:
+                    if bool(args.sync_project_capital):
+                        _print_progress("sync_project_capital", "start")
+                        cycle["sync_project_capital"] = _post_action(client, "/api/v1/oracle/project-capital-events/sync", b"{}")
+                        _print_progress("sync_project_capital", "ok")
+
+                    if bool(args.billing_sync):
+                        _print_progress("billing_sync", "start")
+                        cycle["billing_sync"] = _post_action(client, "/api/v1/oracle/billing/sync", b"{}")
+                        _print_progress("billing_sync", "ok")
+
+                    if bool(args.reconcile_projects) or bool(args.reconcile_project_revenue):
+                        _print_progress("list_projects", "start")
+                        statuses = [s.strip() for s in str(args.project_statuses).split(",") if s.strip()]
+                        project_ids: list[str] = []
+                        seen_projects: set[str] = set()
+                        for st in statuses:
+                            projects_payload = _get_action(client, f"/api/v1/projects?status={st}&limit=100&offset=0")
+                            items = list((projects_payload.get("items") or [])) if isinstance(projects_payload, dict) else []
+                            for p in items:
+                                if not isinstance(p, dict):
+                                    continue
+                                pid = str(p.get("project_id") or "").strip()
+                                if not pid or pid in seen_projects:
+                                    continue
+                                seen_projects.add(pid)
+                                project_ids.append(pid)
+                        _print_progress("list_projects", "ok", detail=f"statuses={len(statuses)} projects={len(project_ids)}")
+                        reconciled: list[dict[str, Any]] = []
+                        for pid in project_ids:
+                            if bool(args.reconcile_projects):
+                                rep = _post_action(client, f"/api/v1/oracle/projects/{pid}/capital/reconciliation", b"{}")
+                                reconciled.append({"project_id": pid, "capital": rep})
+                            if bool(args.reconcile_project_revenue):
+                                rep = _post_action(client, f"/api/v1/oracle/projects/{pid}/revenue/reconciliation", b"{}")
+                                # Attach to last entry if present.
+                                if reconciled and reconciled[-1].get("project_id") == pid:
+                                    reconciled[-1]["revenue"] = rep
+                                else:
+                                    reconciled.append({"project_id": pid, "revenue": rep})
+                        cycle["projects_reconciled"] = reconciled
+
+                    if bool(args.run_month):
+                        exit_code, rm = _run_month_flow(
+                            client=client,
+                            month=month,
+                            execute_payload_arg="auto",
+                            idempotency_key=None,
+                            emit_progress=True,
+                        )
+                        cycle["run_month_exit_code"] = exit_code
+                        cycle["run_month"] = rm
+                        if exit_code not in (0, 10, 4, 6, 7, 9):
+                            cycle["success"] = False
+
+                except OracleRunnerError as exc:
+                    cycle["success"] = False
+                    cycle["error"] = str(exc)
+                    _print_progress("autonomy_loop", "error", str(exc))
+
+                # One JSON per cycle (JSONL-friendly). In non-loop mode, we print once and exit.
+                _print_json(cycle)
+                if not bool(args.loop):
+                    return 0 if cycle.get("success") else 1
+                time.sleep(sleep_seconds)
 
         if args.command == "tx-worker":
             from src.services.blockchain import (

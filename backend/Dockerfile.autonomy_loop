@@ -1,0 +1,11 @@
+FROM python:3.11-slim
+
+WORKDIR /app/backend
+
+COPY backend/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY backend/src ./src
+
+CMD ["sh", "-c", "PYTHONPATH=src python -m oracle_runner autonomy-loop --loop --sleep-seconds ${AUTONOMY_LOOP_SLEEP_SECONDS:-60} --sync-project-capital --billing-sync --reconcile-projects --reconcile-project-revenue --run-month"]
+

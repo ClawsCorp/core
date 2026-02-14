@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from src.core.config import get_settings
 from src.core.database import get_db
+from src.models.indexer_cursor import IndexerCursor
 from src.models.project import Project, ProjectStatus
 from src.models.project_capital_reconciliation_report import ProjectCapitalReconciliationReport
 from src.models.project_revenue_reconciliation_report import ProjectRevenueReconciliationReport
@@ -42,6 +43,43 @@ def get_alerts(response: Response, db: Session = Depends(get_db)) -> AlertsRespo
                 observed_at=now,
             )
         )
+
+    # Indexer health (cursor freshness). Without this, automation cannot observe chain reality.
+    cursor = (
+        db.query(IndexerCursor)
+        .filter(IndexerCursor.cursor_key == "usdc_transfers")
+        .order_by(IndexerCursor.updated_at.desc(), IndexerCursor.id.desc())
+        .first()
+    )
+    if cursor is None:
+        items.append(
+            AlertItem(
+                alert_type="usdc_indexer_cursor_missing",
+                severity="warning",
+                message="USDC indexer cursor is missing (indexer may not be running yet).",
+                ref="usdc_transfers",
+                observed_at=now,
+            )
+        )
+    else:
+        age = int((now - cursor.updated_at).total_seconds())
+        if age > int(settings.indexer_cursor_max_age_seconds):
+            items.append(
+                AlertItem(
+                    alert_type="usdc_indexer_stale",
+                    severity="critical",
+                    message="USDC indexer cursor is stale (automation may be operating on outdated observed transfers).",
+                    ref="usdc_transfers",
+                    observed_at=now,
+                    data={
+                        "chain_id": int(cursor.chain_id),
+                        "last_block_number": int(cursor.last_block_number),
+                        "updated_at": cursor.updated_at.isoformat(),
+                        "age_seconds": age,
+                        "max_age_seconds": int(settings.indexer_cursor_max_age_seconds),
+                    },
+                )
+            )
 
     # Latest per project (simple loop; small data).
     projects = db.query(Project).order_by(Project.project_id.asc()).all()
@@ -223,10 +261,19 @@ def get_alerts(response: Response, db: Session = Depends(get_db)) -> AlertsRespo
         .all()
     )
     for t in pending:
+        created_age = int((now - t.created_at).total_seconds())
+        processing_age = int((now - t.locked_at).total_seconds()) if t.locked_at else None
+        if t.status == "pending":
+            severity = "critical" if created_age > int(settings.tx_outbox_pending_max_age_seconds) else "warning"
+            alert_type = "tx_outbox_pending_stale" if severity == "critical" else "tx_outbox_pending"
+        else:
+            severity = "critical" if (processing_age or 0) > int(settings.tx_outbox_processing_max_age_seconds) else "warning"
+            alert_type = "tx_outbox_processing_stale" if severity == "critical" else "tx_outbox_processing"
+
         items.append(
             AlertItem(
-                alert_type="tx_outbox_pending" if t.status == "pending" else "tx_outbox_processing",
-                severity="warning" if t.status == "pending" else "critical",
+                alert_type=alert_type,
+                severity=severity,
                 message=f"Tx outbox task is {t.status}.",
                 ref=t.task_id,
                 observed_at=now,
@@ -235,6 +282,8 @@ def get_alerts(response: Response, db: Session = Depends(get_db)) -> AlertsRespo
                     "attempts": t.attempts,
                     "locked_by": t.locked_by,
                     "locked_at": t.locked_at.isoformat() if t.locked_at else None,
+                    "age_seconds": created_age,
+                    "processing_age_seconds": processing_age,
                     "tx_hash": t.tx_hash,
                     "last_error_hint": t.last_error_hint,
                     "created_at": t.created_at.isoformat(),
