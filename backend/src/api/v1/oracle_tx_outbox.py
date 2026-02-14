@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import update
@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from src.api.v1.dependencies import require_oracle_hmac
 from src.core.audit import record_audit
+from src.core.config import get_settings
 from src.core.database import get_db
 from src.core.tx_outbox import enqueue_tx_outbox_task
 from src.core.security import hash_body
@@ -21,6 +22,7 @@ from src.schemas.tx_outbox import (
     TxOutboxCompleteResponse,
     TxOutboxEnqueueRequest,
     TxOutboxPendingResponse,
+    TxOutboxUpdateRequest,
     TxOutboxTask,
     TxOutboxTaskResponse,
 )
@@ -29,11 +31,21 @@ router = APIRouter(prefix="/api/v1/oracle/tx-outbox", tags=["oracle-tx-outbox"])
 
 
 def _to_task(row: TxOutbox) -> TxOutboxTask:
+    result_obj: dict | None = None
+    if row.result_json:
+        try:
+            parsed = json.loads(row.result_json)
+            if isinstance(parsed, dict):
+                result_obj = parsed
+        except ValueError:
+            result_obj = None
     return TxOutboxTask(
         task_id=row.task_id,
         idempotency_key=row.idempotency_key,
         task_type=row.task_type,
         payload=json.loads(row.payload_json or "{}"),
+        tx_hash=row.tx_hash,
+        result=result_obj,
         status=row.status,
         attempts=row.attempts,
         last_error_hint=row.last_error_hint,
@@ -103,12 +115,36 @@ async def claim_next(
 ) -> TxOutboxClaimResponse:
     body_hash = hash_body(await request.body())
 
+    settings = get_settings()
+    ttl = int(getattr(settings, "tx_outbox_lock_ttl_seconds", 300) or 300)
+    now = datetime.now(timezone.utc)
+    stale_before = now - timedelta(seconds=max(1, ttl))
+
+    # Prefer pending/unlocked tasks.
     candidate = (
         db.query(TxOutbox)
-        .filter(TxOutbox.status == "pending")
+        .filter(TxOutbox.status == "pending", TxOutbox.locked_at.is_(None))
         .order_by(TxOutbox.id.asc())
         .first()
     )
+    is_reclaim = False
+    if candidate is None:
+        # If none are pending, allow reclaiming a stale processing task (crash-safe).
+        processing = (
+            db.query(TxOutbox)
+            .filter(TxOutbox.status == "processing", TxOutbox.locked_at.isnot(None))
+            .order_by(TxOutbox.id.asc())
+            .first()
+        )
+        if processing is not None:
+            locked_at = processing.locked_at
+            # SQLite may return naive datetimes; interpret as UTC.
+            if locked_at is not None and locked_at.tzinfo is None:
+                locked_at = locked_at.replace(tzinfo=timezone.utc)
+            if locked_at is not None and locked_at < stale_before:
+                candidate = processing
+                is_reclaim = True
+
     if candidate is None:
         record_audit(
             db,
@@ -125,10 +161,14 @@ async def claim_next(
         db.commit()
         return TxOutboxClaimResponse(success=False, data=TxOutboxClaimData(task=None, blocked_reason="no_tasks"))
 
-    now = datetime.now(timezone.utc)
     stmt = (
         update(TxOutbox)
-        .where(TxOutbox.id == candidate.id, TxOutbox.status == "pending", TxOutbox.locked_at.is_(None))
+        .where(
+            TxOutbox.id == candidate.id,
+            ((TxOutbox.status == "pending") & (TxOutbox.locked_at.is_(None)))
+            if not is_reclaim
+            else ((TxOutbox.status == "processing") & (TxOutbox.locked_at == candidate.locked_at)),
+        )
         .values(
             status="processing",
             locked_at=now,
@@ -231,6 +271,10 @@ async def complete_task(
 
     row.status = payload.status
     row.last_error_hint = payload.error_hint
+    if payload.tx_hash:
+        row.tx_hash = payload.tx_hash
+    if payload.result is not None:
+        row.result_json = json.dumps(payload.result, separators=(",", ":"), sort_keys=True)
 
     record_audit(
         db,
@@ -248,3 +292,41 @@ async def complete_task(
     db.refresh(row)
 
     return TxOutboxCompleteResponse(success=True, data=_to_task(row))
+
+
+@router.post("/{task_id}/update", response_model=TxOutboxTaskResponse)
+async def update_task(
+    task_id: str,
+    payload: TxOutboxUpdateRequest,
+    request: Request,
+    _: str = Depends(require_oracle_hmac),
+    db: Session = Depends(get_db),
+) -> TxOutboxTaskResponse:
+    body_hash = hash_body(await request.body())
+
+    row = db.query(TxOutbox).filter(TxOutbox.task_id == task_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if row.status not in {"processing", "pending"}:
+        raise HTTPException(status_code=409, detail="Task is already finalized")
+
+    if payload.tx_hash:
+        row.tx_hash = payload.tx_hash
+    if payload.result is not None:
+        row.result_json = json.dumps(payload.result, separators=(",", ":"), sort_keys=True)
+
+    record_audit(
+        db,
+        actor_type="oracle",
+        agent_id=None,
+        method=request.method,
+        path=request.url.path,
+        idempotency_key=request.headers.get("Idempotency-Key"),
+        body_hash=body_hash,
+        signature_status=getattr(request.state, "signature_status", "none"),
+        request_id=request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID"),
+        commit=False,
+    )
+    db.commit()
+    db.refresh(row)
+    return TxOutboxTaskResponse(success=True, data=_to_task(row))

@@ -588,12 +588,25 @@ def run(argv: list[str] | None = None) -> int:
                 task_type = str(task.get("task_type") or "")
                 payload = task.get("payload") if isinstance(task.get("payload"), dict) else {}
                 idem = str(task.get("idempotency_key") or payload.get("idempotency_key") or "")
+                existing_tx_hash = str(task.get("tx_hash") or "")
+
+                def _update(tx_hash: str | None, result: dict[str, Any] | None) -> None:
+                    update_path = f"/api/v1/oracle/tx-outbox/{task_id}/update"
+                    client.post(
+                        update_path,
+                        body_bytes=to_json_bytes({"tx_hash": tx_hash, "result": result}),
+                    )
 
                 def _complete(status: str, error_hint: str | None) -> None:
                     complete_path = f"/api/v1/oracle/tx-outbox/{task_id}/complete"
                     client.post(
                         complete_path,
-                        body_bytes=to_json_bytes({"status": status, "error_hint": error_hint}),
+                        body_bytes=to_json_bytes(
+                            {
+                                "status": status,
+                                "error_hint": error_hint,
+                            }
+                        ),
                     )
 
                 try:
@@ -601,10 +614,12 @@ def run(argv: list[str] | None = None) -> int:
                         profit_month_id = str(payload.get("profit_month_id") or "")
                         profit_month_value = int(payload.get("profit_month_value"))
                         profit_sum = int(payload.get("profit_sum_micro_usdc"))
-                        tx_hash = submit_create_distribution_tx(
+                        tx_hash = existing_tx_hash or submit_create_distribution_tx(
                             profit_month_value=profit_month_value,
                             total_profit_micro_usdc=profit_sum,
                         )
+                        # Persist early so we can resume after a crash.
+                        _update(tx_hash, {"stage": "submitted"})
                         client.post(
                             f"/api/v1/oracle/distributions/{profit_month_id}/create/record",
                             body_bytes=to_json_bytes(
@@ -615,6 +630,7 @@ def run(argv: list[str] | None = None) -> int:
                                 }
                             ),
                         )
+                        _update(tx_hash, {"stage": "recorded"})
                         _complete("succeeded", None)
                         processed.append(
                             {
@@ -637,13 +653,14 @@ def run(argv: list[str] | None = None) -> int:
                         stakers_count = int(payload.get("stakers_count"))
                         authors_count = int(payload.get("authors_count"))
 
-                        tx_hash = submit_execute_distribution_tx(
+                        tx_hash = existing_tx_hash or submit_execute_distribution_tx(
                             profit_month_value=profit_month_value,
                             stakers=stakers,
                             staker_shares=staker_shares,
                             authors=authors,
                             author_shares=author_shares,
                         )
+                        _update(tx_hash, {"stage": "submitted"})
                         client.post(
                             f"/api/v1/oracle/distributions/{profit_month_id}/execute/record",
                             body_bytes=to_json_bytes(
@@ -656,6 +673,7 @@ def run(argv: list[str] | None = None) -> int:
                                 }
                             ),
                         )
+                        _update(tx_hash, {"stage": "recorded"})
                         _complete("succeeded", None)
                         processed.append(
                             {
@@ -678,6 +696,7 @@ def run(argv: list[str] | None = None) -> int:
                     )
                 except (BlockchainConfigError, BlockchainTxError) as exc:
                     hint = getattr(exc, "error_hint", None) or "tx_error"
+                    _update(existing_tx_hash or None, {"stage": "failed", "error_hint": hint})
                     _complete("failed", hint)
                     processed.append(
                         {

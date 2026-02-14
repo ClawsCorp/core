@@ -5,6 +5,7 @@ import hmac
 import json
 import sys
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,7 @@ from src.core.security import build_oracle_hmac_v2_payload
 from src.main import app
 
 import src.models  # noqa: F401
+from src.models.tx_outbox import TxOutbox
 
 ORACLE_SECRET = "test-oracle-secret"
 
@@ -179,3 +181,90 @@ def test_tx_outbox_pending_requires_hmac_and_lists_items(_client: TestClient) ->
     assert resp.status_code == 200
     assert resp.json()["success"] is True
     assert len(resp.json()["data"]["items"]) >= 1
+
+
+def test_tx_outbox_update_persists_tx_hash_and_result(_client: TestClient, _db: sessionmaker[Session]) -> None:
+    enqueue_path = "/api/v1/oracle/tx-outbox"
+    enqueue_body = json.dumps(
+        {"task_type": "noop", "payload": {"x": 1}, "idempotency_key": "idem-upd-1"},
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    resp = _client.post(
+        enqueue_path,
+        content=enqueue_body,
+        headers=_oracle_headers(enqueue_path, enqueue_body, "req-enq-upd", idem="idem-enq-upd"),
+    )
+    assert resp.status_code == 200
+    task_id = resp.json()["data"]["task_id"]
+
+    # Claim so task is in processing (update is allowed for pending too, but this matches worker behavior).
+    claim_path = f"/api/v1/oracle/tx-outbox/{task_id}/claim"
+    claim_body = json.dumps({"worker_id": "w-upd"}, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    resp = _client.post(
+        claim_path,
+        content=claim_body,
+        headers=_oracle_headers(claim_path, claim_body, "req-claim-upd", idem="idem-claim-upd"),
+    )
+    assert resp.status_code == 200
+
+    update_path = f"/api/v1/oracle/tx-outbox/{task_id}/update"
+    update_body = json.dumps(
+        {"tx_hash": "0x" + "c" * 64, "result": {"stage": "submitted"}},
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    resp = _client.post(
+        update_path,
+        content=update_body,
+        headers=_oracle_headers(update_path, update_body, "req-upd", idem="idem-upd"),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["data"]["tx_hash"] == "0x" + "c" * 64
+    assert resp.json()["data"]["result"]["stage"] == "submitted"
+
+    with _db() as db:
+        row = db.query(TxOutbox).filter(TxOutbox.task_id == task_id).first()
+        assert row is not None
+        assert row.tx_hash == "0x" + "c" * 64
+        assert row.result_json is not None
+
+
+def test_tx_outbox_claim_next_reclaims_stale_processing_task(_client: TestClient, _db: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch) -> None:
+    # Make lock TTL tiny so we can deterministically reclaim.
+    monkeypatch.setenv("TX_OUTBOX_LOCK_TTL_SECONDS", "1")
+
+    enqueue_path = "/api/v1/oracle/tx-outbox"
+    enqueue_body = json.dumps(
+        {"task_type": "noop", "payload": {"x": 1}, "idempotency_key": "idem-stale-1"},
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    resp = _client.post(
+        enqueue_path,
+        content=enqueue_body,
+        headers=_oracle_headers(enqueue_path, enqueue_body, "req-enq-stale", idem="idem-enq-stale"),
+    )
+    assert resp.status_code == 200
+    task_id = resp.json()["data"]["task_id"]
+
+    # Manually mark task as stale processing in DB.
+    with _db() as db:
+        row = db.query(TxOutbox).filter(TxOutbox.task_id == task_id).first()
+        assert row is not None
+        row.status = "processing"
+        row.locked_at = datetime.now(timezone.utc) - timedelta(seconds=10)
+        row.locked_by = "w-old"
+        db.commit()
+
+    claim_next_path = "/api/v1/oracle/tx-outbox/claim-next"
+    claim_body = json.dumps({"worker_id": "w-new"}, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    resp = _client.post(
+        claim_next_path,
+        content=claim_body,
+        headers=_oracle_headers(claim_next_path, claim_body, "req-claim-stale", idem="idem-claim-stale"),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["success"] is True
+    assert resp.json()["data"]["task"]["task_id"] == task_id
+    assert resp.json()["data"]["task"]["locked_by"] == "w-new"

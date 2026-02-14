@@ -16,6 +16,8 @@ class TxOutboxTask(BaseModel):
     idempotency_key: str | None
     task_type: str
     payload: dict
+    tx_hash: str | None = None
+    result: dict | None = None
     status: str
     attempts: int
     last_error_hint: str | None
@@ -47,6 +49,8 @@ class TxOutboxClaimResponse(BaseModel):
 class TxOutboxCompleteRequest(BaseModel):
     status: str = Field(..., min_length=1, max_length=16)  # succeeded|failed
     error_hint: str | None = Field(default=None, max_length=2000)
+    tx_hash: str | None = Field(default=None, max_length=80)
+    result: dict | None = None
 
 
 class TxOutboxCompleteResponse(BaseModel):
@@ -62,3 +66,8 @@ class TxOutboxPendingData(BaseModel):
 class TxOutboxPendingResponse(BaseModel):
     success: bool
     data: TxOutboxPendingData
+
+
+class TxOutboxUpdateRequest(BaseModel):
+    tx_hash: str | None = Field(default=None, max_length=80)
+    result: dict | None = None
