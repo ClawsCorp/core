@@ -47,10 +47,13 @@ PYTHONPATH=src python -m oracle_runner project-capital-event --project-id proj_.
 PYTHONPATH=src python -m oracle_runner evaluate-bounty-eligibility --bounty-id bty_... --payload /path/eligibility.json
 PYTHONPATH=src python -m oracle_runner mark-bounty-paid --bounty-id bty_... --paid-tx-hash 0x...
 PYTHONPATH=src python -m oracle_runner create-distribution --month 202601
+PYTHONPATH=src python -m oracle_runner build-execute-payload --month 202601 --out /path/execute.json
 PYTHONPATH=src python -m oracle_runner execute-distribution --month 202601 --payload /path/execute.json
+PYTHONPATH=src python -m oracle_runner execute-distribution --month 202601 --payload auto
 PYTHONPATH=src python -m oracle_runner confirm-payout --month 202601 [--tx-hash 0x...]
 PYTHONPATH=src python -m oracle_runner sync-payout --month 202601 [--tx-hash 0x...]
 PYTHONPATH=src python -m oracle_runner run-month --month 202601 --execute-payload /path/execute.json
+PYTHONPATH=src python -m oracle_runner run-month --month 202601 --execute-payload auto
 PYTHONPATH=src python -m oracle_runner tx-worker --max-tasks 10
 PYTHONPATH=src python -m oracle_runner --json reconcile --month 202601
 PYTHONPATH=src python -m oracle_runner --json reconcile-project-capital --project-id proj_...
@@ -77,11 +80,12 @@ If `--idempotency-key` is omitted for execute actions, runner derives determinis
 ## `run-month` exit codes
 
 - `0`: complete (or payout already finalized)
-- `2`: reconciliation not ready
-- `3`: create-distribution blocked
-- `4`: execute-distribution blocked
-- `5`: confirm-payout is still pending
-- `1`: runner/config/request error
+- `4`: reconciliation blocked (not ready)
+- `6`: create-distribution blocked
+- `7`: execute payload generation blocked
+- `9`: execute-distribution blocked
+- `10`: confirm-payout is still pending
+- `1`: runner/config/request error (incl. network/auth)
 
 ## Security and safety notes
 

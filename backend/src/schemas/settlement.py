@@ -137,6 +137,22 @@ class DistributionExecuteResponse(BaseModel):
     data: DistributionExecuteData
 
 
+class DistributionExecutePayloadData(BaseModel):
+    profit_month_id: str
+    status: str  # ok|blocked
+    blocked_reason: str | None
+    stakers: list[str]
+    staker_shares: list[int]
+    authors: list[str]
+    author_shares: list[int]
+    notes: list[str] = Field(default_factory=list)
+
+
+class DistributionExecutePayloadResponse(BaseModel):
+    success: bool
+    data: DistributionExecutePayloadData
+
+
 class DistributionCreateRecordRequest(BaseModel):
     idempotency_key: str = Field(..., min_length=1, max_length=255)
     profit_sum_micro_usdc: int = Field(..., ge=0)
