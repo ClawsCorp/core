@@ -124,6 +124,13 @@ export interface paths {
     /** Update Project Status */
     post: operations["update_project_status_api_v1_projects__project_id__status_post"];
   };
+  "/api/v1/projects/{project_id}/settlement/{profit_month_id}": {
+    /**
+     * Get project settlement for month
+     * @description Public read endpoint for a project's computed profit month summary (ledger-only).
+     */
+    get: operations["get_project_settlement_api_v1_projects__project_id__settlement__profit_month_id__get"];
+  };
   "/api/v1/proposals": {
     /** List proposals */
     get: operations["list_proposals_api_v1_proposals_get"];
@@ -252,6 +259,13 @@ export interface paths {
   "/api/v1/oracle/projects/{project_id}/revenue/reconciliation": {
     /** Reconcile Project Revenue */
     post: operations["reconcile_project_revenue_api_v1_oracle_projects__project_id__revenue_reconciliation_post"];
+  };
+  "/api/v1/oracle/projects/{project_id}/settlement/{profit_month_id}": {
+    /**
+     * Compute project settlement for month (oracle)
+     * @description Oracle/HMAC-protected compute endpoint for a project's monthly profit summary (ledger-only). Append-only.
+     */
+    post: operations["compute_project_settlement_api_v1_oracle_projects__project_id__settlement__profit_month_id__post"];
   };
   "/api/v1/oracle/tx-outbox": {
     /** Enqueue Task */
@@ -1224,6 +1238,38 @@ export interface components {
       /** Success */
       success: boolean;
       data: components["schemas"]["ProjectRevenueReconciliationReportPublic"];
+    };
+    /** ProjectSettlementDetailData */
+    ProjectSettlementDetailData: {
+      settlement: components["schemas"]["ProjectSettlementPublic"] | null;
+    };
+    /** ProjectSettlementDetailResponse */
+    ProjectSettlementDetailResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["ProjectSettlementDetailData"];
+    };
+    /** ProjectSettlementPublic */
+    ProjectSettlementPublic: {
+      /** Project Id */
+      project_id: string;
+      /** Profit Month Id */
+      profit_month_id: string;
+      /** Revenue Sum Micro Usdc */
+      revenue_sum_micro_usdc: number;
+      /** Expense Sum Micro Usdc */
+      expense_sum_micro_usdc: number;
+      /** Profit Sum Micro Usdc */
+      profit_sum_micro_usdc: number;
+      /** Profit Nonnegative */
+      profit_nonnegative: boolean;
+      /** Note */
+      note: string | null;
+      /**
+       * Computed At
+       * Format: date-time
+       */
+      computed_at: string;
     };
     /**
      * ProjectStatus
@@ -2504,6 +2550,32 @@ export interface operations {
       };
     };
   };
+  /**
+   * Get project settlement for month
+   * @description Public read endpoint for a project's computed profit month summary (ledger-only).
+   */
+  get_project_settlement_api_v1_projects__project_id__settlement__profit_month_id__get: {
+    parameters: {
+      path: {
+        project_id: string;
+        profit_month_id: string;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ProjectSettlementDetailResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   /** List proposals */
   list_proposals_api_v1_proposals_get: {
     parameters: {
@@ -3276,6 +3348,32 @@ export interface operations {
       200: {
         content: {
           "application/json": components["schemas"]["ProjectRevenueReconciliationRunResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /**
+   * Compute project settlement for month (oracle)
+   * @description Oracle/HMAC-protected compute endpoint for a project's monthly profit summary (ledger-only). Append-only.
+   */
+  compute_project_settlement_api_v1_oracle_projects__project_id__settlement__profit_month_id__post: {
+    parameters: {
+      path: {
+        project_id: string;
+        profit_month_id: string;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ProjectSettlementPublic"];
         };
       };
       /** @description Validation Error */
