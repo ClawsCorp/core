@@ -276,6 +276,80 @@ const { JsonRpcProvider, Wallet, Contract } = require('ethers');
     return tx_hash
 
 
+def submit_usdc_transfer_tx(*, to_address: str, amount_micro_usdc: int) -> str:
+    settings = get_settings()
+    rpc_url = settings.base_sepolia_rpc_url
+    usdc_address = settings.usdc_address
+    signer_private_key = settings.oracle_signer_private_key
+
+    if _is_invalid_rpc_config(rpc_url, usdc_address, to_address):
+        raise BlockchainConfigError("Missing BASE_SEPOLIA_RPC_URL or USDC_ADDRESS")
+    if signer_private_key is None or _is_placeholder(signer_private_key):
+        raise BlockchainConfigError("Missing ORACLE_SIGNER_PRIVATE_KEY")
+    if amount_micro_usdc <= 0:
+        raise BlockchainTxError("amount_micro_usdc must be positive", error_hint="invalid_amount")
+
+    node_script = """
+const { JsonRpcProvider, Wallet, Contract } = require('ethers');
+(async () => {
+  const rpcUrl = process.env.RPC_URL;
+  const privateKey = process.env.PRIVATE_KEY;
+  const usdcAddress = process.env.USDC_ADDRESS;
+  const to = process.env.TO_ADDRESS;
+  const amount = BigInt(process.env.AMOUNT);
+  const provider = new JsonRpcProvider(rpcUrl);
+  const wallet = new Wallet(privateKey, provider);
+  const usdc = new Contract(usdcAddress, [
+    'function transfer(address to, uint256 amount) external returns (bool)'
+  ], wallet);
+  const tx = await usdc.transfer(to, amount);
+  process.stdout.write(JSON.stringify({ tx_hash: tx.hash }));
+})().catch((err) => {
+  const message = err && err.message ? err.message : String(err);
+  process.stderr.write(message);
+  process.exit(1);
+});
+"""
+
+    env = os.environ.copy()
+    env.update(
+        {
+            "RPC_URL": rpc_url,
+            "PRIVATE_KEY": signer_private_key,
+            "USDC_ADDRESS": usdc_address,
+            "TO_ADDRESS": to_address,
+            "AMOUNT": str(int(amount_micro_usdc)),
+        }
+    )
+
+    contracts_dir = settings.contracts_dir
+
+    try:
+        proc = subprocess.run(
+            ["node", "-e", node_script],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=contracts_dir,
+            timeout=45,
+        )
+    except subprocess.CalledProcessError as exc:
+        error_hint = _sanitize_subprocess_error(stdout=exc.stdout, stderr=exc.stderr)
+        raise BlockchainTxError("Failed to submit USDC transfer tx", error_hint=error_hint) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise BlockchainTxError("USDC transfer tx submission timed out", error_hint="timeout") from exc
+
+    try:
+        payload = json.loads(proc.stdout or "{}")
+    except ValueError as exc:
+        raise BlockchainTxError("Invalid node output for USDC transfer tx", error_hint="invalid_output") from exc
+    tx_hash = payload.get("tx_hash")
+    if not isinstance(tx_hash, str) or not tx_hash.startswith("0x"):
+        raise BlockchainTxError("USDC transfer did not return tx_hash", error_hint="invalid_output")
+    return tx_hash
+
+
 def submit_execute_distribution_tx(
     profit_month_value: int,
     stakers: list[str],
