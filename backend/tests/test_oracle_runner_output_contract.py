@@ -22,6 +22,7 @@ class _FakeClient:
             },
             "/api/v1/oracle/distributions/202501/create": {"status": "submitted", "tx_hash": "0xcreate"},
             "/api/v1/oracle/distributions/202501/execute": {"status": "submitted", "tx_hash": "0xexec"},
+            "/api/v1/oracle/payouts/202501/sync": {"status": "ok", "executed_at": "2026-01-01T00:00:00Z"},
             "/api/v1/oracle/payouts/202501/confirm": {"status": "confirmed", "tx_hash": "0xconfirm"},
             "/api/v1/oracle/projects/proj_123/capital/reconciliation": {
                 "project_id": "proj_123",
@@ -233,7 +234,7 @@ def test_run_project_month_stdout_json_and_stderr_progress(monkeypatch, capsys) 
 class _FakeClientReconcileBlocked(_FakeClient):
     def __init__(self, _config: object):
         super().__init__(_config)
-        self._responses["/api/v1/oracle/reconciliation/202501"] = {"ready": False, "delta_micro_usdc": -1}
+        self._responses["/api/v1/oracle/reconciliation/202501"] = {"ready": False, "blocked_reason": "balance_mismatch", "delta_micro_usdc": -1}
 
 
 def test_run_month_blocked_reconcile_still_prints_single_json(monkeypatch, capsys, tmp_path: Path) -> None:
@@ -247,9 +248,9 @@ def test_run_month_blocked_reconcile_still_prints_single_json(monkeypatch, capsy
     exit_code = cli.run(["run-month", "--execute-payload", str(payload)])
 
     captured = capsys.readouterr()
-    assert exit_code == 4
+    assert exit_code == 11
     stdout_lines = [line for line in captured.out.splitlines() if line.strip()]
     assert len(stdout_lines) == 1
     summary = json.loads(stdout_lines[0])
     assert summary["success"] is False
-    assert summary["failed_step"] == "reconcile"
+    assert summary["failed_step"] == "deposit_profit"

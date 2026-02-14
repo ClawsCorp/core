@@ -95,6 +95,7 @@ If `--idempotency-key` is omitted for execute actions, runner derives determinis
 - `7`: execute payload generation blocked
 - `9`: execute-distribution blocked
 - `10`: confirm-payout is still pending
+- `11`: profit deposit was submitted/queued; rerun later once tx-worker executes it
 - `1`: runner/config/request error (incl. network/auth)
 
 ## Security and safety notes
