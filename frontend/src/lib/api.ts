@@ -27,6 +27,8 @@ import type {
   DiscussionThreadSummary,
   AccountingMonthsData,
   AlertsData,
+  AgentRegisterRequest,
+  AgentRegisterResponse,
 } from "@/types";
 
 export class ApiError extends Error {
@@ -128,6 +130,14 @@ export const api = {
       }
       throw error;
     }
+  },
+  registerAgent: async (payload: AgentRegisterRequest, idempotencyKey?: string) => {
+    const response = await requestJSON<AgentRegisterResponse>("/api/v1/agents/register", {
+      method: "POST",
+      body: payload,
+      idempotencyKey,
+    });
+    return response;
   },
   getAccountingMonths: async (params?: { projectId?: string; profitMonthId?: string; limit?: number; offset?: number }) => {
     const query = new URLSearchParams();

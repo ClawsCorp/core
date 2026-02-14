@@ -55,6 +55,29 @@ def enforce_agent_rate_limit(
     window_seconds: int,
     now: datetime | None = None,
 ) -> RateLimitResult:
+    return enforce_actor_rate_limit(
+        db,
+        actor_type="agent",
+        actor_id=agent_id,
+        method=method,
+        path_like=path_like,
+        max_requests=max_requests,
+        window_seconds=window_seconds,
+        now=now,
+    )
+
+
+def enforce_actor_rate_limit(
+    db: Session,
+    *,
+    actor_type: str,
+    actor_id: str,
+    method: str,
+    path_like: str,
+    max_requests: int,
+    window_seconds: int,
+    now: datetime | None = None,
+) -> RateLimitResult:
     if max_requests <= 0 or window_seconds <= 0:
         return RateLimitResult(allowed=True, attempts=0, max_requests=max_requests, window_seconds=window_seconds)
 
@@ -73,8 +96,8 @@ def enforce_agent_rate_limit(
     since = now - timedelta(seconds=window_seconds)
     attempts = _count_audits(
         db,
-        actor_type="agent",
-        agent_id=agent_id,
+        actor_type=actor_type,
+        agent_id=actor_id,
         method=method,
         path_like=path_like,
         since=since,
