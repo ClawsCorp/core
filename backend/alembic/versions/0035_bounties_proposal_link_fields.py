@@ -1,7 +1,7 @@
 """bounties: proposal link + basic SLA fields
 
 Revision ID: 0035
-Revises: 0034_project_domains
+Revises: 0034
 Create Date: 2026-02-14
 """
 
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 revision = "0035"
-down_revision = "0034_project_domains"
+down_revision = "0034"
 branch_labels = None
 depends_on = None
 

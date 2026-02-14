@@ -1,6 +1,6 @@
 """project domains
 
-Revision ID: 0034_project_domains
+Revision ID: 0034
 Revises: 0033_billing_events
 Create Date: 2026-02-14
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision = "0034_project_domains"
+revision = "0034"
 down_revision = "0033_billing_events"
 branch_labels = None
 depends_on = None
