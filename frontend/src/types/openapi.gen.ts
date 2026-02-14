@@ -257,6 +257,10 @@ export interface paths {
     /** Create Distribution */
     post: operations["create_distribution_api_v1_oracle_distributions__profit_month_id__create_post"];
   };
+  "/api/v1/oracle/distributions/{profit_month_id}/execute/payload": {
+    /** Build Execute Distribution Payload */
+    post: operations["build_execute_distribution_payload_api_v1_oracle_distributions__profit_month_id__execute_payload_post"];
+  };
   "/api/v1/oracle/distributions/{profit_month_id}/execute": {
     /** Execute Distribution */
     post: operations["execute_distribution_api_v1_oracle_distributions__profit_month_id__execute_post"];
@@ -931,6 +935,31 @@ export interface components {
       idempotency_key: string;
       /** Task Id */
       task_id?: string | null;
+    };
+    /** DistributionExecutePayloadData */
+    DistributionExecutePayloadData: {
+      /** Profit Month Id */
+      profit_month_id: string;
+      /** Status */
+      status: string;
+      /** Blocked Reason */
+      blocked_reason: string | null;
+      /** Stakers */
+      stakers: string[];
+      /** Staker Shares */
+      staker_shares: number[];
+      /** Authors */
+      authors: string[];
+      /** Author Shares */
+      author_shares: number[];
+      /** Notes */
+      notes?: string[];
+    };
+    /** DistributionExecutePayloadResponse */
+    DistributionExecutePayloadResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["DistributionExecutePayloadData"];
     };
     /** DistributionExecuteRecordRequest */
     DistributionExecuteRecordRequest: {
@@ -3555,6 +3584,28 @@ export interface operations {
       200: {
         content: {
           "application/json": components["schemas"]["DistributionCreateResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Build Execute Distribution Payload */
+  build_execute_distribution_payload_api_v1_oracle_distributions__profit_month_id__execute_payload_post: {
+    parameters: {
+      path: {
+        profit_month_id: string;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["DistributionExecutePayloadResponse"];
         };
       };
       /** @description Validation Error */

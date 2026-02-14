@@ -43,6 +43,8 @@ def _print_progress(stage: str, status: str, detail: str | None = None) -> None:
 
 
 def _load_execute_payload(path: str) -> tuple[bytes, dict[str, Any]]:
+    if path.strip().lower() == "auto":
+        raise OracleRunnerError("Use build-execute-payload or run-month with --execute-payload auto.")
     payload_path = Path(path)
     if not payload_path.exists():
         raise OracleRunnerError(f"Execute payload file not found: {path}")
@@ -58,6 +60,15 @@ def _load_execute_payload(path: str) -> tuple[bytes, dict[str, Any]]:
 
     _validate_execute_payload(parsed)
     return raw, parsed
+
+
+def _write_execute_payload_file(path: str, payload: dict[str, Any]) -> None:
+    out_path = Path(path)
+    try:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(payload, ensure_ascii=True, sort_keys=True), encoding="utf-8")
+    except OSError as exc:
+        raise OracleRunnerError(f"Failed to write payload file: {path}") from exc
 
 
 def _load_json_payload(path: str) -> tuple[bytes, dict[str, Any]]:
@@ -211,9 +222,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     execute = subparsers.add_parser("execute-distribution")
     execute.add_argument("--month", required=True)
-    execute.add_argument("--payload", required=True)
+    execute.add_argument("--payload", required=True, help="Path to JSON file, or 'auto' to fetch from API.")
     execute.add_argument("--idempotency-key")
     execute.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
+
+    build_payload = subparsers.add_parser(
+        "build-execute-payload",
+        help="Build a deterministic executeDistribution payload by querying the oracle API (HMAC protected).",
+    )
+    build_payload.add_argument("--month", required=True)
+    build_payload.add_argument("--out", help="Write payload JSON to this file (required unless --json).")
+    build_payload.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
 
     confirm = subparsers.add_parser("confirm-payout")
     confirm.add_argument("--month", required=True)
@@ -234,7 +253,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     run_month = subparsers.add_parser("run-month")
     run_month.add_argument("--month", required=True)
-    run_month.add_argument("--execute-payload", required=True)
+    run_month.add_argument(
+        "--execute-payload",
+        help="Path to execute payload JSON file, or 'auto' to fetch from API.",
+        required=False,
+        default="auto",
+    )
     run_month.add_argument("--idempotency-key")
     # run-month always prints a single JSON summary to stdout, regardless of --json.
     run_month.add_argument("--json", action="store_true", help=argparse.SUPPRESS)
@@ -427,9 +451,64 @@ def run(argv: list[str] | None = None) -> int:
                 _print_fields(data, ["status", "tx_hash", "blocked_reason", "idempotency_key"])
             return 0
 
+        if args.command == "build-execute-payload":
+            month = _validate_month(args.month)
+            out_path = str(getattr(args, "out", "") or "").strip()
+            if not json_mode and not out_path:
+                raise OracleRunnerError("--out is required unless --json is used.")
+
+            data = _post_action(client, f"/api/v1/oracle/distributions/{month}/execute/payload", b"{}")
+            status = str(data.get("status") or "")
+
+            payload = {
+                "stakers": list(data.get("stakers") or []),
+                "staker_shares": list(data.get("staker_shares") or []),
+                "authors": list(data.get("authors") or []),
+                "author_shares": list(data.get("author_shares") or []),
+            }
+            _validate_execute_payload(payload)
+
+            if out_path:
+                _write_execute_payload_file(out_path, payload)
+
+            if json_mode:
+                _print_json(
+                    {
+                        "success": status == "ok",
+                        "command": command,
+                        "month": month,
+                        "status": status,
+                        "blocked_reason": data.get("blocked_reason"),
+                        "notes": data.get("notes") or [],
+                        "payload": payload,
+                        "out": out_path or None,
+                    }
+                )
+            else:
+                _print_fields(data, ["status", "blocked_reason"])
+                if out_path:
+                    _print_progress(
+                        "build_execute_payload",
+                        "ok" if status == "ok" else "blocked",
+                        detail=out_path,
+                    )
+            return 0 if status == "ok" else 2
+
         if args.command == "execute-distribution":
             month = _validate_month(args.month)
-            body_bytes, parsed = _load_execute_payload(args.payload)
+            if str(args.payload).strip().lower() == "auto":
+                built = _post_action(client, f"/api/v1/oracle/distributions/{month}/execute/payload", b"{}")
+                payload = {
+                    "stakers": list(built.get("stakers") or []),
+                    "staker_shares": list(built.get("staker_shares") or []),
+                    "authors": list(built.get("authors") or []),
+                    "author_shares": list(built.get("author_shares") or []),
+                }
+                _validate_execute_payload(payload)
+                parsed = payload
+                body_bytes = json.dumps(payload, separators=(",", ":"), ensure_ascii=True, sort_keys=True).encode("utf-8")
+            else:
+                body_bytes, parsed = _load_execute_payload(args.payload)
             idempotency_key = args.idempotency_key or _derive_execute_idempotency_key(month, parsed)
             data = _post_action(
                 client,
@@ -543,8 +622,31 @@ def run(argv: list[str] | None = None) -> int:
             _print_progress("create_distribution", "ok")
 
             try:
+                # Prepare payload (auto) or load from file.
+                if str(args.execute_payload).strip().lower() == "auto":
+                    _print_progress("build_execute_payload", "start")
+                    built = _post_action(client, f"/api/v1/oracle/distributions/{month}/execute/payload", b"{}")
+                    summary["build_execute_payload"] = built
+                    if built.get("status") != "ok":
+                        _print_progress("build_execute_payload", "blocked")
+                        summary["failed_step"] = "build_execute_payload"
+                        _print_json(summary)
+                        return 7
+                    _print_progress("build_execute_payload", "ok")
+                    execute_payload = {
+                        "stakers": list(built.get("stakers") or []),
+                        "staker_shares": list(built.get("staker_shares") or []),
+                        "authors": list(built.get("authors") or []),
+                        "author_shares": list(built.get("author_shares") or []),
+                    }
+                    _validate_execute_payload(execute_payload)
+                    execute_body = json.dumps(
+                        execute_payload, separators=(",", ":"), ensure_ascii=True, sort_keys=True
+                    ).encode("utf-8")
+                else:
+                    execute_body, execute_payload = _load_execute_payload(args.execute_payload)
+
                 _print_progress("execute_distribution", "start")
-                execute_body, execute_payload = _load_execute_payload(args.execute_payload)
                 run_idempotency_key = args.idempotency_key or _derive_execute_idempotency_key(month, execute_payload)
                 execute = _post_action(
                     client,
@@ -558,13 +660,13 @@ def run(argv: list[str] | None = None) -> int:
                 summary["failed_step"] = "execute_distribution"
                 summary["error"] = str(exc)
                 _print_json(summary)
-                return 7
+                return 8
 
             if execute.get("status") == "blocked":
                 _print_progress("execute_distribution", "blocked")
                 summary["failed_step"] = "execute_distribution"
                 _print_json(summary)
-                return 8
+                return 9
             _print_progress("execute_distribution", "ok")
 
             try:

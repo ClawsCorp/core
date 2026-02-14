@@ -20,6 +20,8 @@ from src.models.distribution_creation import DistributionCreation
 from src.models.distribution_execution import DistributionExecution
 from src.models.dividend_payout import DividendPayout
 from src.models.expense_event import ExpenseEvent
+from src.models.agent import Agent
+from src.models.project import Project
 from src.models.reconciliation_report import ReconciliationReport
 from src.models.revenue_event import RevenueEvent
 from src.models.settlement import Settlement
@@ -35,6 +37,7 @@ from src.schemas.settlement import (
     DistributionCreateRecordRequest,
     DistributionCreateResponse,
     DistributionExecuteRecordRequest,
+    DistributionExecutePayloadResponse,
     DistributionExecuteRequest,
     DistributionExecuteResponse,
     PayoutTriggerRequest,
@@ -611,6 +614,171 @@ def create_distribution(
             "blocked_reason": None,
             "idempotency_key": idempotency_key,
             "task_id": None,
+        },
+    )
+
+
+def _build_execute_distribution_payload(
+    db: Session, *, profit_month_id: str
+) -> tuple[list[str], list[int], list[str], list[int], list[str]]:
+    # MVP: stakers are not yet indexed. Empty stakers means the stakers bucket
+    # is routed to treasury on-chain (fail-closed and explicit in notes).
+    stakers: list[str] = []
+    staker_shares: list[int] = []
+
+    # Authors bucket: originators of projects that generated positive profit for the month.
+    rev_rows = (
+        db.query(RevenueEvent.project_id, func.sum(RevenueEvent.amount_micro_usdc))
+        .filter(
+            RevenueEvent.profit_month_id == profit_month_id,
+            RevenueEvent.project_id.isnot(None),
+        )
+        .group_by(RevenueEvent.project_id)
+        .all()
+    )
+    exp_rows = (
+        db.query(ExpenseEvent.project_id, func.sum(ExpenseEvent.amount_micro_usdc))
+        .filter(
+            ExpenseEvent.profit_month_id == profit_month_id,
+            ExpenseEvent.project_id.isnot(None),
+        )
+        .group_by(ExpenseEvent.project_id)
+        .all()
+    )
+
+    profit_by_project_pk: dict[int, int] = {}
+    for project_pk, amount_sum in rev_rows:
+        if project_pk is None:
+            continue
+        profit_by_project_pk[int(project_pk)] = profit_by_project_pk.get(int(project_pk), 0) + int(amount_sum or 0)
+    for project_pk, amount_sum in exp_rows:
+        if project_pk is None:
+            continue
+        profit_by_project_pk[int(project_pk)] = profit_by_project_pk.get(int(project_pk), 0) - int(amount_sum or 0)
+
+    positive_project_pks = [pk for pk, profit in profit_by_project_pk.items() if int(profit) > 0]
+    if not positive_project_pks:
+        notes = ["no_positive_profit_projects_for_month", "stakers_indexer_missing_routes_stakers_to_treasury"]
+        return stakers, staker_shares, [], [], notes
+
+    projects = (
+        db.query(Project.id, Project.project_id, Project.originator_agent_id)
+        .filter(Project.id.in_(positive_project_pks))
+        .all()
+    )
+    originator_pks = sorted({int(p.originator_agent_id) for p in projects if p.originator_agent_id is not None})
+    agents = (
+        db.query(Agent.id, Agent.wallet_address)
+        .filter(Agent.id.in_(originator_pks))
+        .all()
+    )
+    wallet_by_agent_pk: dict[int, str | None] = {int(a.id): a.wallet_address for a in agents}
+
+    # Accumulate weights by wallet address (one agent may have multiple projects).
+    weight_by_wallet: dict[str, int] = {}
+    missing_wallet_agents: set[int] = set()
+    invalid_wallet_agents: set[int] = set()
+
+    for proj_pk, _proj_id, originator_pk in projects:
+        if originator_pk is None:
+            continue
+        profit = int(profit_by_project_pk.get(int(proj_pk), 0))
+        if profit <= 0:
+            continue
+        wallet = (wallet_by_agent_pk.get(int(originator_pk)) or "").strip()
+        if not wallet:
+            missing_wallet_agents.add(int(originator_pk))
+            continue
+        if not _ADDRESS_RE.fullmatch(wallet) or wallet.lower() == "0x0000000000000000000000000000000000000000":
+            invalid_wallet_agents.add(int(originator_pk))
+            continue
+        w = wallet.lower()
+        weight_by_wallet[w] = weight_by_wallet.get(w, 0) + profit
+
+    notes: list[str] = ["stakers_indexer_missing_routes_stakers_to_treasury"]
+    if missing_wallet_agents:
+        notes.append("some_originators_missing_wallet_address")
+    if invalid_wallet_agents:
+        notes.append("some_originators_have_invalid_wallet_address")
+
+    # Deterministic ordering; apply caps as MVP compromise.
+    items = sorted(weight_by_wallet.items(), key=lambda kv: (-int(kv[1]), kv[0]))
+    if len(items) > _MAX_AUTHORS:
+        notes.append(f"authors_capped_to_{_MAX_AUTHORS}")
+        items = items[:_MAX_AUTHORS]
+
+    authors = [addr for addr, _weight in items]
+    author_shares = [int(weight) if int(weight) > 0 else 1 for _addr, weight in items]
+
+    # Ensure strictly positive shares (contract requires totalShares > 0 and per-share used for payout math).
+    author_shares = [max(1, int(s)) for s in author_shares]
+
+    return stakers, staker_shares, authors, author_shares, notes
+
+
+@router.post(
+    "/distributions/{profit_month_id}/execute/payload",
+    response_model=DistributionExecutePayloadResponse,
+)
+def build_execute_distribution_payload(
+    profit_month_id: str,
+    request: Request,
+    _: str = Depends(require_oracle_hmac),
+    db: Session = Depends(get_db),
+) -> DistributionExecutePayloadResponse:
+    _validate_month(profit_month_id)
+
+    blocked_reason: str | None = None
+    settlement = _latest_settlement(db, profit_month_id)
+    if settlement is None:
+        blocked_reason = "missing_settlement"
+    elif settlement.profit_sum_micro_usdc <= 0:
+        blocked_reason = "profit_required"
+
+    report = _latest_reconciliation(db, profit_month_id)
+    if report is None:
+        blocked_reason = blocked_reason or "reconciliation_missing"
+    elif not report.ready or report.delta_micro_usdc != 0:
+        blocked_reason = blocked_reason or "not_ready"
+
+    stakers, staker_shares, authors, author_shares, notes = _build_execute_distribution_payload(
+        db, profit_month_id=profit_month_id
+    )
+
+    # Basic validation parity: if we generated a payload that would be rejected, mark as blocked.
+    validation_error = _validate_execute_distribution_payload(
+        DistributionExecuteRequest(
+            stakers=stakers,
+            staker_shares=staker_shares,
+            authors=authors,
+            author_shares=author_shares,
+        )
+    )
+    if validation_error is not None:
+        blocked_reason = blocked_reason or validation_error
+
+    # Audit as oracle read-style action.
+    _record_oracle_audit(
+        request,
+        db,
+        idempotency_key=f"execute_payload:{profit_month_id}",
+        error_hint=blocked_reason,
+        commit=False,
+    )
+    db.commit()
+
+    ok = blocked_reason is None
+    return DistributionExecutePayloadResponse(
+        success=ok,
+        data={
+            "profit_month_id": profit_month_id,
+            "status": "ok" if ok else "blocked",
+            "blocked_reason": blocked_reason,
+            "stakers": stakers,
+            "staker_shares": staker_shares,
+            "authors": authors,
+            "author_shares": author_shares,
+            "notes": notes,
         },
     )
 
