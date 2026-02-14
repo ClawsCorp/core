@@ -227,3 +227,27 @@ def test_run_project_month_stdout_json_and_stderr_progress(monkeypatch, capsys) 
     stderr = captured.err
     assert "stage=reconcile_project_capital status=start" in stderr
     assert "stage=reconcile_project_capital status=ok" in stderr
+
+
+class _FakeClientReconcileBlocked(_FakeClient):
+    def __init__(self, _config: object):
+        super().__init__(_config)
+        self._responses["/api/v1/oracle/reconciliation/202501"] = {"ready": False, "delta_micro_usdc": -1}
+
+
+def test_run_month_blocked_reconcile_still_prints_single_json(monkeypatch, capsys, tmp_path: Path) -> None:
+    monkeypatch.setattr(cli, "load_config_from_env", lambda: object())
+    monkeypatch.setattr(cli, "OracleClient", _FakeClientReconcileBlocked)
+
+    payload = tmp_path / "execute.json"
+    payload.write_text(json.dumps({"stakers": ["0x1"], "staker_shares": [1], "authors": ["0x2"], "author_shares": [1]}))
+
+    exit_code = cli.run(["run-month", "--month", "202501", "--execute-payload", str(payload)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 4
+    stdout_lines = [line for line in captured.out.splitlines() if line.strip()]
+    assert len(stdout_lines) == 1
+    summary = json.loads(stdout_lines[0])
+    assert summary["success"] is False
+    assert summary["failed_step"] == "reconcile"
