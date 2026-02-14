@@ -1,6 +1,8 @@
 #!/usr/bin/env node
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 function usage() {
   process.stderr.write(
@@ -49,10 +51,10 @@ function assertValidSlug(slug) {
 const { slug } = parseArgs(process.argv);
 assertValidSlug(slug);
 
-const repoRoot = process.cwd();
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(scriptDir, "..");
 const surfacesDir = path.join(repoRoot, "frontend", "src", "product_surfaces");
 const surfaceFile = path.join(surfacesDir, `${slug}.tsx`);
-const indexFile = path.join(surfacesDir, "index.ts");
 
 if (!fs.existsSync(surfacesDir)) {
   throw new Error(`missing directory: ${surfacesDir}`);
@@ -60,10 +62,6 @@ if (!fs.existsSync(surfacesDir)) {
 
 if (fs.existsSync(surfaceFile)) {
   throw new Error(`surface already exists: ${surfaceFile}`);
-}
-
-if (!fs.existsSync(indexFile)) {
-  throw new Error(`missing file: ${indexFile}`);
 }
 
 const componentName = `${toPascalCase(slug)}Surface`;
@@ -78,36 +76,12 @@ export function ${componentName}({ project }: { project: ProjectDetail }) {
 
 fs.writeFileSync(surfaceFile, surfaceSource, "utf8");
 
-let indexSource = fs.readFileSync(indexFile, "utf8");
-
-if (indexSource.includes(`from "./${slug}"`)) {
-  throw new Error(`index.ts already imports ./${slug}`);
+// Keep registry mapping fully automated (no manual edits).
+const genScript = path.join(repoRoot, "scripts", "gen_product_surface_registry.mjs");
+const proc = spawnSync("node", [genScript], { cwd: repoRoot, encoding: "utf8" });
+if (proc.status !== 0) {
+  throw new Error(`registry generator failed: ${proc.stderr || proc.stdout}`);
 }
-if (indexSource.includes(`"${slug}"`)) {
-  throw new Error(`index.ts already contains slug key "${slug}"`);
-}
-
-// Insert import after the last local surface import (or after DemoSurface import).
-const importNeedle = 'import { DemoSurface } from "./demo";';
-if (!indexSource.includes(importNeedle)) {
-  throw new Error("unsupported index.ts format: missing DemoSurface import");
-}
-indexSource = indexSource.replace(
-  importNeedle,
-  `${importNeedle}\nimport { ${componentName} } from "./${slug}";`
-);
-
-// Insert map entry.
-const mapNeedle = "const SURFACE_MAP: Record<string, ProductSurfaceComponent> = {\n  demo: DemoSurface,\n};";
-if (!indexSource.includes(mapNeedle)) {
-  throw new Error("unsupported index.ts format: SURFACE_MAP block not found");
-}
-indexSource = indexSource.replace(
-  mapNeedle,
-  `const SURFACE_MAP: Record<string, ProductSurfaceComponent> = {\n  demo: DemoSurface,\n  \"${slug}\": ${componentName},\n};`
-);
-
-fs.writeFileSync(indexFile, indexSource, "utf8");
 
 process.stdout.write(
   JSON.stringify(
@@ -115,11 +89,9 @@ process.stdout.write(
       ok: true,
       slug,
       file: path.relative(repoRoot, surfaceFile),
-      index: path.relative(repoRoot, indexFile),
       component: componentName,
     },
     null,
     2
   ) + "\n"
 );
-
