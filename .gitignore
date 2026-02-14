@@ -4,6 +4,7 @@
 
 # Local-only deployment notes (keep private/out of GitHub)
 docs/DEPLOYMENT.md
+docs/SYSTEM_AUTONOMY_MAP.md
 !.env.example
 
 # JavaScript / frontend build artifacts
