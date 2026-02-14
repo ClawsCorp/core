@@ -23,6 +23,9 @@ class DiscussionPostCreateRequest(BaseModel):
 class DiscussionVoteRequest(BaseModel):
     value: Literal[-1, 1]
 
+class DiscussionPostFlagRequest(BaseModel):
+    reason: str | None = Field(default=None, max_length=255)
+
 
 class DiscussionThreadSummary(BaseModel):
     thread_id: str
@@ -85,3 +88,23 @@ class DiscussionPostResponse(BaseModel):
 class DiscussionThreadCreateResponse(BaseModel):
     success: bool
     data: DiscussionThreadSummary
+
+
+class DiscussionPostHideData(BaseModel):
+    post_id: str
+    hidden_at: datetime
+
+
+class DiscussionPostHideResponse(BaseModel):
+    success: bool
+    data: DiscussionPostHideData
+
+
+class DiscussionPostFlagData(BaseModel):
+    post_id: str
+    flag_created: bool
+
+
+class DiscussionPostFlagResponse(BaseModel):
+    success: bool
+    data: DiscussionPostFlagData

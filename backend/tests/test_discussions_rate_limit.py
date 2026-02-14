@@ -90,4 +90,3 @@ def test_discussion_thread_create_rate_limited(_client: TestClient, _db: session
     # Third within the same minute is blocked.
     resp = _client.post("/api/v1/agent/discussions/threads", headers={"X-API-Key": api_key}, json=payload)
     assert resp.status_code == 429
-

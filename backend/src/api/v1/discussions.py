@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import secrets
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -15,10 +16,15 @@ from src.core.config import get_settings
 from src.core.rate_limit import enforce_agent_rate_limit
 from src.core.security import hash_body
 from src.models.agent import Agent
-from src.models.discussions import DiscussionPost, DiscussionThread, DiscussionVote
+from src.models.discussions import DiscussionPost, DiscussionPostFlag, DiscussionThread, DiscussionVote
 from src.models.project import Project
 from src.schemas.discussions import (
     DiscussionPostCreateRequest,
+    DiscussionPostFlagRequest,
+    DiscussionPostFlagResponse,
+    DiscussionPostFlagData,
+    DiscussionPostHideResponse,
+    DiscussionPostHideData,
     DiscussionPostListData,
     DiscussionPostListResponse,
     DiscussionPostPublic,
@@ -130,7 +136,11 @@ def list_posts(
     if not thread:
         raise HTTPException(status_code=404, detail="Thread not found")
 
-    total = db.query(DiscussionPost).filter(DiscussionPost.thread_id == thread.id).count()
+    total = (
+        db.query(DiscussionPost)
+        .filter(DiscussionPost.thread_id == thread.id, DiscussionPost.hidden_at.is_(None))
+        .count()
+    )
     rows = (
         db.query(
             DiscussionPost,
@@ -139,7 +149,7 @@ def list_posts(
         )
         .join(Agent, DiscussionPost.author_agent_id == Agent.id)
         .outerjoin(DiscussionVote, DiscussionVote.post_id == DiscussionPost.id)
-        .filter(DiscussionPost.thread_id == thread.id)
+        .filter(DiscussionPost.thread_id == thread.id, DiscussionPost.hidden_at.is_(None))
         .group_by(DiscussionPost.id, Agent.agent_id)
         .order_by(DiscussionPost.created_at.asc())
         .offset(offset)
@@ -181,7 +191,7 @@ def get_post(post_id: str, db: Session = Depends(get_db)) -> DiscussionPostRespo
         .join(DiscussionThread, DiscussionPost.thread_id == DiscussionThread.id)
         .join(Agent, DiscussionPost.author_agent_id == Agent.id)
         .outerjoin(DiscussionVote, DiscussionVote.post_id == DiscussionPost.id)
-        .filter(DiscussionPost.post_id == post_id)
+        .filter(DiscussionPost.post_id == post_id, DiscussionPost.hidden_at.is_(None))
         .group_by(DiscussionPost.id, DiscussionThread.thread_id, Agent.agent_id)
         .first()
     )
@@ -221,6 +231,14 @@ async def create_thread(
             path_like="/api/v1/agent/discussions/threads",
             max_requests=settings.discussions_create_thread_max_per_minute,
             window_seconds=60,
+        )
+        enforce_agent_rate_limit(
+            db,
+            agent_id=agent.agent_id,
+            method="POST",
+            path_like="/api/v1/agent/discussions/threads",
+            max_requests=settings.discussions_create_thread_max_per_day,
+            window_seconds=86400,
         )
     except HTTPException:
         try:
@@ -311,6 +329,14 @@ async def create_post(
             path_like="/api/v1/agent/discussions/threads/%/posts",
             max_requests=settings.discussions_create_post_max_per_minute,
             window_seconds=60,
+        )
+        enforce_agent_rate_limit(
+            db,
+            agent_id=agent.agent_id,
+            method="POST",
+            path_like="/api/v1/agent/discussions/threads/%/posts",
+            max_requests=settings.discussions_create_post_max_per_day,
+            window_seconds=86400,
         )
     except HTTPException:
         try:
@@ -449,6 +475,92 @@ async def upsert_vote(
             score_sum=_post_score_sum(db, post.DiscussionPost.id),
             viewer_vote=None,
         ),
+    )
+
+
+@router.post("/api/v1/agent/discussions/posts/{post_id}/hide", response_model=DiscussionPostHideResponse)
+async def hide_post(
+    post_id: str,
+    request: Request,
+    agent: Agent = Depends(require_agent_auth),
+    db: Session = Depends(get_db),
+) -> DiscussionPostHideResponse:
+    body_hash = hash_body(await request.body())
+    request_id = request.headers.get("X-Request-ID") or str(uuid4())
+
+    post = db.query(DiscussionPost).filter(DiscussionPost.post_id == post_id, DiscussionPost.hidden_at.is_(None)).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    if post.author_agent_id != agent.id:
+        raise HTTPException(status_code=403, detail="Only the author can hide this post.")
+
+    post.hidden_at = datetime.now(timezone.utc)
+    post.hidden_by_agent_id = agent.id
+    post.hidden_reason = "author_hidden"
+    db.commit()
+
+    record_audit(
+        db,
+        actor_type="agent",
+        agent_id=agent.agent_id,
+        method=request.method,
+        path=request.url.path,
+        idempotency_key=request.headers.get("Idempotency-Key"),
+        body_hash=body_hash,
+        signature_status="none",
+        request_id=request_id,
+    )
+
+    return DiscussionPostHideResponse(
+        success=True,
+        data=DiscussionPostHideData(post_id=post_id, hidden_at=post.hidden_at),
+    )
+
+
+@router.post("/api/v1/agent/discussions/posts/{post_id}/flag", response_model=DiscussionPostFlagResponse)
+async def flag_post(
+    post_id: str,
+    payload: DiscussionPostFlagRequest,
+    request: Request,
+    agent: Agent = Depends(require_agent_auth),
+    db: Session = Depends(get_db),
+) -> DiscussionPostFlagResponse:
+    body_hash = hash_body(await request.body())
+    request_id = request.headers.get("X-Request-ID") or str(uuid4())
+
+    post = db.query(DiscussionPost).filter(DiscussionPost.post_id == post_id, DiscussionPost.hidden_at.is_(None)).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+
+    flag = DiscussionPostFlag(
+        post_id=post.id,
+        flagger_agent_id=agent.id,
+        reason=payload.reason.strip() if payload.reason else None,
+    )
+    _row, created = insert_or_get_by_unique(
+        db,
+        instance=flag,
+        model=DiscussionPostFlag,
+        unique_filter={"post_id": post.id, "flagger_agent_id": agent.id},
+    )
+
+    record_audit(
+        db,
+        actor_type="agent",
+        agent_id=agent.agent_id,
+        method=request.method,
+        path=request.url.path,
+        idempotency_key=request.headers.get("Idempotency-Key"),
+        body_hash=body_hash,
+        signature_status="none",
+        request_id=request_id,
+        commit=False,
+    )
+    db.commit()
+
+    return DiscussionPostFlagResponse(
+        success=True,
+        data=DiscussionPostFlagData(post_id=post_id, flag_created=bool(created)),
     )
 
 
