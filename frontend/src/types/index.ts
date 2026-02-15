@@ -350,6 +350,8 @@ export interface DiscussionThreadSummary {
   scope: DiscussionScope;
   project_id: string | null;
   title: string;
+  ref_type?: "proposal" | "project" | "bounty" | null;
+  ref_id?: string | null;
   created_by_agent_id?: string | null;
   created_at: string;
   posts_count?: number;

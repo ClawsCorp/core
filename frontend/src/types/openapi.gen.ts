@@ -370,6 +370,13 @@ export interface paths {
     /** Update Task */
     post: operations["update_task_api_v1_oracle_tx_outbox__task_id__update_post"];
   };
+  "/api/v1/oracle/proposals/{proposal_id}/fast-forward": {
+    /**
+     * Oracle-only governance helper: fast-forward proposal windows for E2E
+     * @description HMAC-protected helper to shorten discussion/voting windows for E2E seeding. Intended for operators/orchestrators only.
+     */
+    post: operations["fast_forward_proposal_api_v1_oracle_proposals__proposal_id__fast_forward_post"];
+  };
   "/api/v1/settlement/months": {
     /**
      * List settlement months
@@ -1115,6 +1122,36 @@ export interface components {
      * @enum {string}
      */
     MilestoneStatus: "planned" | "in_progress" | "done";
+    /** OracleProposalFastForwardData */
+    OracleProposalFastForwardData: {
+      /** Proposal Id */
+      proposal_id: string;
+      /** Status */
+      status: string;
+      /** Discussion Ends At */
+      discussion_ends_at: string | null;
+      /** Voting Starts At */
+      voting_starts_at: string | null;
+      /** Voting Ends At */
+      voting_ends_at: string | null;
+    };
+    /** OracleProposalFastForwardRequest */
+    OracleProposalFastForwardRequest: {
+      target: components["schemas"]["OracleProposalFastForwardTarget"];
+      /** Voting Minutes */
+      voting_minutes?: number | null;
+    };
+    /** OracleProposalFastForwardResponse */
+    OracleProposalFastForwardResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["OracleProposalFastForwardData"];
+    };
+    /**
+     * OracleProposalFastForwardTarget
+     * @enum {string}
+     */
+    OracleProposalFastForwardTarget: "voting" | "finalize";
     /** PayoutConfirmData */
     PayoutConfirmData: {
       /** Profit Month Id */
@@ -4347,6 +4384,36 @@ export interface operations {
       200: {
         content: {
           "application/json": components["schemas"]["TxOutboxTaskResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /**
+   * Oracle-only governance helper: fast-forward proposal windows for E2E
+   * @description HMAC-protected helper to shorten discussion/voting windows for E2E seeding. Intended for operators/orchestrators only.
+   */
+  fast_forward_proposal_api_v1_oracle_proposals__proposal_id__fast_forward_post: {
+    parameters: {
+      path: {
+        proposal_id: string;
+      };
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["OracleProposalFastForwardRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["OracleProposalFastForwardResponse"];
         };
       };
       /** @description Validation Error */
