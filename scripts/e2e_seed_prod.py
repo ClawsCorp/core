@@ -688,7 +688,13 @@ def main() -> int:
                 api_key=author["api_key"],
                 body={},
             )
-            rid = fin.get("data", {}).get("resulting_project_id")
+            fin_data = fin.get("data", {}) if isinstance(fin.get("data"), dict) else {}
+            proposal["status"] = fin_data.get("status") or proposal.get("status")
+            proposal["finalized_outcome"] = fin_data.get("finalized_outcome") or proposal.get("finalized_outcome")
+            proposal["resulting_project_id"] = fin_data.get("resulting_project_id") or proposal.get("resulting_project_id")
+            _save_state(state)
+
+            rid = fin_data.get("resulting_project_id")
             if not isinstance(rid, str) or not rid:
                 raise RuntimeError("governance finalize did not produce a project_id")
             project["project_id"] = rid
