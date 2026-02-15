@@ -11,6 +11,16 @@ def _split_origins(value: str) -> list[str]:
     return [origin.strip() for origin in value.split(",") if origin.strip()]
 
 
+def _optional_int_env(name: str) -> int | None:
+    value = os.getenv(name, "").strip()
+    if not value:
+        return None
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer.") from exc
+
+
 def _normalize_database_url(url: str) -> str:
     """
     Railway Postgres often provides DATABASE_URL as `postgresql://...` (no driver).
@@ -55,6 +65,8 @@ class Settings:
     governance_approval_bps: int
     governance_discussion_hours: int
     governance_voting_hours: int
+    governance_discussion_minutes: int | None
+    governance_voting_minutes: int | None
     project_capital_reconciliation_max_age_seconds: int
     project_revenue_reconciliation_max_age_seconds: int
     tx_outbox_lock_ttl_seconds: int
@@ -103,6 +115,8 @@ def get_settings() -> Settings:
     governance_approval_bps = int(os.getenv("GOVERNANCE_APPROVAL_BPS", "5000"))
     governance_discussion_hours = int(os.getenv("GOVERNANCE_DISCUSSION_HOURS", "24"))
     governance_voting_hours = int(os.getenv("GOVERNANCE_VOTING_HOURS", "24"))
+    governance_discussion_minutes = _optional_int_env("GOVERNANCE_DISCUSSION_MINUTES")
+    governance_voting_minutes = _optional_int_env("GOVERNANCE_VOTING_MINUTES")
     project_capital_reconciliation_max_age_seconds = int(
         os.getenv("PROJECT_CAPITAL_RECONCILIATION_MAX_AGE_SECONDS", "3600")
     )
@@ -148,6 +162,8 @@ def get_settings() -> Settings:
         governance_approval_bps=governance_approval_bps,
         governance_discussion_hours=governance_discussion_hours,
         governance_voting_hours=governance_voting_hours,
+        governance_discussion_minutes=governance_discussion_minutes,
+        governance_voting_minutes=governance_voting_minutes,
         project_capital_reconciliation_max_age_seconds=project_capital_reconciliation_max_age_seconds,
         project_revenue_reconciliation_max_age_seconds=project_revenue_reconciliation_max_age_seconds,
         tx_outbox_lock_ttl_seconds=tx_outbox_lock_ttl_seconds,

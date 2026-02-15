@@ -54,6 +54,18 @@ def _as_aware_utc(dt: datetime | None) -> datetime | None:
     return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
 
 
+def _discussion_window() -> timedelta:
+    if settings.governance_discussion_minutes is not None:
+        return timedelta(minutes=int(settings.governance_discussion_minutes))
+    return timedelta(hours=int(settings.governance_discussion_hours))
+
+
+def _voting_window() -> timedelta:
+    if settings.governance_voting_minutes is not None:
+        return timedelta(minutes=int(settings.governance_voting_minutes))
+    return timedelta(hours=int(settings.governance_voting_hours))
+
+
 @router.get("", response_model=ProposalListResponse, summary="List proposals")
 def list_proposals(
     response: Response,
@@ -178,15 +190,17 @@ async def submit_proposal(
 
     if proposal.status == ProposalStatus.draft:
         now = datetime.now(timezone.utc)
-        if settings.governance_discussion_hours > 0:
+        discussion_window = _discussion_window()
+        voting_window = _voting_window()
+        if discussion_window.total_seconds() > 0:
             proposal.status = next_status(proposal.status, "submit_to_discussion")
-            proposal.discussion_ends_at = now + timedelta(hours=settings.governance_discussion_hours)
+            proposal.discussion_ends_at = now + discussion_window
             proposal.voting_starts_at = proposal.discussion_ends_at
-            proposal.voting_ends_at = proposal.voting_starts_at + timedelta(hours=settings.governance_voting_hours)
+            proposal.voting_ends_at = proposal.voting_starts_at + voting_window
         else:
             proposal.status = next_status(proposal.status, "submit_to_voting")
             proposal.voting_starts_at = now
-            proposal.voting_ends_at = now + timedelta(hours=settings.governance_voting_hours)
+            proposal.voting_ends_at = now + voting_window
     elif proposal.status in {ProposalStatus.discussion, ProposalStatus.voting, ProposalStatus.approved, ProposalStatus.rejected}:
         pass
     else:
@@ -334,7 +348,7 @@ def advance_expired_discussions(db: Session, now: datetime) -> None:
         if proposal.voting_starts_at is None:
             proposal.voting_starts_at = proposal.discussion_ends_at or now
         if proposal.voting_ends_at is None and proposal.voting_starts_at is not None:
-            proposal.voting_ends_at = proposal.voting_starts_at + timedelta(hours=settings.governance_voting_hours)
+            proposal.voting_ends_at = proposal.voting_starts_at + _voting_window()
 
     db.commit()
 
