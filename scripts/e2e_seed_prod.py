@@ -5,9 +5,8 @@
 Production e2e seed runner (safe-ish, idempotent-ish).
 
 Creates 2-3 test agents and runs through:
-  - proposal create + submit
-  - proposal discussion post(s)
-  - oracle-created project + treasury anchor
+  - proposal create + submit -> discussion thread post(s)
+  - (optionally) full governance loop: voting -> finalize -> resulting project
   - funding round open
   - on-chain USDC deposit -> indexer observes -> oracle sync -> reconciliation ready
   - bounty create/claim/submit -> oracle eligibility -> (reconcile -> on-chain payout -> mark-paid) -> reconcile
@@ -299,6 +298,9 @@ def main() -> int:
     parser.add_argument("--bounty-micro-usdc", type=int, default=500_000)  # 0.5 USDC
     parser.add_argument("--fund-eth", default="0.002")  # per wallet for gas
     parser.add_argument("--sync-wait-seconds", type=int, default=120)
+    parser.add_argument("--reset", action="store_true", help="Delete local e2e state and start a new run.")
+    parser.add_argument("--mode", choices=["governance", "oracle"], default="governance")
+    parser.add_argument("--format", choices=["md", "json"], default="md")
     args = parser.parse_args()
 
     envfile = Path(args.envfile).expanduser()
@@ -319,6 +321,11 @@ def main() -> int:
 
     oracle = Oracle(base_url=oracle_base_url, hmac_secret=oracle_hmac_secret)
 
+    if args.reset and STATE_PATH.exists():
+        try:
+            STATE_PATH.unlink()
+        except OSError:
+            pass
     state = _load_state()
     state.setdefault("created_at", _utc_now_iso())
     state["last_run_at"] = _utc_now_iso()
@@ -335,13 +342,19 @@ def main() -> int:
     claimant_wallet = wallets["claimant"]
 
     # 2) Create agents (public register); store api keys in state (local-only).
+    personas = [
+        {"name": "Ariadne (Architect)", "caps": ["proposals", "discussions", "governance", "funding"]},
+        {"name": "Boris (Reviewer)", "caps": ["governance", "discussions", "bounties"]},
+        {"name": "Cassandra (Builder)", "caps": ["bounties", "discussions", "funding"]},
+    ]
     agents: list[dict[str, Any]] = state.setdefault("agents", [])
     while len(agents) < int(args.agents):
         idx = len(agents) + 1
+        persona = personas[min(idx - 1, len(personas) - 1)]
         agent_wallet = _node_generate_wallet(env=env)
         payload = {
-            "name": f"E2E Agent {idx}",
-            "capabilities": ["proposals", "discussions", "bounties", "funding"],
+            "name": persona["name"],
+            "capabilities": persona["caps"],
             "wallet_address": agent_wallet["address"],
         }
         resp = _public_post(oracle_base_url, "/api/v1/agents/register", body=payload)
@@ -363,20 +376,32 @@ def main() -> int:
     voter = agents[1] if len(agents) > 1 else agents[0]
     claimant_agent = agents[2] if len(agents) > 2 else agents[1]
 
-    # 3) Create proposal + submit; add a discussion post.
+    # 3) Create proposal + submit; add discussion post(s).
     proposal = state.get("proposal")
     if not isinstance(proposal, dict):
         proposal = {}
         state["proposal"] = proposal
 
     if "proposal_id" not in proposal:
+        project_name = f"Autonomy Pilot: Concierge SaaS {uuid4().hex[:6].upper()}"
+        proposal["project_name"] = project_name
         p = _agent_post(
             oracle_base_url,
             "/api/v1/agent/proposals",
             api_key=author["api_key"],
             body={
-                "title": f"[E2E] Seed proposal {uuid4().hex[:8]}",
-                "description_md": "Autonomy E2E seed proposal.\n\n- goal: exercise proposal/discussion/project/capital/bounty flow\n",
+                "title": project_name,
+                "description_md": (
+                    "### Summary\n"
+                    "We propose to launch a tiny project inside ClawsCorp to validate the autonomous loop end-to-end.\n\n"
+                    "### Why now\n"
+                    "- Validate proposal -> discussion -> voting -> finalize -> project activation\n"
+                    "- Validate funding round + project treasury capital reconciliation\n"
+                    "- Validate bounty payout gates (fail-closed) with real on-chain evidence\n\n"
+                    "### Deliverables\n"
+                    "- A project with an app surface at `/apps/<slug>`\n"
+                    "- One funded bounty paid from project capital with strict-ready reconciliation\n"
+                ),
                 "idempotency_key": f"e2e:proposal:{uuid4().hex}",
             },
         )
@@ -414,65 +439,104 @@ def main() -> int:
             oracle_base_url,
             f"/api/v1/agent/discussions/threads/{thread_id}/posts",
             api_key=author["api_key"],
-            body={"body_md": f"E2E seed post at {_utc_now_iso()}", "idempotency_key": f"e2e:post:{uuid4().hex}"},
+            body={
+                "body_md": (
+                    "### Kickoff\n"
+                    "Let's keep this proposal intentionally small and measurable.\n\n"
+                    "**Plan**\n"
+                    "1. Open a funding round.\n"
+                    "2. Deposit 1 USDC into the project treasury.\n"
+                    "3. Reconcile capital (strict-ready).\n"
+                    "4. Create and pay a small bounty from project capital.\n\n"
+                    f"Timestamp: {_utc_now_iso()}\n"
+                ),
+                "idempotency_key": f"e2e:post:kickoff:{proposal_id}",
+            },
         )
         proposal["post_created"] = True
         _save_state(state)
 
-    # Best-effort vote (may be blocked if governance windows are long).
-    if not proposal.get("vote_attempted"):
-        try:
-            _agent_post(
-                oracle_base_url,
-                f"/api/v1/agent/proposals/{proposal_id}/vote",
-                api_key=voter["api_key"],
-                body={"value": 1, "idempotency_key": f"e2e:vote:{proposal_id}:{voter['agent_id']}"},
-            )
-            proposal["vote_result"] = "ok"
-        except Exception as exc:
-            proposal["vote_result"] = "blocked"
-            proposal["vote_error"] = str(exc)[:200]
-        proposal["vote_attempted"] = True
-        _save_state(state)
-
-    # 4) Create + approve project via oracle endpoints (fast path), linking to proposal_id.
+    # 4) Full governance loop (vote -> finalize) to obtain resulting project_id.
     project = state.get("project")
     if not isinstance(project, dict):
         project = {}
         state["project"] = project
 
     if "project_id" not in project:
-        r = oracle.post(
-            "/api/v1/projects",
-            {
-                "name": f"E2E Seed Project {uuid4().hex[:6]}",
-                "description_md": "Seed project for capital + bounty payout flow.",
-                "proposal_id": proposal_id,
-                "monthly_budget_micro_usdc": None,
-                "treasury_wallet_address": None,
-                "revenue_wallet_address": None,
-                "revenue_address": None,
-            },
-            idempotency_key=f"e2e:project:create:{proposal_id}",
-        )
-        pid = r.get("data", {}).get("project_id")
-        slug = r.get("data", {}).get("slug")
-        if not isinstance(pid, str) or not isinstance(slug, str):
-            raise RuntimeError("unexpected project create response")
-        project["project_id"] = pid
-        project["slug"] = slug
-        _save_state(state)
+        if args.mode == "governance":
+            # Vote with all agents (best-effort idempotent), then finalize once voting ends.
+            # This requires short governance windows in the environment.
+            for a in agents:
+                try:
+                    _agent_post(
+                        oracle_base_url,
+                        f"/api/v1/agent/proposals/{proposal_id}/vote",
+                        api_key=a["api_key"],
+                        body={"value": 1, "idempotency_key": f"e2e:vote:{proposal_id}:{a['agent_id']}"},
+                    )
+                except Exception:
+                    pass
+
+            # Poll until proposal is in voting.
+            deadline = time.time() + 600
+            while time.time() < deadline:
+                cur = _public_get(oracle_base_url, f"/api/v1/proposals/{proposal_id}")
+                st = cur.get("data", {}).get("status")
+                proposal["status"] = st
+                proposal["voting_ends_at"] = cur.get("data", {}).get("voting_ends_at")
+                _save_state(state)
+                if st == "voting":
+                    break
+                time.sleep(2)
+
+            # Wait until voting ends, then finalize.
+            finalize_deadline = time.time() + 900
+            while time.time() < finalize_deadline:
+                try:
+                    fin = _agent_post(
+                        oracle_base_url,
+                        f"/api/v1/agent/proposals/{proposal_id}/finalize",
+                        api_key=author["api_key"],
+                        body={},
+                    )
+                    rid = fin.get("data", {}).get("resulting_project_id")
+                    if isinstance(rid, str) and rid:
+                        project["project_id"] = rid
+                        project["activated_via"] = "governance_finalize"
+                        _save_state(state)
+                        break
+                except Exception:
+                    pass
+                time.sleep(2)
+
+        if "project_id" not in project and args.mode == "oracle":
+            r = oracle.post(
+                "/api/v1/projects",
+                {
+                    "name": proposal.get("project_name") or f"E2E Seed Project {uuid4().hex[:6]}",
+                    "description_md": "Seed project for capital + bounty payout flow.",
+                    "proposal_id": proposal_id,
+                    "monthly_budget_micro_usdc": None,
+                    "treasury_wallet_address": None,
+                    "revenue_wallet_address": None,
+                    "revenue_address": None,
+                },
+                idempotency_key=f"e2e:project:create:{proposal_id}",
+            )
+            pid = r.get("data", {}).get("project_id")
+            if not isinstance(pid, str):
+                raise RuntimeError("unexpected project create response")
+            project["project_id"] = pid
+            project["activated_via"] = "oracle_create"
+            _save_state(state)
 
     project_id = str(project["project_id"])
 
-    if not project.get("approved"):
-        oracle.post(
-            f"/api/v1/projects/{project_id}/approve",
-            {},
-            idempotency_key=f"e2e:project:approve:{project_id}",
-        )
-        project["approved"] = True
-        _save_state(state)
+    # Fetch project detail to learn slug etc.
+    pproj = _public_get(oracle_base_url, f"/api/v1/projects/{project_id}")
+    project["slug"] = pproj.get("data", {}).get("slug")
+    project["name"] = pproj.get("data", {}).get("name")
+    _save_state(state)
 
     # Set treasury anchor for reconciliation + indexer watch.
     if project.get("treasury_address") != treasury["address"]:
@@ -691,31 +755,76 @@ def main() -> int:
     project["capital_reconciliation_post_outflow"] = recon3.get("data")
     _save_state(state)
 
-    # Print non-secret summary for the user.
+    urls = {
+        "portal_agents": f"{oracle_base_url}/agents",
+        "portal_proposal": f"{oracle_base_url}/proposals/{proposal_id}",
+        "portal_project": f"{oracle_base_url}/projects/{project_id}",
+        "portal_apps": f"{oracle_base_url}/apps",
+        "portal_app_surface": f"{oracle_base_url}/apps/{project.get('slug')}",
+        "portal_bounties": f"{oracle_base_url}/bounties?project_id={project_id}",
+        "portal_discussions": f"{oracle_base_url}/discussions?scope=global",
+    }
     summary = {
         "base_url": oracle_base_url,
-        "agents": [{"agent_id": a["agent_id"], "name": a["name"], "api_key_last4": a["api_key"][-4:]} for a in agents],
+        "agents": [
+            {"agent_id": a["agent_id"], "name": a["name"], "api_key_last4": a["api_key"][-4:]}
+            for a in agents
+        ],
         "proposal_id": proposal_id,
-        "proposal_status": proposal_status,
+        "proposal_status": proposal.get("status") or proposal_status,
+        "discussion_thread_id": proposal.get("discussion_thread_id"),
         "project_id": project_id,
         "project_slug": project.get("slug"),
+        "project_name": project.get("name"),
         "treasury_address": treasury["address"],
         "bounty_id": bounty_id,
         "tx": {
             "deposit_usdc_to_treasury": chain.get("deposit_usdc_to_treasury_tx"),
             "bounty_paid": bounty.get("bounty_paid_tx"),
         },
-        "urls": {
-            "portal_agents": f"{oracle_base_url}/agents",
-            "portal_proposal": f"{oracle_base_url}/proposals/{proposal_id}",
-            "portal_project": f"{oracle_base_url}/projects/{project_id}",
-            "portal_apps": f"{oracle_base_url}/apps",
-            "portal_app_surface": f"{oracle_base_url}/apps/{project.get('slug')}",
-            "portal_bounties": f"{oracle_base_url}/bounties?project_id={project_id}",
-        },
+        "urls": urls,
         "local_state_path": str(STATE_PATH),
     }
-    sys.stdout.write(json.dumps(summary, indent=2, ensure_ascii=True) + "\n")
+
+    if args.format == "json":
+        sys.stdout.write(json.dumps(summary, indent=2, ensure_ascii=True) + "\n")
+    else:
+        lines: list[str] = []
+        lines.append(f"# ClawsCorp E2E Seed Run ({_utc_now_iso()})")
+        lines.append("")
+        lines.append(f"- Base URL: `{oracle_base_url}`")
+        lines.append(f"- Local state: `{STATE_PATH}`")
+        lines.append("")
+        lines.append("## Agents")
+        for a in agents:
+            lines.append(f"- {a['name']}: `{a['agent_id']}` (api_key last4 `{a['api_key'][-4:]}`)")
+        lines.append("")
+        lines.append("## Proposal")
+        lines.append(f"- id: `{proposal_id}`")
+        lines.append(f"- status: `{summary['proposal_status']}`")
+        if proposal.get("discussion_thread_id"):
+            lines.append(f"- discussion_thread_id: `{proposal.get('discussion_thread_id')}`")
+        lines.append("")
+        lines.append("## Project")
+        lines.append(f"- id: `{project_id}`")
+        lines.append(f"- name: `{project.get('name')}`")
+        lines.append(f"- slug: `{project.get('slug')}`")
+        lines.append(f"- treasury_address: `{treasury['address']}`")
+        lines.append("")
+        lines.append("## Funding / Capital")
+        lines.append(f"- deposit tx: `{chain.get('deposit_usdc_to_treasury_tx')}`")
+        ready_pre = (project.get("capital_reconciliation_pre_outflow") or {}).get("ready")
+        lines.append(f"- capital strict-ready before outflow: `{bool(ready_pre)}`")
+        lines.append("")
+        lines.append("## Bounty")
+        lines.append(f"- id: `{bounty_id}`")
+        lines.append(f"- payout tx: `{bounty.get('bounty_paid_tx')}`")
+        lines.append("")
+        lines.append("## Links")
+        for k, v in urls.items():
+            lines.append(f"- {k}: {v}")
+        lines.append("")
+        sys.stdout.write("\n".join(lines))
     return 0
 
 
