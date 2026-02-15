@@ -8,7 +8,15 @@ import { useEffect, useMemo, useState } from "react";
 import { api, readErrorMessage } from "@/lib/api";
 import { getExplorerBaseUrl } from "@/lib/env";
 import { formatMicroUsdc } from "@/lib/format";
-import type { BountyPublic, DiscussionPost, DiscussionThreadSummary, ProjectDetail, ProjectFundingSummary, StatsData } from "@/types";
+import type {
+  BountyPublic,
+  DiscussionPost,
+  DiscussionThreadSummary,
+  ProjectCapitalSummary,
+  ProjectDetail,
+  ProjectFundingSummary,
+  StatsData,
+} from "@/types";
 
 function Badge({ tone, children }: { tone: "green" | "yellow" | "red" | "gray"; children: ReactNode }) {
   const style: Record<string, string | number> = {
@@ -61,6 +69,7 @@ export function DemoSurface({ project }: { project: ProjectDetail }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<StatsData | null>(null);
+  const [capital, setCapital] = useState<ProjectCapitalSummary | null>(null);
   const [funding, setFunding] = useState<ProjectFundingSummary | null>(null);
   const [bounties, setBounties] = useState<BountyPublic[]>([]);
   const [threads, setThreads] = useState<DiscussionThreadSummary[]>([]);
@@ -92,8 +101,9 @@ export function DemoSurface({ project }: { project: ProjectDetail }) {
       setLoading(true);
       setError(null);
       try {
-        const [statsData, fundingData, bountyList, threadList] = await Promise.all([
+        const [statsData, capitalData, fundingData, bountyList, threadList] = await Promise.all([
           api.getStats(),
+          api.getProjectCapitalSummary(project.project_id),
           api.getProjectFundingSummary(project.project_id),
           api.getBounties({ projectId: project.project_id }),
           api.getDiscussionThreads({ scope: "project", projectId: project.project_id, limit: 5, offset: 0 }),
@@ -101,6 +111,7 @@ export function DemoSurface({ project }: { project: ProjectDetail }) {
 
         if (!alive) return;
         setStats(statsData);
+        setCapital(capitalData);
         setFunding(fundingData);
         setBounties(bountyList.items);
         setThreads(threadList.items);
@@ -202,9 +213,10 @@ export function DemoSurface({ project }: { project: ProjectDetail }) {
         {!loading && !error ? (
           <div style={{ border: "1px solid #e5e7eb", borderRadius: 10, padding: 12, background: "#ffffff" }}>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <div><b>Total raised:</b> {formatMicroUsdc(funding?.total_raised_micro_usdc)}</div>
+              <div><b>Total raised (observed):</b> {formatMicroUsdc(funding?.total_raised_micro_usdc)}</div>
               <div><b>Open round:</b> {funding?.open_round ? `${funding.open_round.status}` : "—"}</div>
               <div><b>Open raised:</b> {formatMicroUsdc(funding?.open_round_raised_micro_usdc)}</div>
+              <div><b>Ledger balance:</b> {formatMicroUsdc(capital?.balance_micro_usdc)}</div>
               <div style={{ color: "#6b7280" }}>last deposit: {funding?.last_deposit_at ?? "—"}</div>
             </div>
             <div style={{ marginTop: 10 }}>
@@ -220,6 +232,11 @@ export function DemoSurface({ project }: { project: ProjectDetail }) {
                 ))}
                 {(funding?.contributors ?? []).length === 0 ? <li>—</li> : null}
               </ul>
+              {(funding?.contributors ?? []).length === 0 ? (
+                <div style={{ marginTop: 8, fontSize: 12, color: "#6b7280" }}>
+                  Contributor list is populated from observed on-chain USDC transfers. If the indexer is catching up, this may temporarily show as empty.
+                </div>
+              ) : null}
             </div>
           </div>
         ) : null}
