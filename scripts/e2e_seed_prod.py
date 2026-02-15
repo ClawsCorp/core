@@ -136,17 +136,21 @@ def _node_json(script: str, *, env: dict[str, str]) -> dict[str, Any]:
     Run a node one-liner and parse stdout JSON.
     Never prints env (may contain secrets).
     """
-    proc = subprocess.run(
-        ["node", "-e", script],
-        cwd=str(CONTRACTS_DIR),
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
+    try:
+        proc = subprocess.run(
+            ["node", "-e", script],
+            cwd=str(CONTRACTS_DIR),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=240,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("node script timed out") from exc
     if proc.returncode != 0:
         # Sanitize stderr: redact hex private keys if they ever appear.
         err = (proc.stderr or "").strip()
+        err = re.sub(r"transaction=\"0x[0-9a-fA-F]+\"", "transaction=\"0x<redacted_tx>\"", err)
         err = re.sub(r"0x[0-9a-fA-F]{64}", "0x<redacted>", err)
         err = err[:240] if err else "unknown"
         raise RuntimeError(f"node script failed: {err}")
@@ -175,6 +179,24 @@ process.stdout.write(JSON.stringify({ address: w.address.toLowerCase(), private_
     return {"address": address, "private_key": pk}
 
 
+def _node_private_key_to_address(*, env: dict[str, str], private_key: str) -> str:
+    script = r"""
+const { Wallet } = require("ethers");
+(async () => {
+  const w = new Wallet(process.env.PK);
+  process.stdout.write(JSON.stringify({ address: w.address.toLowerCase() }));
+})().catch((err) => {
+  const message = err && err.message ? err.message : String(err);
+  process.stderr.write(message);
+  process.exit(1);
+});
+"""
+    data = _node_json(script, env={**env, "PK": private_key})
+    addr = str(data.get("address", "")).lower()
+    if not (addr.startswith("0x") and len(addr) == 42):
+        raise RuntimeError("unable to derive address from private key")
+    return addr
+
 def _node_send_eth(*, env: dict[str, str], from_private_key: str, to_address: str, amount_eth: str) -> str:
     # amount_eth is a string to avoid float issues.
     script = r"""
@@ -182,10 +204,36 @@ const { JsonRpcProvider, Wallet, parseEther } = require("ethers");
 (async () => {
   const provider = new JsonRpcProvider(process.env.RPC_URL);
   const wallet = new Wallet(process.env.FROM_PRIVATE_KEY, provider);
-  const tx = await wallet.sendTransaction({ to: process.env.TO_ADDRESS, value: parseEther(process.env.AMOUNT_ETH) });
-  const receipt = await tx.wait(1);
-  process.stdout.write(JSON.stringify({ tx_hash: tx.hash, status: receipt.status }));
-})().catch(() => process.exit(1));
+  const fee = await provider.getFeeData();
+  const bump = (v) => (v == null ? null : (BigInt(v) * 2n));
+  let nonce = await provider.getTransactionCount(wallet.address, 'pending');
+  for (let i = 0; i < 6; i++) {
+    try {
+      const tx = await wallet.sendTransaction({
+        to: process.env.TO_ADDRESS,
+        value: parseEther(process.env.AMOUNT_ETH),
+        nonce,
+        maxFeePerGas: bump(fee.maxFeePerGas),
+        maxPriorityFeePerGas: bump(fee.maxPriorityFeePerGas),
+      });
+      const receipt = await tx.wait(1);
+      process.stdout.write(JSON.stringify({ tx_hash: tx.hash, status: receipt.status, nonce }));
+      return;
+    } catch (err) {
+      const msg = err && err.message ? err.message : String(err);
+      if (msg.includes("nonce") || msg.includes("underpriced") || msg.includes("replacement")) {
+        nonce += 1;
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error("nonce_retry_exhausted");
+})().catch((err) => {
+  const message = err && err.message ? err.message : String(err);
+  process.stderr.write(message);
+  process.exit(1);
+});
 """
     run_env = dict(env)
     run_env["RPC_URL"] = env["BASE_SEPOLIA_RPC_URL"]
@@ -207,10 +255,34 @@ const { JsonRpcProvider, Wallet, Contract } = require("ethers");
   const token = new Contract(process.env.TOKEN_ADDRESS, [
     "function transfer(address to, uint256 amount) public returns (bool)"
   ], wallet);
-  const tx = await token.transfer(process.env.TO_ADDRESS, BigInt(process.env.AMOUNT));
-  const receipt = await tx.wait(1);
-  process.stdout.write(JSON.stringify({ tx_hash: tx.hash, status: receipt.status }));
-})().catch(() => process.exit(1));
+  const fee = await provider.getFeeData();
+  const bump = (v) => (v == null ? null : (BigInt(v) * 2n));
+  let nonce = await provider.getTransactionCount(wallet.address, 'pending');
+  for (let i = 0; i < 6; i++) {
+    try {
+      const tx = await token.transfer(process.env.TO_ADDRESS, BigInt(process.env.AMOUNT), {
+        nonce,
+        maxFeePerGas: bump(fee.maxFeePerGas),
+        maxPriorityFeePerGas: bump(fee.maxPriorityFeePerGas),
+      });
+      const receipt = await tx.wait(1);
+      process.stdout.write(JSON.stringify({ tx_hash: tx.hash, status: receipt.status, nonce }));
+      return;
+    } catch (err) {
+      const msg = err && err.message ? err.message : String(err);
+      if (msg.includes("nonce") || msg.includes("underpriced") || msg.includes("replacement")) {
+        nonce += 1;
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error("nonce_retry_exhausted");
+})().catch((err) => {
+  const message = err && err.message ? err.message : String(err);
+  process.stderr.write(message);
+  process.exit(1);
+});
 """
     run_env = dict(env)
     run_env["RPC_URL"] = env["BASE_SEPOLIA_RPC_URL"]
@@ -222,6 +294,33 @@ const { JsonRpcProvider, Wallet, Contract } = require("ethers");
     if int(data.get("status", 0) or 0) != 1:
         raise RuntimeError("usdc transfer reverted")
     return str(data.get("tx_hash", "")).lower()
+
+
+def _node_erc20_balance_micro_usdc(*, env: dict[str, str], address: str) -> int:
+    script = r"""
+const { JsonRpcProvider, Contract } = require("ethers");
+(async () => {
+  const provider = new JsonRpcProvider(process.env.RPC_URL);
+  const token = new Contract(process.env.TOKEN_ADDRESS, [
+    "function balanceOf(address) view returns (uint256)"
+  ], provider);
+  const bal = await token.balanceOf(process.env.ADDRESS);
+  process.stdout.write(JSON.stringify({ balance: bal.toString() }));
+})().catch((err) => {
+  const message = err && err.message ? err.message : String(err);
+  process.stderr.write(message);
+  process.exit(1);
+});
+"""
+    run_env = dict(env)
+    run_env["RPC_URL"] = env["BASE_SEPOLIA_RPC_URL"]
+    run_env["TOKEN_ADDRESS"] = env["USDC_ADDRESS"]
+    run_env["ADDRESS"] = address
+    data = _node_json(script, env=run_env)
+    try:
+        return int(str(data.get("balance", "0")))
+    except ValueError as exc:
+        raise RuntimeError("unable to parse ERC20 balance") from exc
 
 
 @dataclass
@@ -467,15 +566,21 @@ def main() -> int:
             # Vote with all agents (best-effort idempotent), then finalize.
             # In production, governance windows may be long (hours). To keep E2E deterministic,
             # we use an oracle-only helper endpoint to fast-forward the windows.
-            try:
-                oracle.post(
-                    f"/api/v1/oracle/proposals/{proposal_id}/fast-forward",
-                    {"target": "voting", "voting_minutes": 2},
-                    idempotency_key=f"e2e:gov:ff:voting:{proposal_id}",
-                )
-            except Exception:
-                pass
+            ff_voting = oracle.post(
+                f"/api/v1/oracle/proposals/{proposal_id}/fast-forward",
+                {"target": "voting", "voting_minutes": 2},
+                idempotency_key=f"e2e:gov:ff:voting:{proposal_id}",
+            )
+            proposal["status"] = ff_voting.get("data", {}).get("status")
+            proposal["voting_ends_at"] = ff_voting.get("data", {}).get("voting_ends_at")
+            _save_state(state)
 
+            # Ensure the proposal is now in voting before attempting votes.
+            cur = _public_get(oracle_base_url, f"/api/v1/proposals/{proposal_id}")
+            if cur.get("data", {}).get("status") != "voting":
+                raise RuntimeError("fast-forward to voting did not take effect")
+
+            vote_results: list[dict[str, Any]] = []
             for a in agents:
                 try:
                     _agent_post(
@@ -484,18 +589,20 @@ def main() -> int:
                         api_key=a["api_key"],
                         body={"value": 1, "idempotency_key": f"e2e:vote:{proposal_id}:{a['agent_id']}"},
                     )
+                    vote_results.append({"agent_id": a["agent_id"], "ok": True})
                 except Exception:
-                    pass
+                    vote_results.append({"agent_id": a["agent_id"], "ok": False})
+            proposal["vote_results"] = vote_results
+            _save_state(state)
 
             # End voting immediately and finalize.
-            try:
-                oracle.post(
-                    f"/api/v1/oracle/proposals/{proposal_id}/fast-forward",
-                    {"target": "finalize"},
-                    idempotency_key=f"e2e:gov:ff:finalize:{proposal_id}",
-                )
-            except Exception:
-                pass
+            ff_final = oracle.post(
+                f"/api/v1/oracle/proposals/{proposal_id}/fast-forward",
+                {"target": "finalize"},
+                idempotency_key=f"e2e:gov:ff:finalize:{proposal_id}",
+            )
+            proposal["status"] = ff_final.get("data", {}).get("status")
+            _save_state(state)
 
             # Wait until voting ends, then finalize.
             finalize_deadline = time.time() + 900
@@ -507,6 +614,12 @@ def main() -> int:
                         api_key=author["api_key"],
                         body={},
                     )
+                    # If the proposal is rejected, do not spin.
+                    finalized_outcome = fin.get("data", {}).get("finalized_outcome")
+                    if finalized_outcome == "rejected":
+                        proposal["finalized_outcome"] = "rejected"
+                        _save_state(state)
+                        raise RuntimeError("proposal finalized as rejected (likely missing votes/quorum)")
                     rid = fin.get("data", {}).get("resulting_project_id")
                     if isinstance(rid, str) and rid:
                         project["project_id"] = rid
@@ -516,6 +629,9 @@ def main() -> int:
                 except Exception:
                     pass
                 time.sleep(2)
+
+            if "project_id" not in project:
+                raise RuntimeError("governance finalize did not produce a project_id")
 
         if "project_id" not in project and args.mode == "oracle":
             r = oracle.post(
@@ -589,12 +705,26 @@ def main() -> int:
         _save_state(state)
 
     # Fund USDC to funder then deposit to treasury.
+    if "fund_micro_usdc_effective" not in chain:
+        oracle_address = _node_private_key_to_address(env=env, private_key=oracle_signer_pk)
+        oracle_usdc_balance = _node_erc20_balance_micro_usdc(env=env, address=oracle_address)
+        min_required = int(args.bounty_micro_usdc) + 50_000  # bounty + small cushion
+        desired = int(args.fund_micro_usdc)
+        if desired < min_required:
+            desired = min_required
+        if oracle_usdc_balance < min_required:
+            raise RuntimeError("oracle signer USDC balance is too low for e2e (top up needed)")
+        if oracle_usdc_balance < desired:
+            desired = int(oracle_usdc_balance)
+        chain["fund_micro_usdc_effective"] = int(desired)
+        _save_state(state)
+
     if "fund_usdc_funder_tx" not in chain:
         chain["fund_usdc_funder_tx"] = _node_erc20_transfer_usdc(
             env=env,
             from_private_key=oracle_signer_pk,
             to_address=funder["address"],
-            amount_micro_usdc=int(args.fund_micro_usdc),
+            amount_micro_usdc=int(chain["fund_micro_usdc_effective"]),
         )
         _save_state(state)
     if "deposit_usdc_to_treasury_tx" not in chain:
@@ -602,7 +732,7 @@ def main() -> int:
             env=env,
             from_private_key=funder["private_key"],
             to_address=treasury["address"],
-            amount_micro_usdc=int(args.fund_micro_usdc),
+            amount_micro_usdc=int(chain["fund_micro_usdc_effective"]),
         )
         _save_state(state)
 
