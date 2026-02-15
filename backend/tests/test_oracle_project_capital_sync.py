@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import hashlib
+import hashlib 
 import hmac
 import json
 import sys
@@ -161,4 +161,74 @@ def test_project_capital_sync_creates_capital_events(_client: TestClient, _db: s
     assert resp2.json()["data"]["capital_events_inserted"] == 0
 
     with _db() as db:
+        assert db.query(ProjectFundingDeposit).count() == 1
+
+
+def test_project_capital_sync_skips_transfer_already_accounted_by_evidence_tx_hash(
+    _client: TestClient, _db: sessionmaker[Session]
+) -> None:
+    treasury = "0x00000000000000000000000000000000000000aa"
+    tx_hash = "0x" + ("22" * 32)
+
+    with _db() as db:
+        project = Project(
+            project_id="prj_cap2",
+            slug="cap2",
+            name="Capital 2",
+            description_md=None,
+            status=ProjectStatus.active,
+            proposal_id=None,
+            origin_proposal_id=None,
+            originator_agent_id=None,
+            discussion_thread_id=None,
+            treasury_wallet_address=None,
+            treasury_address=treasury,
+            revenue_wallet_address=None,
+            revenue_address=None,
+            monthly_budget_micro_usdc=None,
+            created_by_agent_id=None,
+            approved_at=None,
+        )
+        db.add(project)
+        db.flush()
+
+        # Observed transfer into treasury.
+        db.add(
+            ObservedUsdcTransfer(
+                chain_id=84532,
+                token_address="0x0000000000000000000000000000000000000bbb",
+                from_address="0x00000000000000000000000000000000000000cc",
+                to_address=treasury,
+                amount_micro_usdc=5000,
+                block_number=101,
+                tx_hash=tx_hash,
+                log_index=7,
+            )
+        )
+        # Capital event already exists (e.g. manual ingestion) using tx hash as evidence.
+        db.add(
+            ProjectCapitalEvent(
+                event_id="pcap_manual",
+                idempotency_key="manual",
+                profit_month_id="202602",
+                project_id=int(project.id),
+                delta_micro_usdc=5000,
+                source="manual_oracle_ingestion",
+                evidence_tx_hash=tx_hash.lower(),
+                evidence_url=None,
+            )
+        )
+        db.commit()
+
+    path = "/api/v1/oracle/project-capital-events/sync"
+    body = b"{}"
+    resp = _client.post(path, content=body, headers=_oracle_headers(path, body, "req-1", idem="idem-1"))
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["success"] is True
+    assert payload["data"]["transfers_seen"] == 1
+    assert payload["data"]["capital_events_inserted"] == 0
+
+    with _db() as db:
+        assert db.query(ProjectCapitalEvent).count() == 1
         assert db.query(ProjectFundingDeposit).count() == 1
