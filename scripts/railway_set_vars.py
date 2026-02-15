@@ -12,8 +12,8 @@ Example:
     --project-id cd76995a-d819-4b36-808b-422de3ff430e \\
     --environment-name production \\
     --service-name core \\
-    --set GOVENANCE_DISCUSSION_MINUTES=0 \\
-    --set GOVENANCE_VOTING_MINUTES=2
+    --set GOVERNANCE_DISCUSSION_MINUTES=1 \\
+    --set GOVERNANCE_VOTING_MINUTES=2
 
 Notes:
 - Uses Authorization: Bearer <token> (workspace/account token).
@@ -31,7 +31,8 @@ from typing import Any
 from urllib import error, request
 
 
-API_URL = "https://backboard.railway.com/graphql/v2"
+# Railway Public API endpoint.
+API_URL = os.getenv("RAILWAY_API_URL", "").strip() or "https://api.railway.app/graphql/v2"
 
 
 class RailwayApiError(RuntimeError):
@@ -222,4 +223,3 @@ if __name__ == "__main__":
     except Exception as exc:
         sys.stderr.write(f"railway_set_vars failed: {type(exc).__name__}: {str(exc)[:200]}\n")
         raise SystemExit(1)
-
