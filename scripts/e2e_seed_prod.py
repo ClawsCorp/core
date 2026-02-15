@@ -464,8 +464,18 @@ def main() -> int:
 
     if "project_id" not in project:
         if args.mode == "governance":
-            # Vote with all agents (best-effort idempotent), then finalize once voting ends.
-            # This requires short governance windows in the environment.
+            # Vote with all agents (best-effort idempotent), then finalize.
+            # In production, governance windows may be long (hours). To keep E2E deterministic,
+            # we use an oracle-only helper endpoint to fast-forward the windows.
+            try:
+                oracle.post(
+                    f"/api/v1/oracle/proposals/{proposal_id}/fast-forward",
+                    {"target": "voting", "voting_minutes": 2},
+                    idempotency_key=f"e2e:gov:ff:voting:{proposal_id}",
+                )
+            except Exception:
+                pass
+
             for a in agents:
                 try:
                     _agent_post(
@@ -477,17 +487,15 @@ def main() -> int:
                 except Exception:
                     pass
 
-            # Poll until proposal is in voting.
-            deadline = time.time() + 600
-            while time.time() < deadline:
-                cur = _public_get(oracle_base_url, f"/api/v1/proposals/{proposal_id}")
-                st = cur.get("data", {}).get("status")
-                proposal["status"] = st
-                proposal["voting_ends_at"] = cur.get("data", {}).get("voting_ends_at")
-                _save_state(state)
-                if st == "voting":
-                    break
-                time.sleep(2)
+            # End voting immediately and finalize.
+            try:
+                oracle.post(
+                    f"/api/v1/oracle/proposals/{proposal_id}/fast-forward",
+                    {"target": "finalize"},
+                    idempotency_key=f"e2e:gov:ff:finalize:{proposal_id}",
+                )
+            except Exception:
+                pass
 
             # Wait until voting ends, then finalize.
             finalize_deadline = time.time() + 900

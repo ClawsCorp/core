@@ -22,6 +22,7 @@ from src.api.v1.oracle_project_revenue import router as oracle_project_revenue_r
 from src.api.v1.oracle_project_settlement import router as oracle_project_settlement_router
 from src.api.v1.oracle_project_spend_policy import router as oracle_project_spend_policy_router
 from src.api.v1.oracle_tx_outbox import router as oracle_tx_outbox_router
+from src.api.v1.oracle_governance import router as oracle_governance_router
 from src.api.v1.projects import router as projects_router
 from src.api.v1.proposals import agent_router as agent_proposals_router, router as proposals_router
 from src.api.v1.reputation import router as reputation_router
@@ -106,6 +107,7 @@ app.include_router(oracle_project_revenue_router)
 app.include_router(oracle_project_settlement_router)
 app.include_router(oracle_project_spend_policy_router)
 app.include_router(oracle_tx_outbox_router)
+app.include_router(oracle_governance_router)
 app.include_router(settlement_router)
 app.include_router(stakers_router)
 app.include_router(discussions_router)
