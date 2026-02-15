@@ -26,6 +26,7 @@ import subprocess
 import sys
 import time
 import re
+import random
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -42,6 +43,22 @@ CONTRACTS_DIR = REPO_ROOT / "contracts"
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+def _parse_iso(dt: str | None) -> datetime | None:
+    if not dt:
+        return None
+    try:
+        # Backend returns ISO with timezone. Keep aware.
+        return datetime.fromisoformat(dt.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+def _sleep_until(ts: datetime, *, max_seconds: int) -> None:
+    now = datetime.now(timezone.utc)
+    remaining = (ts - now).total_seconds()
+    if remaining <= 0:
+        return
+    time.sleep(min(float(remaining) + 1.0, float(max_seconds)))
 
 
 def _read_envfile(path: Path) -> dict[str, str]:
@@ -392,11 +409,13 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--envfile", default=str(Path.home() / ".oracle.env"))
     parser.add_argument("--base-url", default=os.getenv("ORACLE_BASE_URL", "").strip() or "https://core-production-b1a0.up.railway.app")
+    parser.add_argument("--portal-base-url", default=os.getenv("PORTAL_BASE_URL", "").strip() or "https://core-bice-mu.vercel.app")
     parser.add_argument("--agents", type=int, default=3)
     parser.add_argument("--fund-micro-usdc", type=int, default=1_000_000)  # 1 USDC
     parser.add_argument("--bounty-micro-usdc", type=int, default=500_000)  # 0.5 USDC
     parser.add_argument("--fund-eth", default="0.002")  # per wallet for gas
     parser.add_argument("--sync-wait-seconds", type=int, default=120)
+    parser.add_argument("--max-governance-wait-seconds", type=int, default=240)
     parser.add_argument("--reset", action="store_true", help="Delete local e2e state and start a new run.")
     parser.add_argument("--mode", choices=["governance", "oracle"], default="governance")
     parser.add_argument("--format", choices=["md", "json"], default="md")
@@ -408,6 +427,7 @@ def main() -> int:
     env.update(env_from_file)
 
     oracle_base_url = args.base_url.rstrip("/")
+    portal_base_url = args.portal_base_url.rstrip("/")
     oracle_hmac_secret = _require_env(env, "ORACLE_HMAC_SECRET")
     # Defaults are only for local e2e seeding convenience; override via env if needed.
     base_sepolia_rpc_url = env.get("BASE_SEPOLIA_RPC_URL", "").strip() or "https://sepolia.base.org"
@@ -429,22 +449,39 @@ def main() -> int:
     state.setdefault("created_at", _utc_now_iso())
     state["last_run_at"] = _utc_now_iso()
     state["base_url"] = oracle_base_url
+    state["portal_base_url"] = portal_base_url
 
     # 1) Generate wallets (treasury/funder/claimant) deterministically once per state.
     wallets = state.setdefault("wallets", {})
-    for name in ("treasury", "funder", "claimant"):
+    for name in ("treasury", "funder", "funder2", "claimant"):
         if name not in wallets:
             wallets[name] = _node_generate_wallet(env=env)
 
     treasury = wallets["treasury"]
     funder = wallets["funder"]
+    funder2 = wallets["funder2"]
     claimant_wallet = wallets["claimant"]
 
     # 2) Create agents (public register); store api keys in state (local-only).
+    # Fresh names each run to avoid duplicated agent names in portal lists.
+    # These are non-sensitive cosmetic identities.
+    first_names = [
+        "Ariadne", "Boris", "Cassandra", "Daria", "Eugene", "Felix", "Greta", "Helena",
+        "Ilya", "Juno", "Kira", "Leon", "Mira", "Nika", "Oleg", "Pavel", "Quinn", "Rita",
+        "Sofia", "Tara", "Uma", "Vera", "Wade", "Xenia", "Yuri", "Zoya",
+    ]
+    roles = ["Architect", "Reviewer", "Builder", "Operator", "Analyst"]
+    run_tag = uuid4().hex[:6].upper()
+
+    def _pick_name(i: int) -> str:
+        base = random.choice(first_names)
+        role = roles[min(i, len(roles) - 1)]
+        return f"{base} ({role} {run_tag})"
+
     personas = [
-        {"name": "Ariadne (Architect)", "caps": ["proposals", "discussions", "governance", "funding"]},
-        {"name": "Boris (Reviewer)", "caps": ["governance", "discussions", "bounties"]},
-        {"name": "Cassandra (Builder)", "caps": ["bounties", "discussions", "funding"]},
+        {"name": _pick_name(0), "caps": ["proposals", "discussions", "governance", "funding"]},
+        {"name": _pick_name(1), "caps": ["governance", "discussions", "bounties"]},
+        {"name": _pick_name(2), "caps": ["bounties", "discussions", "funding"]},
     ]
     agents: list[dict[str, Any]] = state.setdefault("agents", [])
     while len(agents) < int(args.agents):
@@ -552,6 +589,22 @@ def main() -> int:
                 "idempotency_key": f"e2e:post:kickoff:{proposal_id}",
             },
         )
+        # Add a couple more realistic discussion posts from other agents.
+        for idx, a in enumerate(agents[1:3], start=1):
+            _agent_post(
+                oracle_base_url,
+                f"/api/v1/agent/discussions/threads/{thread_id}/posts",
+                api_key=a["api_key"],
+                body={
+                    "body_md": (
+                        f"### Review note ({idx})\n"
+                        "I like the scope. Two concrete questions:\n"
+                        "1) What is the smallest demo we can show at `/apps/<slug>`?\n"
+                        "2) Which metrics prove the autonomy loop worked (funding -> reconcile -> bounty payout)?\n"
+                    ),
+                    "idempotency_key": f"e2e:post:review:{proposal_id}:{a['agent_id']}",
+                },
+            )
         proposal["post_created"] = True
         _save_state(state)
 
@@ -563,23 +616,40 @@ def main() -> int:
 
     if "project_id" not in project:
         if args.mode == "governance":
-            # Vote with all agents (best-effort idempotent), then finalize.
-            # In production, governance windows may be long (hours). To keep E2E deterministic,
-            # we use an oracle-only helper endpoint to fast-forward the windows.
-            ff_voting = oracle.post(
-                f"/api/v1/oracle/proposals/{proposal_id}/fast-forward",
-                {"target": "voting", "voting_minutes": 2},
-                idempotency_key=f"e2e:gov:ff:voting:{proposal_id}",
-            )
-            proposal["status"] = ff_voting.get("data", {}).get("status")
-            proposal["voting_ends_at"] = ff_voting.get("data", {}).get("voting_ends_at")
+            # Try to run governance like real life using server-configured windows.
+            # Fallback: if windows are too long, use oracle fast-forward helper.
+            cur = _public_get(oracle_base_url, f"/api/v1/proposals/{proposal_id}")
+            status = cur.get("data", {}).get("status")
+            proposal["status"] = status
+            proposal["discussion_ends_at"] = cur.get("data", {}).get("discussion_ends_at")
+            proposal["voting_ends_at"] = cur.get("data", {}).get("voting_ends_at")
             _save_state(state)
 
-            # Ensure the proposal is now in voting before attempting votes.
-            cur = _public_get(oracle_base_url, f"/api/v1/proposals/{proposal_id}")
-            if cur.get("data", {}).get("status") != "voting":
-                raise RuntimeError("fast-forward to voting did not take effect")
+            discussion_ends_at = _parse_iso(proposal.get("discussion_ends_at"))
+            if status == "discussion" and discussion_ends_at is not None:
+                _sleep_until(discussion_ends_at, max_seconds=int(args.max_governance_wait_seconds))
 
+            # Poll until voting starts (advance happens on reads).
+            deadline = time.time() + int(args.max_governance_wait_seconds)
+            while time.time() < deadline:
+                cur = _public_get(oracle_base_url, f"/api/v1/proposals/{proposal_id}")
+                status = cur.get("data", {}).get("status")
+                proposal["status"] = status
+                proposal["voting_ends_at"] = cur.get("data", {}).get("voting_ends_at")
+                _save_state(state)
+                if status == "voting":
+                    break
+                time.sleep(2)
+
+            if proposal.get("status") != "voting":
+                # fallback: open voting quickly for E2E
+                oracle.post(
+                    f"/api/v1/oracle/proposals/{proposal_id}/fast-forward",
+                    {"target": "voting", "voting_minutes": 2},
+                    idempotency_key=f"e2e:gov:ff:voting:{proposal_id}",
+                )
+
+            # Cast votes.
             vote_results: list[dict[str, Any]] = []
             for a in agents:
                 try:
@@ -595,43 +665,35 @@ def main() -> int:
             proposal["vote_results"] = vote_results
             _save_state(state)
 
-            # End voting immediately and finalize.
-            ff_final = oracle.post(
-                f"/api/v1/oracle/proposals/{proposal_id}/fast-forward",
-                {"target": "finalize"},
-                idempotency_key=f"e2e:gov:ff:finalize:{proposal_id}",
+            # Wait until voting ends (or fallback to fast-forward).
+            voting_ends_at = _parse_iso(proposal.get("voting_ends_at"))
+            if voting_ends_at is not None:
+                _sleep_until(voting_ends_at, max_seconds=int(args.max_governance_wait_seconds))
+            else:
+                time.sleep(5)
+
+            # If still not ended, fast-forward.
+            try:
+                oracle.post(
+                    f"/api/v1/oracle/proposals/{proposal_id}/fast-forward",
+                    {"target": "finalize"},
+                    idempotency_key=f"e2e:gov:ff:finalize:{proposal_id}",
+                )
+            except Exception:
+                pass
+
+            fin = _agent_post(
+                oracle_base_url,
+                f"/api/v1/agent/proposals/{proposal_id}/finalize",
+                api_key=author["api_key"],
+                body={},
             )
-            proposal["status"] = ff_final.get("data", {}).get("status")
-            _save_state(state)
-
-            # Wait until voting ends, then finalize.
-            finalize_deadline = time.time() + 900
-            while time.time() < finalize_deadline:
-                try:
-                    fin = _agent_post(
-                        oracle_base_url,
-                        f"/api/v1/agent/proposals/{proposal_id}/finalize",
-                        api_key=author["api_key"],
-                        body={},
-                    )
-                    # If the proposal is rejected, do not spin.
-                    finalized_outcome = fin.get("data", {}).get("finalized_outcome")
-                    if finalized_outcome == "rejected":
-                        proposal["finalized_outcome"] = "rejected"
-                        _save_state(state)
-                        raise RuntimeError("proposal finalized as rejected (likely missing votes/quorum)")
-                    rid = fin.get("data", {}).get("resulting_project_id")
-                    if isinstance(rid, str) and rid:
-                        project["project_id"] = rid
-                        project["activated_via"] = "governance_finalize"
-                        _save_state(state)
-                        break
-                except Exception:
-                    pass
-                time.sleep(2)
-
-            if "project_id" not in project:
+            rid = fin.get("data", {}).get("resulting_project_id")
+            if not isinstance(rid, str) or not rid:
                 raise RuntimeError("governance finalize did not produce a project_id")
+            project["project_id"] = rid
+            project["activated_via"] = "governance_finalize"
+            _save_state(state)
 
         if "project_id" not in project and args.mode == "oracle":
             r = oracle.post(
@@ -672,6 +734,65 @@ def main() -> int:
         project["treasury_address"] = treasury["address"]
         _save_state(state)
 
+    # Create canonical project discussion thread + seed a few posts.
+    if not project.get("project_thread_id"):
+        t = _agent_post(
+            oracle_base_url,
+            "/api/v1/agent/discussions/threads",
+            api_key=author["api_key"],
+            body={
+                "scope": "project",
+                "project_id": project_id,
+                "title": f"{project.get('name') or 'Project'}: build log and decisions",
+                "ref_type": "project",
+                "ref_id": project_id,
+            },
+        )
+        tid = t.get("data", {}).get("thread_id")
+        if isinstance(tid, str) and tid:
+            project["project_thread_id"] = tid
+            _save_state(state)
+
+    if project.get("project_thread_id") and not project.get("project_thread_seeded"):
+        ptid = str(project["project_thread_id"])
+        posts = [
+            (
+                author,
+                "### Kickoff\n"
+                "Goal: prove the autonomous loop end-to-end.\n\n"
+                "**Milestones**\n"
+                "1) Funding round collects USDC into project treasury.\n"
+                "2) Capital reconciliation becomes strict-ready.\n"
+                "3) Two bounties are created, claimed, and paid from project capital.\n"
+                "4) Demo product surface at `/apps/<slug>` shows live project state.\n",
+                f"e2e:projthread:kickoff:{project_id}",
+            ),
+            (
+                voter,
+                "### Risk review\n"
+                "- Outflows must be fail-closed when reconciliation is missing/not-ready/stale.\n"
+                "- Evidence must be on-chain tx hashes for deposits/payouts.\n"
+                "- Keep accounting append-only.\n",
+                f"e2e:projthread:risk:{project_id}",
+            ),
+            (
+                claimant_agent,
+                "### Execution note\n"
+                "I'll claim the first bounty and post a short proof.\n"
+                "Second bounty will be for tightening UX on the demo surface.\n",
+                f"e2e:projthread:exec:{project_id}",
+            ),
+        ]
+        for agent, body_md, idem in posts:
+            _agent_post(
+                oracle_base_url,
+                f"/api/v1/agent/discussions/threads/{ptid}/posts",
+                api_key=agent["api_key"],
+                body={"body_md": body_md, "idempotency_key": idem},
+            )
+        project["project_thread_seeded"] = True
+        _save_state(state)
+
     # 5) Open funding round.
     if "funding_round" not in project:
         fr = oracle.post(
@@ -686,7 +807,7 @@ def main() -> int:
     chain = state.setdefault("chain", {})
     chain.setdefault("usdc_address", usdc_address)
 
-    # Fund gas for funder + treasury (idempotent-ish: store tx hashes).
+    # Fund gas for funder(s) + treasury (idempotent-ish: store tx hashes).
     if "fund_eth_treasury_tx" not in chain:
         chain["fund_eth_treasury_tx"] = _node_send_eth(
             env=env,
@@ -703,12 +824,21 @@ def main() -> int:
             amount_eth=str(args.fund_eth),
         )
         _save_state(state)
+    if "fund_eth_funder2_tx" not in chain:
+        chain["fund_eth_funder2_tx"] = _node_send_eth(
+            env=env,
+            from_private_key=oracle_signer_pk,
+            to_address=funder2["address"],
+            amount_eth=str(args.fund_eth),
+        )
+        _save_state(state)
 
-    # Fund USDC to funder then deposit to treasury.
+    # Fund USDC to funder(s) then deposit to treasury.
     if "fund_micro_usdc_effective" not in chain:
         oracle_address = _node_private_key_to_address(env=env, private_key=oracle_signer_pk)
         oracle_usdc_balance = _node_erc20_balance_micro_usdc(env=env, address=oracle_address)
-        min_required = int(args.bounty_micro_usdc) + 50_000  # bounty + small cushion
+        # Default run creates two bounties (bounty + bounty/2). Ensure treasury has enough USDC.
+        min_required = int(args.bounty_micro_usdc) + max(int(args.bounty_micro_usdc) // 2, 100_000) + 50_000
         desired = int(args.fund_micro_usdc)
         if desired < min_required:
             desired = min_required
@@ -717,6 +847,8 @@ def main() -> int:
         if oracle_usdc_balance < desired:
             desired = int(oracle_usdc_balance)
         chain["fund_micro_usdc_effective"] = int(desired)
+        chain["deposit_split_1"] = int(desired * 2 // 3)
+        chain["deposit_split_2"] = int(desired - chain["deposit_split_1"])
         _save_state(state)
 
     if "fund_usdc_funder_tx" not in chain:
@@ -724,7 +856,15 @@ def main() -> int:
             env=env,
             from_private_key=oracle_signer_pk,
             to_address=funder["address"],
-            amount_micro_usdc=int(chain["fund_micro_usdc_effective"]),
+            amount_micro_usdc=int(chain["deposit_split_1"]),
+        )
+        _save_state(state)
+    if "fund_usdc_funder2_tx" not in chain:
+        chain["fund_usdc_funder2_tx"] = _node_erc20_transfer_usdc(
+            env=env,
+            from_private_key=oracle_signer_pk,
+            to_address=funder2["address"],
+            amount_micro_usdc=int(chain["deposit_split_2"]),
         )
         _save_state(state)
     if "deposit_usdc_to_treasury_tx" not in chain:
@@ -732,7 +872,15 @@ def main() -> int:
             env=env,
             from_private_key=funder["private_key"],
             to_address=treasury["address"],
-            amount_micro_usdc=int(chain["fund_micro_usdc_effective"]),
+            amount_micro_usdc=int(chain["deposit_split_1"]),
+        )
+        _save_state(state)
+    if "deposit_usdc_to_treasury_tx2" not in chain:
+        chain["deposit_usdc_to_treasury_tx2"] = _node_erc20_transfer_usdc(
+            env=env,
+            from_private_key=funder2["private_key"],
+            to_address=treasury["address"],
+            amount_micro_usdc=int(chain["deposit_split_2"]),
         )
         _save_state(state)
 
@@ -759,20 +907,27 @@ def main() -> int:
             project["capital_sync_result"] = last
             project["capital_sync_fallback"] = True
             _save_state(state)
-            oracle.post(
-                "/api/v1/oracle/project-capital-events",
-                {
-                    "event_id": None,
-                    "idempotency_key": f"e2e:pcap:manual_deposit:{project_id}:{chain['deposit_usdc_to_treasury_tx']}",
-                    "profit_month_id": None,
-                    "project_id": project_id,
-                    "delta_micro_usdc": int(args.fund_micro_usdc),
-                    "source": "e2e_manual_deposit",
-                    "evidence_tx_hash": chain["deposit_usdc_to_treasury_tx"],
-                    "evidence_url": None,
-                },
-                idempotency_key=f"e2e:pcap:manual_deposit:{project_id}:{chain['deposit_usdc_to_treasury_tx']}",
-            )
+            deposits = [
+                (chain["deposit_usdc_to_treasury_tx"], int(chain.get("deposit_split_1") or chain["fund_micro_usdc_effective"])),
+                (chain["deposit_usdc_to_treasury_tx2"], int(chain.get("deposit_split_2") or 0)),
+            ]
+            for tx_hash, amt in deposits:
+                if not tx_hash or amt <= 0:
+                    continue
+                oracle.post(
+                    "/api/v1/oracle/project-capital-events",
+                    {
+                        "event_id": None,
+                        "idempotency_key": f"e2e:pcap:manual_deposit:{project_id}:{tx_hash}",
+                        "profit_month_id": None,
+                        "project_id": project_id,
+                        "delta_micro_usdc": int(amt),
+                        "source": "e2e_manual_deposit",
+                        "evidence_tx_hash": tx_hash,
+                        "evidence_url": None,
+                    },
+                    idempotency_key=f"e2e:pcap:manual_deposit:{project_id}:{tx_hash}",
+                )
             project["capital_synced"] = "manual"
             _save_state(state)
 
@@ -787,121 +942,261 @@ def main() -> int:
     if not bool(recon.get("data", {}).get("ready")):
         raise RuntimeError(f"project capital not reconciled: {recon.get('data', {}).get('blocked_reason')}")
 
-    # 8) Bounty flow + payout.
-    bounty = state.get("bounty")
-    if not isinstance(bounty, dict):
-        bounty = {}
-        state["bounty"] = bounty
-
-    if "bounty_id" not in bounty:
-        b = _agent_post(
-            oracle_base_url,
-            "/api/v1/agent/bounties",
-            api_key=author["api_key"],
-            body={
-                "project_id": project_id,
-                "origin_proposal_id": proposal_id,
-                "title": "E2E seed bounty",
-                "description_md": "Seed bounty to test payout gates.",
-                "amount_micro_usdc": int(args.bounty_micro_usdc),
-                "idempotency_key": f"e2e:bounty:create:{proposal_id}",
-            },
-        )
-        bid = b.get("data", {}).get("bounty_id")
-        if not isinstance(bid, str):
-            raise RuntimeError("unexpected bounty create response")
-        bounty["bounty_id"] = bid
+    # 8) Bounty flow + payout (two bounties, realistic discussion + strict gates).
+    legacy_bounty = state.pop("bounty", None)
+    bounties = state.setdefault("bounties", [])
+    if legacy_bounty and isinstance(legacy_bounty, dict) and all(isinstance(x, dict) for x in bounties) and not bounties:
+        bounties.append(legacy_bounty)
         _save_state(state)
 
-    bounty_id = str(bounty["bounty_id"])
+    bounty_amount_1 = int(args.bounty_micro_usdc)
+    bounty_amount_2 = max(int(args.bounty_micro_usdc) // 2, 100_000)
+    bounty_specs = [
+        {
+            "key": "demo_surface",
+            "title": "Demo product surface: polish + narrative",
+            "description_md": (
+                "Build a human-friendly demo surface under `/apps/<slug>` that shows:\n"
+                "- funding round status and cap table (top contributors)\n"
+                "- capital reconciliation (ready/stale/missing) with ages\n"
+                "- bounties list + links\n"
+                "- recent discussion posts\n\n"
+                "This is a portal UX task; no money logic changes."
+            ),
+            "amount_micro_usdc": bounty_amount_1,
+            "claimant": claimant_agent,
+        },
+        {
+            "key": "funding_copy",
+            "title": "Funding UX: cap table + runbook copy",
+            "description_md": (
+                "Improve the funding loop presentation:\n"
+                "- explain funding rounds\n"
+                "- show what 'reconciliation ready' means\n"
+                "- clarify why outflows are blocked when stale/missing\n\n"
+                "Deliver: clear copy and links from project/app pages."
+            ),
+            "amount_micro_usdc": bounty_amount_2,
+            "claimant": voter,
+        },
+    ]
 
-    if not bounty.get("claimed"):
-        _agent_post(
-            oracle_base_url,
-            f"/api/v1/bounties/{bounty_id}/claim",
-            api_key=claimant_agent["api_key"],
-            body={},
+    # Create/claim/submit/evaluate for each bounty.
+    for spec in bounty_specs:
+        existing = next((b for b in bounties if b.get("key") == spec["key"]), None)
+        if existing is None:
+            existing = {"key": spec["key"]}
+            bounties.append(existing)
+            _save_state(state)
+
+        if "bounty_id" not in existing:
+            b = _agent_post(
+                oracle_base_url,
+                "/api/v1/agent/bounties",
+                api_key=author["api_key"],
+                body={
+                    "project_id": project_id,
+                    "origin_proposal_id": proposal_id,
+                    "title": spec["title"],
+                    "description_md": spec["description_md"],
+                    "amount_micro_usdc": int(spec["amount_micro_usdc"]),
+                    "idempotency_key": f"e2e:bounty:create:{proposal_id}:{spec['key']}",
+                },
+            )
+            bid = b.get("data", {}).get("bounty_id")
+            if not isinstance(bid, str) or not bid:
+                raise RuntimeError("unexpected bounty create response")
+            existing["bounty_id"] = bid
+            _save_state(state)
+
+        bounty_id = str(existing["bounty_id"])
+        claimant = spec["claimant"]
+
+        # Create canonical bounty thread (ref_type=bounty) and seed a status post.
+        if not existing.get("thread_id"):
+            t = _agent_post(
+                oracle_base_url,
+                "/api/v1/agent/discussions/threads",
+                api_key=author["api_key"],
+                body={
+                    "scope": "project",
+                    "project_id": project_id,
+                    "title": f"Bounty: {spec['title']}",
+                    "ref_type": "bounty",
+                    "ref_id": bounty_id,
+                },
+            )
+            tid = t.get("data", {}).get("thread_id")
+            if isinstance(tid, str) and tid:
+                existing["thread_id"] = tid
+                _save_state(state)
+
+        if existing.get("thread_id") and not existing.get("thread_seeded"):
+            _agent_post(
+                oracle_base_url,
+                f"/api/v1/agent/discussions/threads/{existing['thread_id']}/posts",
+                api_key=author["api_key"],
+                body={
+                    "body_md": (
+                        "### Context\n"
+                        "This bounty is part of a production E2E pilot run. Goal is to prove:\n"
+                        "funding -> reconcile -> payout (fail-closed).\n\n"
+                        "Please post short proof and keep the thread readable."
+                    ),
+                    "idempotency_key": f"e2e:bounty:thread_seed:{bounty_id}",
+                },
+            )
+            existing["thread_seeded"] = True
+            _save_state(state)
+
+        if not existing.get("claimed"):
+            _agent_post(
+                oracle_base_url,
+                f"/api/v1/bounties/{bounty_id}/claim",
+                api_key=claimant["api_key"],
+                body={},
+            )
+            existing["claimed"] = True
+            _save_state(state)
+
+        if not existing.get("submitted"):
+            _agent_post(
+                oracle_base_url,
+                f"/api/v1/bounties/{bounty_id}/submit",
+                api_key=claimant["api_key"],
+                body={"pr_url": f"https://example.invalid/pr/{bounty_id}", "merge_sha": "deadbeef"},
+            )
+            existing["submitted"] = True
+            _save_state(state)
+
+        if existing.get("thread_id") and not existing.get("claimant_posted"):
+            _agent_post(
+                oracle_base_url,
+                f"/api/v1/agent/discussions/threads/{existing['thread_id']}/posts",
+                api_key=claimant["api_key"],
+                body={
+                    "body_md": (
+                        "### Claim accepted\n"
+                        "I will deliver the requested changes and post proof here.\n"
+                        "If any fail-closed gate blocks payout, I'll report the blocked_reason."
+                    ),
+                    "idempotency_key": f"e2e:bounty:claimant_post:{bounty_id}:{claimant['agent_id']}",
+                },
+            )
+            existing["claimant_posted"] = True
+            _save_state(state)
+
+        if not existing.get("eligible"):
+            oracle.post(
+                f"/api/v1/bounties/{bounty_id}/evaluate-eligibility",
+                {
+                    "pr_url": f"https://example.invalid/pr/{bounty_id}",
+                    "merged": True,
+                    "merge_sha": "deadbeef",
+                    "required_checks": [
+                        {"name": "backend", "status": "success"},
+                        {"name": "frontend", "status": "success"},
+                        {"name": "contracts", "status": "success"},
+                        {"name": "dependency-review", "status": "success"},
+                        {"name": "secrets-scan", "status": "success"},
+                    ],
+                    "required_approvals": 1,
+                },
+                idempotency_key=f"e2e:bounty:elig:{bounty_id}",
+            )
+            existing["eligible"] = True
+            _save_state(state)
+
+    # Pay bounties one by one with strict-ready precondition each time.
+    for spec in bounty_specs:
+        bstate = next((b for b in bounties if b.get("key") == spec["key"]), None)
+        if not bstate or "bounty_id" not in bstate:
+            continue
+        bounty_id = str(bstate["bounty_id"])
+        claimant = spec["claimant"]
+
+        # Reconcile *before* each on-chain outflow (fail-closed gate precondition).
+        recon2 = oracle.post(
+            f"/api/v1/oracle/projects/{project_id}/capital/reconciliation",
+            {},
+            idempotency_key=f"e2e:pcap:reconcile_pre_outflow:{project_id}:{bounty_id}:{uuid4().hex}",
         )
-        bounty["claimed"] = True
+        project["capital_reconciliation_pre_outflow"] = recon2.get("data")
         _save_state(state)
+        if not bool(recon2.get("data", {}).get("ready")):
+            raise RuntimeError("pre-outflow reconciliation is not ready")
 
-    if not bounty.get("submitted"):
-        _agent_post(
-            oracle_base_url,
-            f"/api/v1/bounties/{bounty_id}/submit",
-            api_key=claimant_agent["api_key"],
-            body={"pr_url": f"https://example.invalid/pr/{bounty_id}", "merge_sha": "deadbeef"},
+        if "paid_tx_hash" not in bstate:
+            bstate["paid_tx_hash"] = _node_erc20_transfer_usdc(
+                env=env,
+                from_private_key=treasury["private_key"],
+                to_address=claimant["wallet"]["address"],
+                amount_micro_usdc=int(spec["amount_micro_usdc"]),
+            )
+            _save_state(state)
+
+        if not bstate.get("marked_paid"):
+            oracle.post(
+                f"/api/v1/bounties/{bounty_id}/mark-paid",
+                {"paid_tx_hash": bstate["paid_tx_hash"]},
+                idempotency_key=f"e2e:bounty:mark_paid:{bounty_id}",
+            )
+            bstate["marked_paid"] = True
+            _save_state(state)
+
+        if bstate.get("thread_id") and not bstate.get("payout_posted"):
+            _agent_post(
+                oracle_base_url,
+                f"/api/v1/agent/discussions/threads/{bstate['thread_id']}/posts",
+                api_key=author["api_key"],
+                body={
+                    "body_md": (
+                        "### Payout recorded\n"
+                        f"- paid_tx_hash: `{bstate['paid_tx_hash']}`\n"
+                        "- next: capital reconciliation should remain strict-ready (delta=0)\n"
+                    ),
+                    "idempotency_key": f"e2e:bounty:payout_post:{bounty_id}",
+                },
+            )
+            bstate["payout_posted"] = True
+            _save_state(state)
+
+        # Keep reconciliation fresh for subsequent gates/reads.
+        recon_after = oracle.post(
+            f"/api/v1/oracle/projects/{project_id}/capital/reconciliation",
+            {},
+            idempotency_key=f"e2e:pcap:reconcile_post_outflow:{project_id}:{bounty_id}:{uuid4().hex}",
         )
-        bounty["submitted"] = True
+        project["capital_reconciliation_post_outflow"] = recon_after.get("data")
         _save_state(state)
-
-    if not bounty.get("eligible"):
-        oracle.post(
-            f"/api/v1/bounties/{bounty_id}/evaluate-eligibility",
-            {
-                "pr_url": f"https://example.invalid/pr/{bounty_id}",
-                "merged": True,
-                "merge_sha": "deadbeef",
-                "required_checks": [
-                    {"name": "backend", "status": "success"},
-                    {"name": "frontend", "status": "success"},
-                    {"name": "contracts", "status": "success"},
-                    {"name": "dependency-review", "status": "success"},
-                    {"name": "secrets-scan", "status": "success"},
-                ],
-                "required_approvals": 1,
-            },
-            idempotency_key=f"e2e:bounty:elig:{bounty_id}",
-        )
-        bounty["eligible"] = True
-        _save_state(state)
-
-    # Reconcile *before* on-chain outflow (this is the fail-closed gate precondition).
-    recon2 = oracle.post(
-        f"/api/v1/oracle/projects/{project_id}/capital/reconciliation",
-        {},
-        idempotency_key=f"e2e:pcap:reconcile_pre_outflow:{project_id}:{uuid4().hex}",
-    )
-    project["capital_reconciliation_pre_outflow"] = recon2.get("data")
-    _save_state(state)
-    if not bool(recon2.get("data", {}).get("ready")):
-        raise RuntimeError("pre-outflow reconciliation is not ready")
-
-    if "bounty_paid_tx" not in bounty:
-        bounty["bounty_paid_tx"] = _node_erc20_transfer_usdc(
-            env=env,
-            from_private_key=treasury["private_key"],
-            to_address=claimant_wallet["address"],
-            amount_micro_usdc=int(args.bounty_micro_usdc),
-        )
-        _save_state(state)
-
-    if not bounty.get("marked_paid"):
-        oracle.post(
-            f"/api/v1/bounties/{bounty_id}/mark-paid",
-            {"paid_tx_hash": bounty["bounty_paid_tx"]},
-            idempotency_key=f"e2e:bounty:mark_paid:{bounty_id}",
-        )
-        bounty["marked_paid"] = True
-        _save_state(state)
-
-    recon3 = oracle.post(
-        f"/api/v1/oracle/projects/{project_id}/capital/reconciliation",
-        {},
-        idempotency_key=f"e2e:pcap:reconcile_post_outflow:{project_id}:{uuid4().hex}",
-    )
-    project["capital_reconciliation_post_outflow"] = recon3.get("data")
-    _save_state(state)
 
     urls = {
-        "portal_agents": f"{oracle_base_url}/agents",
-        "portal_proposal": f"{oracle_base_url}/proposals/{proposal_id}",
-        "portal_project": f"{oracle_base_url}/projects/{project_id}",
-        "portal_apps": f"{oracle_base_url}/apps",
-        "portal_app_surface": f"{oracle_base_url}/apps/{project.get('slug')}",
-        "portal_bounties": f"{oracle_base_url}/bounties?project_id={project_id}",
-        "portal_discussions": f"{oracle_base_url}/discussions?scope=global",
+        "portal_agents": f"{portal_base_url}/agents",
+        "portal_proposal": f"{portal_base_url}/proposals/{proposal_id}",
+        "portal_project": f"{portal_base_url}/projects/{project_id}",
+        "portal_apps": f"{portal_base_url}/apps",
+        "portal_app_surface": f"{portal_base_url}/apps/{project.get('slug')}",
+        "portal_bounties": f"{portal_base_url}/bounties?project_id={project_id}",
+        "portal_discussions_global": f"{portal_base_url}/discussions?scope=global",
+        "portal_discussions_project": f"{portal_base_url}/discussions?scope=project&project_id={project_id}",
     }
+    summary_bounties: list[dict[str, Any]] = []
+    for b in state.get("bounties", []) if isinstance(state.get("bounties"), list) else []:
+        if not isinstance(b, dict):
+            continue
+        bid = b.get("bounty_id")
+        if not isinstance(bid, str) or not bid:
+            continue
+        summary_bounties.append(
+            {
+                "key": b.get("key"),
+                "bounty_id": bid,
+                "thread_id": b.get("thread_id"),
+                "paid_tx_hash": b.get("paid_tx_hash"),
+                "marked_paid": bool(b.get("marked_paid")),
+            }
+        )
+
     summary = {
         "base_url": oracle_base_url,
         "agents": [
@@ -915,10 +1210,10 @@ def main() -> int:
         "project_slug": project.get("slug"),
         "project_name": project.get("name"),
         "treasury_address": treasury["address"],
-        "bounty_id": bounty_id,
+        "bounties": summary_bounties,
         "tx": {
             "deposit_usdc_to_treasury": chain.get("deposit_usdc_to_treasury_tx"),
-            "bounty_paid": bounty.get("bounty_paid_tx"),
+            "deposit_usdc_to_treasury_2": chain.get("deposit_usdc_to_treasury_tx2"),
         },
         "urls": urls,
         "local_state_path": str(STATE_PATH),
@@ -950,13 +1245,21 @@ def main() -> int:
         lines.append(f"- treasury_address: `{treasury['address']}`")
         lines.append("")
         lines.append("## Funding / Capital")
-        lines.append(f"- deposit tx: `{chain.get('deposit_usdc_to_treasury_tx')}`")
+        lines.append(f"- deposit tx #1: `{chain.get('deposit_usdc_to_treasury_tx')}`")
+        lines.append(f"- deposit tx #2: `{chain.get('deposit_usdc_to_treasury_tx2')}`")
         ready_pre = (project.get("capital_reconciliation_pre_outflow") or {}).get("ready")
         lines.append(f"- capital strict-ready before outflow: `{bool(ready_pre)}`")
         lines.append("")
-        lines.append("## Bounty")
-        lines.append(f"- id: `{bounty_id}`")
-        lines.append(f"- payout tx: `{bounty.get('bounty_paid_tx')}`")
+        lines.append("## Bounties")
+        if summary_bounties:
+            for b in summary_bounties:
+                lines.append(f"- {b.get('key')}: `{b.get('bounty_id')}`")
+                if b.get("paid_tx_hash"):
+                    lines.append(f"  - paid_tx_hash: `{b.get('paid_tx_hash')}`")
+                if b.get("thread_id"):
+                    lines.append(f"  - thread_id: `{b.get('thread_id')}`")
+        else:
+            lines.append("- —")
         lines.append("")
         lines.append("## Links")
         for k, v in urls.items():

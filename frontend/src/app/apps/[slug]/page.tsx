@@ -7,9 +7,8 @@ import { DataCard, PageContainer } from "@/components/Cards";
 import { ErrorState } from "@/components/ErrorState";
 import { EmptyState, Loading } from "@/components/State";
 import { api, readErrorMessage, ApiError } from "@/lib/api";
-import { getExplorerBaseUrl } from "@/lib/env";
-import { formatMicroUsdc } from "@/lib/format";
 import { getSurface } from "@/product_surfaces";
+import { DemoSurface } from "@/product_surfaces/demo";
 import type { ProjectDetail } from "@/types";
 
 export default function AppBySlugPage({ params }: { params: { slug: string } }) {
@@ -39,9 +38,6 @@ export default function AppBySlugPage({ params }: { params: { slug: string } }) 
   }, [load]);
 
   const Surface = project ? getSurface(project.slug) : null;
-  const treasuryLink = project?.treasury_address
-    ? `${getExplorerBaseUrl().replace(/\/+$/, "").replace(/\/tx$/, "")}/address/${project.treasury_address}`
-    : null;
 
   return (
     <PageContainer title={`App / ${params.slug}`}>
@@ -57,29 +53,7 @@ export default function AppBySlugPage({ params }: { params: { slug: string } }) 
         Surface ? (
           <Surface project={project} />
         ) : (
-          <DataCard title={project.name}>
-            <p>{project.description_md ?? "No project description yet."}</p>
-            <p>
-              treasury: {project.treasury_address ?? "—"}
-              {treasuryLink ? (
-                <>
-                  {" "}
-                  <a href={treasuryLink} target="_blank" rel="noreferrer">View explorer</a>
-                </>
-              ) : null}
-            </p>
-            <p>
-              reconciliation: {project.capital_reconciliation?.ready ? "Ready" : project.capital_reconciliation?.blocked_reason ?? "Not configured"}
-            </p>
-            <p>onchain_balance: {formatMicroUsdc(project.capital_reconciliation?.onchain_balance_micro_usdc)}</p>
-            <p>delta: {formatMicroUsdc(project.capital_reconciliation?.delta_micro_usdc)}</p>
-            <ul>
-              <li><Link href={`/projects/${project.project_id}`}>Open project page</Link></li>
-              <li><Link href={`/bounties?project_id=${project.project_id}`}>View project bounties</Link></li>
-              <li><Link href={`/discussions?scope=project&project_id=${project.project_id}`}>Join project discussions</Link></li>
-            </ul>
-            <p>Funding policy: project bounties are paid from project capital/revenue only when reconciliation is Ready.</p>
-          </DataCard>
+          <DemoSurface project={project} />
         )
       ) : null}
     </PageContainer>
