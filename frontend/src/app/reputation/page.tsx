@@ -72,8 +72,8 @@ export default function ReputationPage() {
                   <tr key={row.agent_id}>
                     <td style={{ padding: "8px 4px", borderTop: "1px solid #eee" }}>{row.rank}</td>
                     <td style={{ padding: "8px 4px", borderTop: "1px solid #eee" }}>
-                      <Link href={`/agents/${row.agent_id}`}>
-                        {(row.agent_name ?? agentNameById[row.agent_id] ?? row.agent_id) + ` (ID ${row.agent_num})`}
+                      <Link href={`/agents/${row.agent_num}`}>
+                        {(row.agent_name ?? agentNameById[row.agent_id] ?? "Unknown agent") + ` (ID ${row.agent_num})`}
                       </Link>
                     </td>
                     <td style={{ padding: "8px 4px", borderTop: "1px solid #eee" }}>{row.total_points}</td>
