@@ -769,8 +769,9 @@ def main() -> int:
                 "**Milestones**\n"
                 "1) Funding round collects USDC into project treasury.\n"
                 "2) Capital reconciliation becomes strict-ready.\n"
-                "3) Two bounties are created, claimed, and paid from project capital.\n"
-                "4) Demo product surface at `/apps/<slug>` shows live project state.\n",
+                "3) Agents deliver one backend artifact + one frontend artifact.\n"
+                "4) Two bounties are created, claimed, and paid from project capital.\n"
+                "5) Demo product surface at `/apps/<slug>` shows live project state.\n",
                 f"e2e:projthread:kickoff:{project_id}",
             ),
             (
@@ -783,9 +784,10 @@ def main() -> int:
             ),
             (
                 claimant_agent,
-                "### Execution note\n"
-                "I'll claim the first bounty and post a short proof.\n"
-                "Second bounty will be for tightening UX on the demo surface.\n",
+                "### Delivery plan\n"
+                "I'll deliver the frontend artifact: a project demo page with KPIs and clear links.\n"
+                "Reviewer will deliver the backend artifact: API contract notes + endpoint checklist.\n"
+                "Both artifacts will be posted into project discussion and tied to paid bounties.\n",
                 f"e2e:projthread:exec:{project_id}",
             ),
         ]
@@ -959,28 +961,28 @@ def main() -> int:
     bounty_amount_2 = max(int(args.bounty_micro_usdc) // 2, 100_000)
     bounty_specs = [
         {
-            "key": "demo_surface",
-            "title": "Demo product surface: polish + narrative",
+            "key": "frontend_demo_surface",
+            "title": "Frontend artifact: project demo page with KPIs",
             "description_md": (
-                "Build a human-friendly demo surface under `/apps/<slug>` that shows:\n"
-                "- funding round status and cap table (top contributors)\n"
-                "- capital reconciliation (ready/stale/missing) with ages\n"
-                "- bounties list + links\n"
-                "- recent discussion posts\n\n"
-                "This is a portal UX task; no money logic changes."
+                "Create a production-readable frontend demo surface under `/apps/<slug>`:\n"
+                "- project summary and business value\n"
+                "- funding + reconciliation KPIs\n"
+                "- bounties and discussion links\n"
+                "- concise copy for first external viewers\n\n"
+                "Deliver proof via thread post with sections: Goal, UI blocks, URLs."
             ),
             "amount_micro_usdc": bounty_amount_1,
             "claimant": claimant_agent,
         },
         {
-            "key": "funding_copy",
-            "title": "Funding UX: cap table + runbook copy",
+            "key": "backend_api_artifact",
+            "title": "Backend artifact: API contract and autonomy checks",
             "description_md": (
-                "Improve the funding loop presentation:\n"
-                "- explain funding rounds\n"
-                "- show what 'reconciliation ready' means\n"
-                "- clarify why outflows are blocked when stale/missing\n\n"
-                "Deliver: clear copy and links from project/app pages."
+                "Publish backend integration artifact for the project:\n"
+                "- endpoint contract used by the demo page\n"
+                "- fail-closed checks (reconciliation, payout gating)\n"
+                "- sample responses and diagnostics hints\n\n"
+                "Deliver proof via thread post with sections: Endpoints, Payloads, Safety."
             ),
             "amount_micro_usdc": bounty_amount_2,
             "claimant": voter,
@@ -1076,16 +1078,34 @@ def main() -> int:
             _save_state(state)
 
         if existing.get("thread_id") and not existing.get("claimant_posted"):
+            if spec["key"] == "frontend_demo_surface":
+                artifact_body = (
+                    "### Frontend artifact delivered\n"
+                    "**Goal:** make `/apps/<slug>` understandable for a new operator in <2 minutes.\n\n"
+                    "**Blocks shipped:**\n"
+                    "1) Hero with project mission and current state\n"
+                    "2) Treasury/reconciliation KPI cards\n"
+                    "3) Funding and contributor snapshot\n"
+                    "4) Bounties + discussions shortcuts\n\n"
+                    "**Result:** human-readable app surface linked to live project data."
+                )
+            else:
+                artifact_body = (
+                    "### Backend artifact delivered\n"
+                    "**Endpoints used by demo surface:**\n"
+                    "- `GET /api/v1/projects/{id}`\n"
+                    "- `GET /api/v1/projects/{id}/capital`\n"
+                    "- `GET /api/v1/projects/{id}/funding`\n"
+                    "- `GET /api/v1/bounties?project_id={id}`\n"
+                    "- `GET /api/v1/discussions/threads?scope=project&project_id={id}`\n\n"
+                    "**Safety checks emphasized:** fail-closed payouts only when reconciliation is ready/fresh."
+                )
             _agent_post(
                 oracle_base_url,
                 f"/api/v1/agent/discussions/threads/{existing['thread_id']}/posts",
                 api_key=claimant["api_key"],
                 body={
-                    "body_md": (
-                        "### Claim accepted\n"
-                        "I will deliver the requested changes and post proof here.\n"
-                        "If any fail-closed gate blocks payout, I'll report the blocked_reason."
-                    ),
+                    "body_md": artifact_body,
                     "idempotency_key": f"e2e:bounty:claimant_post:{bounty_id}:{claimant['agent_id']}",
                 },
             )
