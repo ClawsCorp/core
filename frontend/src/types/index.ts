@@ -169,6 +169,25 @@ export interface ProjectCryptoInvoice {
   updated_at: string;
 }
 
+export interface GitOutboxTask {
+  task_id: string;
+  idempotency_key: string | null;
+  project_num: number | null;
+  requested_by_agent_num: number | null;
+  task_type: string;
+  payload: Record<string, unknown>;
+  result: Record<string, unknown> | null;
+  branch_name: string | null;
+  commit_sha: string | null;
+  status: string;
+  attempts: number;
+  last_error_hint: string | null;
+  locked_at: string | null;
+  locked_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ProjectSummary {
   project_num: number;
   project_id: string;

@@ -16,6 +16,7 @@ import type {
   AccountingMonthSummary,
   BountyFundingSource,
   BountyPublic,
+  GitOutboxTask,
   ProjectCapitalSummary,
   ProjectCryptoInvoice,
   ProjectDetail,
@@ -35,6 +36,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
   const [accountingMonths, setAccountingMonths] = useState<AccountingMonthSummary[]>([]);
   const [domains, setDomains] = useState<ProjectDomainPublic[]>([]);
   const [cryptoInvoices, setCryptoInvoices] = useState<ProjectCryptoInvoice[]>([]);
+  const [gitTasks, setGitTasks] = useState<GitOutboxTask[]>([]);
 
   const [domainValue, setDomainValue] = useState("");
   const [domainBusy, setDomainBusy] = useState(false);
@@ -51,12 +53,16 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
   const [invoiceDescription, setInvoiceDescription] = useState("");
   const [invoiceBusy, setInvoiceBusy] = useState(false);
   const [invoiceMessage, setInvoiceMessage] = useState<string | null>(null);
+  const [surfaceSlug, setSurfaceSlug] = useState("");
+  const [surfaceBusy, setSurfaceBusy] = useState(false);
+  const [surfaceMessage, setSurfaceMessage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [projectResult, capitalResult, fundingResult, bountiesResult, statsResult, accountingResult, domainsResult, invoicesResult] = await Promise.all([
+      const agentApiKey = getAgentApiKey();
+      const [projectResult, capitalResult, fundingResult, bountiesResult, statsResult, accountingResult, domainsResult, invoicesResult, gitOutboxResult] = await Promise.all([
         api.getProject(params.id),
         api.getProjectCapitalSummary(params.id),
         api.getProjectFundingSummary(params.id).catch(() => null),
@@ -65,6 +71,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
         api.getAccountingMonths({ projectId: params.id, limit: 6, offset: 0 }).catch(() => null),
         api.getProjectDomains(params.id).catch(() => ({ items: [] })),
         api.getProjectCryptoInvoices(params.id, 20, 0).catch(() => ({ items: [], limit: 0, offset: 0, total: 0 })),
+        agentApiKey ? api.listProjectGitOutbox(agentApiKey, params.id, 20).catch(() => ({ items: [], limit: 20, total: 0 })) : Promise.resolve({ items: [], limit: 20, total: 0 }),
       ]);
       setProject(projectResult);
       setCapital(capitalResult);
@@ -74,6 +81,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
       setAccountingMonths(accountingResult?.items ?? []);
       setDomains(domainsResult.items ?? []);
       setCryptoInvoices(invoicesResult.items ?? []);
+      setGitTasks(gitOutboxResult.items ?? []);
     } catch (err) {
       setError(readErrorMessage(err));
     } finally {
@@ -260,6 +268,32 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
       setInvoiceMessage(readErrorMessage(err));
     } finally {
       setInvoiceBusy(false);
+    }
+  };
+
+  const onCreateSurfaceTask = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSurfaceMessage(null);
+    const apiKey = getAgentApiKey();
+    if (!apiKey) {
+      setSurfaceMessage("Missing agent key. Save X-API-Key above, then retry.");
+      return;
+    }
+    const slug = surfaceSlug.trim().toLowerCase();
+    if (!slug) {
+      setSurfaceMessage("Enter app slug.");
+      return;
+    }
+    setSurfaceBusy(true);
+    try {
+      const task = await api.createProjectSurfaceCommitTask(apiKey, params.id, { slug });
+      setSurfaceMessage(`Queued git task ${task.task_id}.`);
+      setSurfaceSlug("");
+      await load();
+    } catch (err) {
+      setSurfaceMessage(readErrorMessage(err));
+    } finally {
+      setSurfaceBusy(false);
     }
   };
 
@@ -533,6 +567,41 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
                     {inv.invoice_id} · {inv.status} · {formatMicroUsdc(inv.amount_micro_usdc)}
                     {inv.paid_at ? ` · paid_at=${formatDateTimeShort(inv.paid_at)}` : ""}
                     {inv.description ? ` · ${inv.description}` : ""}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </DataCard>
+
+          <DataCard title="App surface git tasks (agent)">
+            <p>Queue autonomous app-surface commits for this project.</p>
+            <form onSubmit={(event) => void onCreateSurfaceTask(event)} style={{ marginBottom: 12 }}>
+              <div style={{ marginBottom: 8 }}>
+                <label>
+                  slug:{" "}
+                  <input
+                    value={surfaceSlug}
+                    onChange={(event) => setSurfaceSlug(event.target.value)}
+                    placeholder="aurora-notes"
+                  />
+                </label>
+              </div>
+              <button type="submit" disabled={surfaceBusy}>
+                {surfaceBusy ? "Queueing..." : "Queue surface commit"}
+              </button>
+            </form>
+            {surfaceMessage ? <p>{surfaceMessage}</p> : null}
+            {gitTasks.length === 0 ? (
+              <p>No git tasks for this project yet.</p>
+            ) : (
+              <ul>
+                {gitTasks.map((task) => (
+                  <li key={task.task_id}>
+                    {task.task_id} · {task.task_type} · {task.status}
+                    {task.branch_name ? ` · ${task.branch_name}` : ""}
+                    {task.commit_sha ? ` · ${task.commit_sha.slice(0, 10)}` : ""}
+                    {task.last_error_hint ? ` · error=${task.last_error_hint}` : ""}
+                    {` · created_at=${formatDateTimeShort(task.created_at)}`}
                   </li>
                 ))}
               </ul>

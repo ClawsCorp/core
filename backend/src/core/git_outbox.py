@@ -26,10 +26,14 @@ def enqueue_git_outbox_task(
     task_type: str,
     payload: dict,
     idempotency_key: str | None,
+    project_id: int | None = None,
+    requested_by_agent_id: int | None = None,
 ) -> GitOutbox:
     row = GitOutbox(
         task_id=new_git_outbox_task_id(db),
         idempotency_key=idempotency_key,
+        project_id=project_id,
+        requested_by_agent_id=requested_by_agent_id,
         task_type=task_type,
         payload_json=json.dumps(payload, separators=(",", ":"), sort_keys=True),
         result_json=None,

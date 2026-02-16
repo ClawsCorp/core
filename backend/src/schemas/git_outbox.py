@@ -11,11 +11,15 @@ class GitOutboxEnqueueRequest(BaseModel):
     task_type: str = Field(..., min_length=1, max_length=64)
     payload: dict = Field(default_factory=dict)
     idempotency_key: str | None = Field(default=None, min_length=1, max_length=255)
+    project_num: int | None = None
+    requested_by_agent_num: int | None = None
 
 
 class GitOutboxTask(BaseModel):
     task_id: str
     idempotency_key: str | None
+    project_num: int | None = None
+    requested_by_agent_num: int | None = None
     task_type: str
     payload: dict
     result: dict | None = None
@@ -76,3 +80,21 @@ class GitOutboxUpdateRequest(BaseModel):
     result: dict | None = None
     branch_name: str | None = Field(default=None, max_length=128)
     commit_sha: str | None = Field(default=None, max_length=64)
+
+
+class AgentGitOutboxCreateSurfaceRequest(BaseModel):
+    slug: str = Field(..., min_length=1, max_length=64)
+    branch_name: str | None = Field(default=None, min_length=1, max_length=128)
+    commit_message: str | None = Field(default=None, min_length=1, max_length=200)
+    idempotency_key: str | None = Field(default=None, min_length=1, max_length=255)
+
+
+class AgentGitOutboxListData(BaseModel):
+    items: list[GitOutboxTask]
+    limit: int
+    total: int
+
+
+class AgentGitOutboxListResponse(BaseModel):
+    success: bool
+    data: AgentGitOutboxListData
