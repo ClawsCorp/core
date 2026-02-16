@@ -56,6 +56,29 @@ def _validate_slug(value: str) -> str:
     return slug
 
 
+def _default_pr_title(project: Project, slug: str) -> str:
+    return f"feat(surface): {project.name} - {slug}"
+
+
+def _default_pr_body(project: Project, slug: str, task_idempotency_key: str) -> str:
+    return "\n".join(
+        [
+            "## Summary",
+            f"- add generated app surface `{slug}` for project `{project.name}` (ID {project.project_id})",
+            "- update product surface registry",
+            "",
+            "## Autonomous Task",
+            f"- idempotency_key: `{task_idempotency_key}`",
+            f"- project_id: `{project.project_id}`",
+            "",
+            "## Checklist",
+            "- [ ] frontend lint/build passed",
+            "- [ ] app surface opens on /apps/<slug>",
+            "- [ ] copy/content reviewed",
+        ]
+    )
+
+
 def _to_task(row: GitOutbox) -> GitOutboxTask:
     result_obj: dict | None = None
     pr_url: str | None = None
@@ -118,10 +141,10 @@ async def enqueue_project_surface_commit(
     if payload.commit_message:
         worker_payload["commit_message"] = payload.commit_message.strip()
     worker_payload["open_pr"] = bool(payload.open_pr)
-    if payload.pr_title:
-        worker_payload["pr_title"] = payload.pr_title.strip()
-    if payload.pr_body:
-        worker_payload["pr_body"] = payload.pr_body.strip()
+    worker_payload["pr_title"] = (payload.pr_title.strip() if payload.pr_title else _default_pr_title(project, slug))
+    worker_payload["pr_body"] = (
+        payload.pr_body.strip() if payload.pr_body else _default_pr_body(project, slug, idempotency_key)
+    )
 
     row = enqueue_git_outbox_task(
         db,

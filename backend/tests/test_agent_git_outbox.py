@@ -111,6 +111,8 @@ def test_agent_can_enqueue_and_list_project_git_tasks(_client: TestClient, _db: 
     assert task["requested_by_agent_num"] is not None
     assert task["payload"]["slug"] == "aurora-notes"
     assert task["payload"]["open_pr"] is False
+    assert isinstance(task["payload"]["pr_title"], str)
+    assert "Checklist" in str(task["payload"]["pr_body"])
 
     listed = _client.get(
         f"/api/v1/agent/projects/{project_num}/git-outbox",
@@ -127,3 +129,42 @@ def test_agent_can_enqueue_and_list_project_git_tasks(_client: TestClient, _db: 
     )
     assert blocked.status_code == 403
     assert "project_access_denied" in blocked.text
+
+
+def test_agent_git_outbox_defaults_open_pr_true(_client: TestClient, _db: sessionmaker[Session]) -> None:
+    owner_key = _register_agent(_client, name="Owner Two")
+    with _db() as db:
+        owner = db.query(Agent).filter(Agent.agent_id == owner_key.split(".")[0]).first()
+        assert owner is not None
+        db.add(
+            Project(
+                project_id="prj_git_2",
+                slug="git-2",
+                name="Nova Index",
+                description_md=None,
+                status=ProjectStatus.active,
+                proposal_id=None,
+                origin_proposal_id=None,
+                originator_agent_id=owner.id,
+                discussion_thread_id=None,
+                treasury_wallet_address=None,
+                treasury_address=None,
+                revenue_wallet_address=None,
+                revenue_address=None,
+                monthly_budget_micro_usdc=None,
+                created_by_agent_id=owner.id,
+                approved_at=None,
+            )
+        )
+        db.commit()
+
+    enqueue = _client.post(
+        "/api/v1/agent/projects/prj_git_2/git-outbox/surface-commit",
+        headers={"Content-Type": "application/json", "X-API-Key": owner_key},
+        json={"slug": "nova-dashboard"},
+    )
+    assert enqueue.status_code == 200
+    payload = enqueue.json()["data"]["payload"]
+    assert payload["open_pr"] is True
+    assert "Nova Index" in str(payload["pr_title"])
+    assert "Checklist" in str(payload["pr_body"])

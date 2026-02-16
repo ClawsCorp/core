@@ -20,6 +20,10 @@ function groupBySeverity(items: AlertItem[]): Record<string, AlertItem[]> {
   return out;
 }
 
+function pickByPrefix(items: AlertItem[], prefix: string): AlertItem[] {
+  return items.filter((item) => String(item.alert_type || "").startsWith(prefix));
+}
+
 export default function AutonomyPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -44,6 +48,39 @@ export default function AutonomyPage() {
 
   const items = useMemo(() => alerts?.items ?? [], [alerts]);
   const grouped = useMemo(() => groupBySeverity(items), [items]);
+  const gitAlerts = useMemo(() => pickByPrefix(items, "git_outbox_"), [items]);
+  const gitCriticalCount = useMemo(
+    () => gitAlerts.filter((item) => item.severity === "critical").length,
+    [gitAlerts],
+  );
+  const gitWarningCount = useMemo(
+    () => gitAlerts.filter((item) => item.severity === "warning").length,
+    [gitAlerts],
+  );
+  const gitPendingCount = useMemo(
+    () =>
+      gitAlerts.filter(
+        (item) =>
+          item.alert_type === "git_outbox_pending" ||
+          item.alert_type === "git_outbox_pending_stale" ||
+          item.alert_type === "git_outbox_processing" ||
+          item.alert_type === "git_outbox_processing_stale",
+      ).length,
+    [gitAlerts],
+  );
+  const gitFailedCount = useMemo(
+    () => gitAlerts.filter((item) => item.alert_type === "git_outbox_failed").length,
+    [gitAlerts],
+  );
+  const gitHealth = useMemo(() => {
+    if (gitCriticalCount > 0) {
+      return "critical";
+    }
+    if (gitWarningCount > 0) {
+      return "warning";
+    }
+    return "ok";
+  }, [gitCriticalCount, gitWarningCount]);
 
   return (
     <PageContainer title="Autonomy Dashboard">
@@ -69,6 +106,15 @@ export default function AutonomyPage() {
                 <Link href="/runbook">Runbook</Link>
               </li>
             </ul>
+          </DataCard>
+
+          <DataCard title="Git Automation Health">
+            <p>status: {gitHealth}</p>
+            <p>pending_or_processing: {gitPendingCount}</p>
+            <p>failed: {gitFailedCount}</p>
+            <p>warning: {gitWarningCount}</p>
+            <p>critical: {gitCriticalCount}</p>
+            {gitAlerts.length === 0 ? <p>No git_outbox alerts.</p> : null}
           </DataCard>
 
           {Object.entries(grouped)
