@@ -20,6 +20,12 @@ from src.services.project_revenue import is_reconciliation_fresh as is_revenue_f
 router = APIRouter(prefix="/api/v1", tags=["public-system"])
 
 
+def _as_aware_utc(dt: datetime | None) -> datetime | None:
+    if dt is None:
+        return None
+    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+
+
 @router.get(
     "/alerts",
     response_model=AlertsResponse,
@@ -62,7 +68,8 @@ def get_alerts(response: Response, db: Session = Depends(get_db)) -> AlertsRespo
             )
         )
     else:
-        age = int((now - cursor.updated_at).total_seconds())
+        cursor_updated_at = _as_aware_utc(cursor.updated_at) or now
+        age = int((now - cursor_updated_at).total_seconds())
         if age > int(settings.indexer_cursor_max_age_seconds):
             items.append(
                 AlertItem(
@@ -74,7 +81,7 @@ def get_alerts(response: Response, db: Session = Depends(get_db)) -> AlertsRespo
                     data={
                         "chain_id": int(cursor.chain_id),
                         "last_block_number": int(cursor.last_block_number),
-                        "updated_at": cursor.updated_at.isoformat(),
+                        "updated_at": cursor_updated_at.isoformat(),
                         "age_seconds": age,
                         "max_age_seconds": int(settings.indexer_cursor_max_age_seconds),
                     },
@@ -260,12 +267,23 @@ def get_alerts(response: Response, db: Session = Depends(get_db)) -> AlertsRespo
             if rep.blocked_reason == "balance_mismatch" and delta < 0:
                 amount = -delta
                 idem = f"deposit_profit:{month}:{amount}"
-                task = (
+                task_exact = (
                     db.query(TxOutbox)
                     .filter(TxOutbox.idempotency_key == idem)
                     .order_by(TxOutbox.id.desc())
                     .first()
                 )
+                # Fallback by month prefix to avoid false "missing" alerts when delta changes
+                # while a previous month-scoped deposit task is already pending/processing.
+                task_month = (
+                    db.query(TxOutbox)
+                    .filter(TxOutbox.idempotency_key.like(f"deposit_profit:{month}:%"))
+                    .order_by(TxOutbox.id.desc())
+                    .first()
+                )
+                task = task_exact or task_month
+                matched_exact_amount = task is not None and task.idempotency_key == idem
+
                 if task is None:
                     # In direct submit mode (TX_OUTBOX_ENABLED=false), absence of tx_outbox task is expected.
                     # Avoid false-positive "missing task" warning in this mode.
@@ -296,10 +314,13 @@ def get_alerts(response: Response, db: Session = Depends(get_db)) -> AlertsRespo
                                 "attempts": task.attempts,
                                 "locked_at": task.locked_at.isoformat() if task.locked_at else None,
                                 "locked_by": task.locked_by,
+                                "matched_exact_amount": matched_exact_amount,
+                                "expected_idempotency_key": idem,
                             },
                         )
                     )
                 elif task.status == "failed":
+                    task_updated_at = _as_aware_utc(task.updated_at) or now
                     items.append(
                         AlertItem(
                             alert_type="platform_profit_deposit_failed",
@@ -314,7 +335,9 @@ def get_alerts(response: Response, db: Session = Depends(get_db)) -> AlertsRespo
                                 "tx_hash": task.tx_hash,
                                 "attempts": task.attempts,
                                 "last_error_hint": task.last_error_hint,
-                                "updated_at": task.updated_at.isoformat(),
+                                "updated_at": task_updated_at.isoformat(),
+                                "matched_exact_amount": matched_exact_amount,
+                                "expected_idempotency_key": idem,
                             },
                         )
                     )
@@ -329,8 +352,10 @@ def get_alerts(response: Response, db: Session = Depends(get_db)) -> AlertsRespo
         .all()
     )
     for t in pending:
-        created_age = int((now - t.created_at).total_seconds())
-        processing_age = int((now - t.locked_at).total_seconds()) if t.locked_at else None
+        created_at = _as_aware_utc(t.created_at) or now
+        locked_at = _as_aware_utc(t.locked_at)
+        created_age = int((now - created_at).total_seconds())
+        processing_age = int((now - locked_at).total_seconds()) if locked_at else None
         if t.status == "pending":
             severity = "critical" if created_age > int(settings.tx_outbox_pending_max_age_seconds) else "warning"
             alert_type = "tx_outbox_pending_stale" if severity == "critical" else "tx_outbox_pending"
@@ -349,12 +374,12 @@ def get_alerts(response: Response, db: Session = Depends(get_db)) -> AlertsRespo
                     "task_type": t.task_type,
                     "attempts": t.attempts,
                     "locked_by": t.locked_by,
-                    "locked_at": t.locked_at.isoformat() if t.locked_at else None,
+                    "locked_at": locked_at.isoformat() if locked_at else None,
                     "age_seconds": created_age,
                     "processing_age_seconds": processing_age,
                     "tx_hash": t.tx_hash,
                     "last_error_hint": t.last_error_hint,
-                    "created_at": t.created_at.isoformat(),
+                    "created_at": created_at.isoformat(),
                 },
             )
         )
@@ -367,6 +392,7 @@ def get_alerts(response: Response, db: Session = Depends(get_db)) -> AlertsRespo
         .all()
     )
     for t in failed:
+        task_updated_at = _as_aware_utc(t.updated_at) or now
         items.append(
             AlertItem(
                 alert_type="tx_outbox_failed",
@@ -379,7 +405,7 @@ def get_alerts(response: Response, db: Session = Depends(get_db)) -> AlertsRespo
                     "attempts": t.attempts,
                     "tx_hash": t.tx_hash,
                     "last_error_hint": t.last_error_hint,
-                    "updated_at": t.updated_at.isoformat(),
+                    "updated_at": task_updated_at.isoformat(),
                 },
             )
         )
