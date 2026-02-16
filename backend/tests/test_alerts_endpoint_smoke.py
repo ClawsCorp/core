@@ -18,6 +18,7 @@ from src.core.database import Base, get_db
 from src.main import app
 
 import src.models  # noqa: F401
+from src.models.git_outbox import GitOutbox
 from src.models.reconciliation_report import ReconciliationReport
 from src.models.tx_outbox import TxOutbox
 
@@ -163,6 +164,79 @@ def test_alerts_do_not_report_missing_when_month_task_pending_with_amount_drift(
         alert_types = [str(x.get("alert_type")) for x in items if isinstance(x, dict)]
         assert "platform_profit_deposit_missing" not in alert_types
         assert "platform_profit_deposit_pending" in alert_types
+    finally:
+        app.dependency_overrides.clear()
+        get_settings.cache_clear()
+
+
+def test_alerts_include_git_outbox_stale_and_failed(monkeypatch) -> None:
+    monkeypatch.setenv("GIT_OUTBOX_PENDING_MAX_AGE_SECONDS", "1")
+    monkeypatch.setenv("GIT_OUTBOX_PROCESSING_MAX_AGE_SECONDS", "1")
+    get_settings.cache_clear()
+
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+
+    with session_local() as db:
+        db.add(
+            GitOutbox(
+                task_id="gto_pending_old",
+                idempotency_key="git:pending:old",
+                task_type="create_app_surface_commit",
+                payload_json='{"slug":"sunrise-ledger"}',
+                result_json=None,
+                branch_name=None,
+                commit_sha=None,
+                status="pending",
+                attempts=1,
+                last_error_hint=None,
+                locked_at=None,
+                locked_by=None,
+                created_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
+                updated_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
+            )
+        )
+        db.add(
+            GitOutbox(
+                task_id="gto_failed_1",
+                idempotency_key="git:failed:1",
+                task_type="create_app_surface_commit",
+                payload_json='{"slug":"aurora-notes"}',
+                result_json='{"stage":"failed"}',
+                branch_name=None,
+                commit_sha=None,
+                status="failed",
+                attempts=3,
+                last_error_hint="gh not authenticated",
+                locked_at=None,
+                locked_by=None,
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc),
+            )
+        )
+        db.commit()
+
+    def _override_get_db():
+        db: Session = session_local()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = _override_get_db
+    client = TestClient(app, raise_server_exceptions=False)
+    try:
+        resp = client.get("/api/v1/alerts")
+        assert resp.status_code == 200
+        items = resp.json()["data"]["items"]
+        alert_types = [str(x.get("alert_type")) for x in items if isinstance(x, dict)]
+        assert "git_outbox_pending_stale" in alert_types
+        assert "git_outbox_failed" in alert_types
     finally:
         app.dependency_overrides.clear()
         get_settings.cache_clear()

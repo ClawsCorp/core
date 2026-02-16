@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from src.core.config import get_settings
 from src.core.database import get_db
 from src.models.indexer_cursor import IndexerCursor
+from src.models.git_outbox import GitOutbox
 from src.models.project import Project, ProjectStatus
 from src.models.project_capital_reconciliation_report import ProjectCapitalReconciliationReport
 from src.models.project_revenue_reconciliation_report import ProjectRevenueReconciliationReport
@@ -405,6 +406,75 @@ def get_alerts(response: Response, db: Session = Depends(get_db)) -> AlertsRespo
                     "attempts": t.attempts,
                     "tx_hash": t.tx_hash,
                     "last_error_hint": t.last_error_hint,
+                    "updated_at": task_updated_at.isoformat(),
+                },
+            )
+        )
+
+    # Git outbox tasks (repo automation visibility).
+    git_pending = (
+        db.query(GitOutbox)
+        .filter(GitOutbox.status.in_(["pending", "processing"]))
+        .order_by(GitOutbox.created_at.asc(), GitOutbox.id.asc())
+        .limit(50)
+        .all()
+    )
+    for t in git_pending:
+        created_at = _as_aware_utc(t.created_at) or now
+        locked_at = _as_aware_utc(t.locked_at)
+        created_age = int((now - created_at).total_seconds())
+        processing_age = int((now - locked_at).total_seconds()) if locked_at else None
+        if t.status == "pending":
+            severity = "critical" if created_age > int(settings.git_outbox_pending_max_age_seconds) else "warning"
+            alert_type = "git_outbox_pending_stale" if severity == "critical" else "git_outbox_pending"
+        else:
+            severity = "critical" if (processing_age or 0) > int(settings.git_outbox_processing_max_age_seconds) else "warning"
+            alert_type = "git_outbox_processing_stale" if severity == "critical" else "git_outbox_processing"
+
+        items.append(
+            AlertItem(
+                alert_type=alert_type,
+                severity=severity,
+                message=f"Git outbox task is {t.status}.",
+                ref=t.task_id,
+                observed_at=now,
+                data={
+                    "task_type": t.task_type,
+                    "attempts": t.attempts,
+                    "locked_by": t.locked_by,
+                    "locked_at": locked_at.isoformat() if locked_at else None,
+                    "age_seconds": created_age,
+                    "processing_age_seconds": processing_age,
+                    "last_error_hint": t.last_error_hint,
+                    "project_num": t.project_id,
+                    "requested_by_agent_num": t.requested_by_agent_id,
+                    "created_at": created_at.isoformat(),
+                },
+            )
+        )
+
+    git_failed = (
+        db.query(GitOutbox)
+        .filter(GitOutbox.status == "failed")
+        .order_by(GitOutbox.updated_at.desc(), GitOutbox.id.desc())
+        .limit(25)
+        .all()
+    )
+    for t in git_failed:
+        task_updated_at = _as_aware_utc(t.updated_at) or now
+        items.append(
+            AlertItem(
+                alert_type="git_outbox_failed",
+                severity="critical",
+                message="Git outbox task failed.",
+                ref=t.task_id,
+                observed_at=now,
+                data={
+                    "task_type": t.task_type,
+                    "attempts": t.attempts,
+                    "last_error_hint": t.last_error_hint,
+                    "project_num": t.project_id,
+                    "requested_by_agent_num": t.requested_by_agent_id,
                     "updated_at": task_updated_at.isoformat(),
                 },
             )
