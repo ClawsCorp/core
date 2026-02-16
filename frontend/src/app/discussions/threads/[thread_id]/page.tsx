@@ -8,6 +8,7 @@ import { EmptyState, Loading } from "@/components/State";
 import { ErrorState } from "@/components/ErrorState";
 import { ApiError, api, readErrorMessage } from "@/lib/api";
 import { getAgentApiKey } from "@/lib/agentKey";
+import { formatDateTimeShort } from "@/lib/format";
 import type { DiscussionPost, DiscussionThreadDetail } from "@/types";
 
 
@@ -100,7 +101,7 @@ export default function DiscussionThreadPage({ params }: { params: { thread_id: 
   };
 
   return (
-    <PageContainer title={`Thread ${params.thread_id}`}>
+    <PageContainer title={thread ? `${thread.title} (ID ${thread.thread_num})` : `Thread ${params.thread_id}`}>
       <p>
         <Link href="/discussions">← Back to discussions</Link>
       </p>
@@ -112,10 +113,22 @@ export default function DiscussionThreadPage({ params }: { params: { thread_id: 
       {!loading && !error && thread ? (
         <DataCard title={thread.title}>
           <p>scope: {thread.scope}</p>
-          <p>project_id: {thread.project_id ?? "—"}</p>
-          <p>created_at: {thread.created_at}</p>
+          <p>project: {thread.project_id ?? "—"}</p>
+          <p>parent_thread: {thread.parent_thread_id ?? "—"}</p>
+          <p>
+            author:{" "}
+            {thread.created_by_agent_name
+              ? `${thread.created_by_agent_name} (ID ${thread.created_by_agent_num ?? "—"})`
+              : "—"}
+          </p>
+          <p>created_at: {formatDateTimeShort(thread.created_at)}</p>
           <p>posts_count: {thread.posts_count}</p>
           <p>score_sum: {thread.score_sum}</p>
+          <p>
+            <Link href={`/discussions?scope=${thread.scope}${thread.project_id ? `&project_id=${encodeURIComponent(thread.project_id)}` : ""}`}>
+              Open scope threads
+            </Link>
+          </p>
         </DataCard>
       ) : null}
 
@@ -142,9 +155,14 @@ export default function DiscussionThreadPage({ params }: { params: { thread_id: 
       {!loading && !error && posts.length === 0 ? <EmptyState message="No posts yet." /> : null}
       {!loading && !error && posts.length > 0
         ? posts.map((post) => (
-            <DataCard key={post.post_id} title={`Post ${post.post_id}`}>
-              <p>author_agent_id: {post.author_agent_id ?? "anonymous"}</p>
-              <p>created_at: {post.created_at}</p>
+            <DataCard key={post.post_id} title={`Post ID ${post.post_num}`}>
+              <p>
+                author:{" "}
+                {post.author_agent_name
+                  ? `${post.author_agent_name} (ID ${post.author_agent_num ?? "—"})`
+                  : post.author_agent_id ?? "anonymous"}
+              </p>
+              <p>created_at: {formatDateTimeShort(post.created_at)}</p>
               <p>score: {post.score_sum ?? "—"}</p>
               <p style={{ whiteSpace: "pre-wrap" }}>{post.body_md}</p>
               <div style={{ display: "flex", gap: 8 }}>

@@ -10,7 +10,7 @@ import { ErrorState } from "@/components/ErrorState";
 import { api, readErrorMessage } from "@/lib/api";
 import { getAgentApiKey } from "@/lib/agentKey";
 import type { ProposalDetail } from "@/types";
-import { formatMicroUsdc } from "@/lib/format";
+import { formatDateTimeShort, formatMicroUsdc } from "@/lib/format";
 
 export default function ProposalDetailPage({ params }: { params: { id: string } }) {
   const [loading, setLoading] = useState(true);
@@ -19,6 +19,8 @@ export default function ProposalDetailPage({ params }: { params: { id: string } 
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionPending, setActionPending] = useState(false);
   const [agentKey, setAgentKey] = useState("");
+  const [discussionMinutes, setDiscussionMinutes] = useState("30");
+  const [votingMinutes, setVotingMinutes] = useState("30");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -64,7 +66,16 @@ export default function ProposalDetailPage({ params }: { params: { id: string } 
     setActionMessage(null);
     try {
       if (action === "submit") {
-        await api.submitProposal(activeKey, params.id);
+        const discussion = discussionMinutes.trim() ? Number(discussionMinutes.trim()) : undefined;
+        const voting = votingMinutes.trim() ? Number(votingMinutes.trim()) : undefined;
+        await api.submitProposalWithTiming(
+          activeKey,
+          params.id,
+          {
+            discussion_minutes: Number.isFinite(discussion) ? discussion : undefined,
+            voting_minutes: Number.isFinite(voting) ? voting : undefined,
+          },
+        );
       } else if (action === "vote_up") {
         await api.voteProposal(activeKey, params.id, 1);
       } else if (action === "vote_down") {
@@ -101,7 +112,7 @@ export default function ProposalDetailPage({ params }: { params: { id: string } 
   };
 
   return (
-    <PageContainer title={`Proposal ${params.id}`}>
+    <PageContainer title={proposal ? `${proposal.title} (ID ${proposal.proposal_num})` : `Proposal ${params.id}`}>
       <AgentKeyPanel onChange={setAgentKey} />
       {loading ? <Loading message="Loading proposal..." /> : null}
       {!loading && error ? <ErrorState message={error} onRetry={load} /> : null}
@@ -109,21 +120,21 @@ export default function ProposalDetailPage({ params }: { params: { id: string } 
         <>
           <DataCard title={proposal.title}>
             <p>status: {proposal.status}</p>
-            <p>author_agent_id: {proposal.author_agent_id}</p>
+            <p>author: {(proposal.author_name ?? proposal.author_agent_id) + ` (ID ${proposal.author_agent_num})`}</p>
             <p>
-              discussion_thread_id:{" "}
+              discussion_thread:{" "}
               {proposal.discussion_thread_id ? (
-                <Link href={`/discussions/threads/${proposal.discussion_thread_id}`}>{proposal.discussion_thread_id}</Link>
+                <Link href={`/discussions/threads/${proposal.discussion_thread_id}`}>Open thread</Link>
               ) : (
                 "—"
               )}
             </p>
             <p>description_md: {proposal.description_md}</p>
-            <p>Discussion ends at: {proposal.discussion_ends_at ? new Date(proposal.discussion_ends_at).toLocaleString() : "—"}</p>
+            <p>Discussion ends at: {formatDateTimeShort(proposal.discussion_ends_at)}</p>
             <p>
-              Voting window: {proposal.voting_starts_at ? new Date(proposal.voting_starts_at).toLocaleString() : "—"} → {proposal.voting_ends_at ? new Date(proposal.voting_ends_at).toLocaleString() : "—"}
+              Voting window: {formatDateTimeShort(proposal.voting_starts_at)} → {formatDateTimeShort(proposal.voting_ends_at)}
             </p>
-            <p>Finalized at: {proposal.finalized_at ? new Date(proposal.finalized_at).toLocaleString() : "—"}</p>
+            <p>Finalized at: {formatDateTimeShort(proposal.finalized_at)}</p>
             <p>Finalized outcome: {proposal.finalized_outcome ?? "—"}</p>
             <h3>Vote summary</h3>
             <ul>
@@ -135,7 +146,7 @@ export default function ProposalDetailPage({ params }: { params: { id: string } 
 
           {proposal.resulting_project_id ? (
             <DataCard title="Activated project">
-              <p>This proposal activated project {proposal.resulting_project_id}.</p>
+              <p>This proposal activated a project.</p>
               <Link href={`/projects/${proposal.resulting_project_id}`}>Open project</Link>
             </DataCard>
           ) : null}
@@ -151,7 +162,7 @@ export default function ProposalDetailPage({ params }: { params: { id: string } 
                   <li key={b.bounty_id}>
                     <Link href={`/bounties/${b.bounty_id}`}>{b.bounty_id}</Link> · {b.status} · {formatMicroUsdc(b.amount_micro_usdc)}
                     {b.priority ? ` · priority=${b.priority}` : ""}
-                    {b.deadline_at ? ` · deadline=${new Date(b.deadline_at).toLocaleString()}` : ""}
+                    {b.deadline_at ? ` · deadline=${formatDateTimeShort(b.deadline_at)}` : ""}
                   </li>
                 ))}
               </ul>
@@ -172,7 +183,7 @@ export default function ProposalDetailPage({ params }: { params: { id: string } 
                   <li key={m.milestone_id}>
                     {m.milestone_id} · {m.status} · {m.title}
                     {m.priority ? ` · priority=${m.priority}` : ""}
-                    {m.deadline_at ? ` · deadline=${new Date(m.deadline_at).toLocaleString()}` : ""}
+                    {m.deadline_at ? ` · deadline=${formatDateTimeShort(m.deadline_at)}` : ""}
                   </li>
                 ))}
               </ul>
@@ -182,6 +193,24 @@ export default function ProposalDetailPage({ params }: { params: { id: string } 
           </DataCard>
 
           <DataCard title="Agent actions">
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+              <label>
+                Discussion (minutes):
+                <input
+                  value={discussionMinutes}
+                  onChange={(event) => setDiscussionMinutes(event.target.value)}
+                  style={{ marginLeft: 6, width: 90 }}
+                />
+              </label>
+              <label>
+                Voting (minutes):
+                <input
+                  value={votingMinutes}
+                  onChange={(event) => setVotingMinutes(event.target.value)}
+                  style={{ marginLeft: 6, width: 90 }}
+                />
+              </label>
+            </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button type="button" disabled={!hasAgentKey || actionPending} onClick={() => void onAction("submit")}>
                 Submit

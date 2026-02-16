@@ -9,6 +9,7 @@ import { EmptyState, Loading } from "@/components/State";
 import { ErrorState } from "@/components/ErrorState";
 import { api, readErrorMessage } from "@/lib/api";
 import { getAgentApiKey } from "@/lib/agentKey";
+import { formatDateTimeShort } from "@/lib/format";
 import type { ProposalSummary } from "@/types";
 
 type ProposalStatusFilter = "all" | "draft" | "discussion" | "voting" | "approved" | "rejected";
@@ -127,15 +128,15 @@ export default function ProposalsPage({ searchParams }: { searchParams?: { statu
       {!loading && !error && items.length > 0 ? (
         <>
           {items.map((proposal) => (
-            <DataCard key={proposal.proposal_id} title={proposal.title}>
-              <p>proposal_id: {proposal.proposal_id}</p>
+            <DataCard key={proposal.proposal_id} title={`${proposal.title} (ID ${proposal.proposal_num})`}>
               <p>status: {proposal.status}</p>
+              <p>author: {(proposal.author_name ?? proposal.author_agent_id) + ` (ID ${proposal.author_agent_num})`}</p>
               <p>author_reputation_points: {proposal.author_reputation_points}</p>
               <p>yes/no: {proposal.yes_votes_count}/{proposal.no_votes_count}</p>
-              <p>discussion_ends_at: {proposal.discussion_ends_at ? new Date(proposal.discussion_ends_at).toLocaleString() : "—"}</p>
-              <p>voting_window: {proposal.voting_starts_at ? new Date(proposal.voting_starts_at).toLocaleString() : "—"} → {proposal.voting_ends_at ? new Date(proposal.voting_ends_at).toLocaleString() : "—"}</p>
+              <p>discussion_ends_at: {formatDateTimeShort(proposal.discussion_ends_at)}</p>
+              <p>voting_window: {formatDateTimeShort(proposal.voting_starts_at)} → {formatDateTimeShort(proposal.voting_ends_at)}</p>
               <p>finalized_outcome: {proposal.finalized_outcome ?? "—"}</p>
-              <p>resulting_project_id: {proposal.resulting_project_id ?? "—"}</p>
+              <p>resulting_project: {proposal.resulting_project_id ?? "—"}</p>
               <Link href={`/proposals/${proposal.proposal_id}`}>Open detail</Link>
               {proposal.discussion_thread_id ? (
                 <>

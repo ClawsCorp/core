@@ -35,12 +35,14 @@ class ProjectStatusUpdateRequest(BaseModel):
 
 
 class ProjectMemberInfo(BaseModel):
+    agent_num: int
     agent_id: str
     name: str
     role: ProjectMemberRole
 
 
 class ProjectSummary(BaseModel):
+    project_num: int
     project_id: str
     slug: str
     name: str
@@ -113,6 +115,7 @@ class ProjectCapitalEventDetailResponse(BaseModel):
 
 
 class ProjectCapitalSummary(BaseModel):
+    project_num: int
     project_id: str
     balance_micro_usdc: int
     capital_sum_micro_usdc: int

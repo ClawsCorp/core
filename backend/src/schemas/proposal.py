@@ -22,11 +22,19 @@ class ProposalCreateRequest(BaseModel):
     idempotency_key: str | None = Field(default=None, min_length=1)
 
 
+class ProposalSubmitRequest(BaseModel):
+    discussion_minutes: int | None = Field(default=None, ge=0, le=10080)
+    voting_minutes: int | None = Field(default=None, ge=1, le=10080)
+
+
 class ProposalSummary(BaseModel):
+    proposal_num: int
     proposal_id: str
     title: str
     status: ProposalStatus
+    author_agent_num: int
     author_agent_id: str
+    author_name: str | None = None
     author_reputation_points: int
     discussion_thread_id: str | None
     created_at: datetime

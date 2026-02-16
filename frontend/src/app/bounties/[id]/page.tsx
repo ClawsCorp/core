@@ -9,7 +9,7 @@ import { Loading } from "@/components/State";
 import { ErrorState } from "@/components/ErrorState";
 import { api, readErrorMessage } from "@/lib/api";
 import { getAgentApiKey } from "@/lib/agentKey";
-import { formatMicroUsdc } from "@/lib/format";
+import { formatDateTimeShort, formatMicroUsdc } from "@/lib/format";
 import type { BountyPublic, ProjectCapitalReconciliationReport, ProjectCapitalSummary } from "@/types";
 
 export default function BountyDetailPage({ params }: { params: { id: string } }) {
@@ -173,22 +173,27 @@ export default function BountyDetailPage({ params }: { params: { id: string } })
       : "";
 
   return (
-    <PageContainer title={`Bounty ${params.id}`}>
+    <PageContainer title={bounty ? `${bounty.title} (ID ${bounty.bounty_num})` : `Bounty ${params.id}`}>
       <AgentKeyPanel />
       {loading ? <Loading message="Loading bounty..." /> : null}
       {!loading && error ? <ErrorState message={error} onRetry={load} /> : null}
       {!loading && !error && bounty ? (
         <>
           <DataCard title={bounty.title}>
-            <p>project_id: {bounty.project_id ?? "—"}</p>
+            <p>project: {bounty.project_id ?? "—"}</p>
             <p>origin_proposal_id: {bounty.origin_proposal_id ?? "—"}</p>
             <p>origin_milestone_id: {bounty.origin_milestone_id ?? "—"}</p>
             <p>status: {bounty.status}</p>
             <p>funding_source: {bounty.funding_source}</p>
             <p>amount: {formatMicroUsdc(bounty.amount_micro_usdc)}</p>
             <p>priority: {bounty.priority ?? "—"}</p>
-            <p>deadline_at: {bounty.deadline_at ? new Date(bounty.deadline_at).toLocaleString() : "—"}</p>
-            <p>claimant_agent_id: {bounty.claimant_agent_id ?? "—"}</p>
+            <p>deadline_at: {formatDateTimeShort(bounty.deadline_at)}</p>
+            <p>
+              claimant:{" "}
+              {bounty.claimant_agent_name
+                ? `${bounty.claimant_agent_name} (ID ${bounty.claimant_agent_num ?? "—"})`
+                : "—"}
+            </p>
             <p>pr_url: {bounty.pr_url ?? "—"}</p>
             <p>merge_sha: {bounty.merge_sha ?? "—"}</p>
             <p>paid_tx_hash: {bounty.paid_tx_hash ?? "—"}</p>
@@ -281,7 +286,7 @@ export default function BountyDetailPage({ params }: { params: { id: string } })
           <DataCard title="Project capital gate (for payouts)">
             {bounty.project_id ? (
               <>
-                <p>project_id: {bounty.project_id}</p>
+                <p>project: {bounty.project_id}</p>
                 <p>capital_balance: {formatMicroUsdc(projectCapital?.balance_micro_usdc)}</p>
                 <p>
                   capital_sufficient:{" "}
@@ -293,7 +298,7 @@ export default function BountyDetailPage({ params }: { params: { id: string } })
                     <p>ready: {capitalReconciliation.ready ? "yes" : "no"}</p>
                     <p>blocked_reason: {capitalReconciliation.blocked_reason ?? "—"}</p>
                     <p>delta_micro_usdc: {formatMicroUsdc(capitalReconciliation.delta_micro_usdc)}</p>
-                    <p>computed_at: {new Date(capitalReconciliation.computed_at).toLocaleString()}</p>
+                    <p>computed_at: {formatDateTimeShort(capitalReconciliation.computed_at)}</p>
                     <p>
                       max_age_seconds:{" "}
                       {reconciliationMaxAgeSeconds !== null ? reconciliationMaxAgeSeconds : "unknown"}{" "}

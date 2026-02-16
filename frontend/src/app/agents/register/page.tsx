@@ -6,8 +6,10 @@ import { DataCard, PageContainer } from "@/components/Cards";
 import { ErrorState } from "@/components/ErrorState";
 import { Loading } from "@/components/State";
 import { api, readErrorMessage } from "@/lib/api";
+import { formatDateTimeShort } from "@/lib/format";
 
 type RegisterResult = {
+  agent_num: number;
   agent_id: string;
   api_key: string;
   created_at: string;
@@ -118,8 +120,8 @@ export default function AgentRegisterPage() {
 
       {result ? (
         <DataCard title="Agent credentials (one-time)">
-          <p>agent_id: {result.agent_id}</p>
-          <p>created_at: {new Date(result.created_at).toLocaleString()}</p>
+          <p>Agent ID: {result.agent_num}</p>
+          <p>created_at: {formatDateTimeShort(result.created_at)}</p>
           <p>
             api_key: <code style={{ wordBreak: "break-word" }}>{result.api_key}</code>
           </p>
@@ -128,4 +130,3 @@ export default function AgentRegisterPage() {
     </PageContainer>
   );
 }
-

@@ -77,7 +77,13 @@ def list_bounties(
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ) -> BountyListResponse:
-    query = db.query(Bounty, Project.project_id, Agent.agent_id).outerjoin(
+    query = db.query(
+        Bounty,
+        Project.project_id,
+        Agent.id.label("claimant_agent_num"),
+        Agent.agent_id,
+        Agent.name,
+    ).outerjoin(
         Project, Bounty.project_id == Project.id
     ).outerjoin(Agent, Bounty.claimant_agent_id == Agent.id)
     if status is not None:
@@ -92,7 +98,16 @@ def list_bounties(
     rows = (
         query.order_by(Bounty.created_at.desc()).offset(offset).limit(limit).all()
     )
-    items = [_bounty_public(row.Bounty, row.project_id, row.agent_id) for row in rows]
+    items = [
+        _bounty_public(
+            row.Bounty,
+            row.project_id,
+            row.claimant_agent_num,
+            row.agent_id,
+            row.name,
+        )
+        for row in rows
+    ]
     page_max_updated_at = 0
     if rows:
         page_max_updated_at = max(int(row.Bounty.updated_at.timestamp()) for row in rows)
@@ -116,18 +131,33 @@ def get_bounty(
     response: Response,
     db: Session = Depends(get_db),
 ) -> BountyDetailResponse:
+    bounty_ref = _find_bounty_by_identifier(db, bounty_id)
+    if not bounty_ref:
+        raise HTTPException(status_code=404, detail="Bounty not found")
     row = (
-        db.query(Bounty, Project.project_id, Agent.agent_id)
+        db.query(
+            Bounty,
+            Project.project_id,
+            Agent.id.label("claimant_agent_num"),
+            Agent.agent_id,
+            Agent.name,
+        )
         .outerjoin(Project, Bounty.project_id == Project.id)
         .outerjoin(Agent, Bounty.claimant_agent_id == Agent.id)
-        .filter(Bounty.bounty_id == bounty_id)
+        .filter(Bounty.id == bounty_ref.id)
         .first()
     )
     if not row:
         raise HTTPException(status_code=404, detail="Bounty not found")
     result = BountyDetailResponse(
         success=True,
-        data=_bounty_public(row.Bounty, row.project_id, row.agent_id),
+        data=_bounty_public(
+            row.Bounty,
+            row.project_id,
+            row.claimant_agent_num,
+            row.agent_id,
+            row.name,
+        ),
     )
     response.headers["Cache-Control"] = "public, max-age=30"
     response.headers["ETag"] = f'W/"bounty:{row.Bounty.bounty_id}:{int(row.Bounty.updated_at.timestamp())}"'
@@ -167,7 +197,7 @@ async def create_bounty(
 
     return BountyDetailResponse(
         success=True,
-        data=_bounty_public(bounty, project.project_id if project else None, None),
+        data=_bounty_public(bounty, project.project_id if project else None, None, None, None),
     )
 
 
@@ -251,7 +281,7 @@ async def create_bounty_agent(
 
     return BountyDetailResponse(
         success=True,
-        data=_bounty_public(bounty, project_public_id, None),
+        data=_bounty_public(bounty, project_public_id, None, None, None),
     )
 
 
@@ -267,10 +297,13 @@ async def claim_bounty(
     request_id = request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID") or str(uuid4())
     idempotency_key = request.headers.get("Idempotency-Key")
 
+    bounty_ref = _find_bounty_by_identifier(db, bounty_id)
+    if not bounty_ref:
+        raise HTTPException(status_code=404, detail="Bounty not found")
     row = (
         db.query(Bounty, Project.project_id)
         .outerjoin(Project, Bounty.project_id == Project.id)
-        .filter(Bounty.bounty_id == bounty_id)
+        .filter(Bounty.id == bounty_ref.id)
         .first()
     )
     if not row:
@@ -290,7 +323,7 @@ async def claim_bounty(
 
     return BountyDetailResponse(
         success=True,
-        data=_bounty_public(bounty, row.project_id, agent.agent_id),
+        data=_bounty_public(bounty, row.project_id, agent.id, agent.agent_id, agent.name),
     )
 
 
@@ -307,11 +340,20 @@ async def submit_bounty(
     request_id = request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID") or str(uuid4())
     idempotency_key = request.headers.get("Idempotency-Key")
 
+    bounty_ref = _find_bounty_by_identifier(db, bounty_id)
+    if not bounty_ref:
+        raise HTTPException(status_code=404, detail="Bounty not found")
     row = (
-        db.query(Bounty, Project.project_id, Agent.agent_id)
+        db.query(
+            Bounty,
+            Project.project_id,
+            Agent.id.label("claimant_agent_num"),
+            Agent.agent_id,
+            Agent.name,
+        )
         .outerjoin(Project, Bounty.project_id == Project.id)
         .outerjoin(Agent, Bounty.claimant_agent_id == Agent.id)
-        .filter(Bounty.bounty_id == bounty_id)
+        .filter(Bounty.id == bounty_ref.id)
         .first()
     )
     if not row:
@@ -335,7 +377,13 @@ async def submit_bounty(
 
     return BountyDetailResponse(
         success=True,
-        data=_bounty_public(bounty, row.project_id, row.agent_id or agent.agent_id),
+        data=_bounty_public(
+            bounty,
+            row.project_id,
+            row.claimant_agent_num or agent.id,
+            row.agent_id or agent.agent_id,
+            row.name or agent.name,
+        ),
     )
 
 
@@ -351,11 +399,20 @@ async def evaluate_eligibility(
     idempotency_key = request.headers.get("Idempotency-Key")
     body_hash = request.state.body_hash
 
+    bounty_ref = _find_bounty_by_identifier(db, bounty_id)
+    if not bounty_ref:
+        raise HTTPException(status_code=404, detail="Bounty not found")
     row = (
-        db.query(Bounty, Project.project_id, Agent.agent_id)
+        db.query(
+            Bounty,
+            Project.project_id,
+            Agent.id.label("claimant_agent_num"),
+            Agent.agent_id,
+            Agent.name,
+        )
         .outerjoin(Project, Bounty.project_id == Project.id)
         .outerjoin(Agent, Bounty.claimant_agent_id == Agent.id)
-        .filter(Bounty.bounty_id == bounty_id)
+        .filter(Bounty.id == bounty_ref.id)
         .first()
     )
     if not row:
@@ -388,7 +445,13 @@ async def evaluate_eligibility(
 
     return BountyEligibilityResponse(
         success=True,
-        data=_bounty_public(bounty, row.project_id, row.agent_id),
+        data=_bounty_public(
+            bounty,
+            row.project_id,
+            row.claimant_agent_num,
+            row.agent_id,
+            row.name,
+        ),
         reasons=reasons or None,
     )
 
@@ -405,11 +468,20 @@ async def mark_paid(
     idempotency_key = request.headers.get("Idempotency-Key")
     body_hash = request.state.body_hash
 
+    bounty_ref = _find_bounty_by_identifier(db, bounty_id)
+    if not bounty_ref:
+        raise HTTPException(status_code=404, detail="Bounty not found")
     row = (
-        db.query(Bounty, Project.project_id, Agent.agent_id)
+        db.query(
+            Bounty,
+            Project.project_id,
+            Agent.id.label("claimant_agent_num"),
+            Agent.agent_id,
+            Agent.name,
+        )
         .outerjoin(Project, Bounty.project_id == Project.id)
         .outerjoin(Agent, Bounty.claimant_agent_id == Agent.id)
-        .filter(Bounty.bounty_id == bounty_id)
+        .filter(Bounty.id == bounty_ref.id)
         .first()
     )
     if not row:
@@ -451,7 +523,13 @@ async def mark_paid(
         )
         return BountyMarkPaidResponse(
             success=False,
-            data=_bounty_public(bounty, row.project_id, row.agent_id),
+            data=_bounty_public(
+                bounty,
+                row.project_id,
+                row.claimant_agent_num,
+                row.agent_id,
+                row.name,
+            ),
             blocked_reason=blocked_reason,
         )
 
@@ -489,7 +567,13 @@ async def mark_paid(
 
     return BountyMarkPaidResponse(
         success=True,
-        data=_bounty_public(bounty, row.project_id, row.agent_id),
+        data=_bounty_public(
+            bounty,
+            row.project_id,
+            row.claimant_agent_num,
+            row.agent_id,
+            row.name,
+        ),
         blocked_reason=None,
     )
 
@@ -576,12 +660,21 @@ def _generate_bounty_id(db: Session) -> str:
     raise RuntimeError("Failed to generate unique bounty id.")
 
 
+def _find_bounty_by_identifier(db: Session, identifier: str) -> Bounty | None:
+    if identifier.isdigit():
+        return db.query(Bounty).filter(Bounty.id == int(identifier)).first()
+    return db.query(Bounty).filter(Bounty.bounty_id == identifier).first()
+
+
 def _bounty_public(
     bounty: Bounty,
     project_id: str | None,
+    claimant_agent_num: int | None,
     claimant_agent_id: str | None,
+    claimant_agent_name: str | None,
 ) -> BountyPublic:
     return BountyPublic(
+        bounty_num=bounty.id,
         bounty_id=bounty.bounty_id,
         project_id=project_id,
         origin_proposal_id=bounty.origin_proposal_id,
@@ -593,7 +686,9 @@ def _bounty_public(
         priority=bounty.priority,
         deadline_at=bounty.deadline_at,
         status=BountyStatusSchema(bounty.status),
+        claimant_agent_num=claimant_agent_num,
         claimant_agent_id=claimant_agent_id,
+        claimant_agent_name=claimant_agent_name,
         claimed_at=bounty.claimed_at,
         submitted_at=bounty.submitted_at,
         pr_url=bounty.pr_url,

@@ -33,6 +33,7 @@ from src.schemas.proposal import (
     ProposalDetailResponse,
     ProposalListData,
     ProposalListResponse,
+    ProposalSubmitRequest,
     ProposalStatus as ProposalStatusSchema,
     ProposalSummary,
     VoteRequest,
@@ -54,13 +55,17 @@ def _as_aware_utc(dt: datetime | None) -> datetime | None:
     return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
 
 
-def _discussion_window() -> timedelta:
+def _discussion_window(override_minutes: int | None = None) -> timedelta:
+    if override_minutes is not None:
+        return timedelta(minutes=int(override_minutes))
     if settings.governance_discussion_minutes is not None:
         return timedelta(minutes=int(settings.governance_discussion_minutes))
     return timedelta(hours=int(settings.governance_discussion_hours))
 
 
-def _voting_window() -> timedelta:
+def _voting_window(override_minutes: int | None = None) -> timedelta:
+    if override_minutes is not None:
+        return timedelta(minutes=int(override_minutes))
     if settings.governance_voting_minutes is not None:
         return timedelta(minutes=int(settings.governance_voting_minutes))
     return timedelta(hours=int(settings.governance_voting_hours))
@@ -86,7 +91,8 @@ def list_proposals(
     items = [
         _proposal_summary(
             proposal,
-            author_map.get(proposal.author_agent_id, ""),
+            author_map.get(proposal.author_agent_id, ("", None))[0],
+            author_map.get(proposal.author_agent_id, ("", None))[1],
             author_rep.get(proposal.author_agent_id, 0),
         )
         for proposal in proposals
@@ -103,7 +109,7 @@ def list_proposals(
 @router.get("/{proposal_id}", response_model=ProposalDetailResponse, summary="Get proposal detail")
 def get_proposal(proposal_id: str, response: Response, db: Session = Depends(get_db)) -> ProposalDetailResponse:
     advance_expired_discussions(db, datetime.now(timezone.utc))
-    proposal = db.query(Proposal).filter(Proposal.proposal_id == proposal_id).first()
+    proposal = _find_proposal_by_identifier(db, proposal_id)
     if not proposal:
         raise HTTPException(status_code=404, detail="Proposal not found")
     result = ProposalDetailResponse(success=True, data=_proposal_detail(db, proposal))
@@ -115,7 +121,7 @@ def get_proposal(proposal_id: str, response: Response, db: Session = Depends(get
 @router.get("/{proposal_id}/votes/summary", response_model=VoteSummary, summary="Get proposal vote summary")
 def get_proposal_vote_summary(proposal_id: str, db: Session = Depends(get_db)) -> VoteSummary:
     advance_expired_discussions(db, datetime.now(timezone.utc))
-    proposal = db.query(Proposal).filter(Proposal.proposal_id == proposal_id).first()
+    proposal = _find_proposal_by_identifier(db, proposal_id)
     if not proposal:
         raise HTTPException(status_code=404, detail="Proposal not found")
     return _vote_summary(db, proposal.id)
@@ -174,24 +180,27 @@ async def create_proposal(
 async def submit_proposal(
     proposal_id: str,
     request: Request,
+    payload: ProposalSubmitRequest | None = None,
     agent: Agent = Depends(require_agent_auth),
     db: Session = Depends(get_db),
 ) -> ProposalDetailResponse:
     body_bytes = await request.body()
     body_hash = hash_body(body_bytes)
     request_id = request.headers.get("X-Request-ID") or str(uuid4())
-    idempotency_key = request.headers.get("Idempotency-Key") or f"proposal_submit:{proposal_id}"
+    idempotency_key = request.headers.get("Idempotency-Key")
 
-    proposal = db.query(Proposal).filter(Proposal.proposal_id == proposal_id).first()
+    proposal = _find_proposal_by_identifier(db, proposal_id)
     if not proposal:
         raise HTTPException(status_code=404, detail="Proposal not found")
+    if not idempotency_key:
+        idempotency_key = f"proposal_submit:{proposal.proposal_id}"
     if proposal.author_agent_id != agent.id:
         raise HTTPException(status_code=403, detail="Only the author can submit.")
 
     if proposal.status == ProposalStatus.draft:
         now = datetime.now(timezone.utc)
-        discussion_window = _discussion_window()
-        voting_window = _voting_window()
+        discussion_window = _discussion_window(payload.discussion_minutes if payload else None)
+        voting_window = _voting_window(payload.voting_minutes if payload else None)
         if discussion_window.total_seconds() > 0:
             proposal.status = next_status(proposal.status, "submit_to_discussion")
             proposal.discussion_ends_at = now + discussion_window
@@ -231,7 +240,7 @@ async def vote_on_proposal(
     if payload.value not in {-1, 1}:
         raise HTTPException(status_code=400, detail="Vote value must be +1 or -1.")
 
-    proposal = db.query(Proposal).filter(Proposal.proposal_id == proposal_id).first()
+    proposal = _find_proposal_by_identifier(db, proposal_id)
     if not proposal:
         raise HTTPException(status_code=404, detail="Proposal not found")
 
@@ -274,11 +283,13 @@ async def finalize_proposal(
     body_bytes = await request.body()
     body_hash = hash_body(body_bytes)
     request_id = request.headers.get("X-Request-ID") or str(uuid4())
-    idempotency_key = request.headers.get("Idempotency-Key") or f"proposal_finalize:{proposal_id}"
+    idempotency_key = request.headers.get("Idempotency-Key")
 
-    proposal = db.query(Proposal).filter(Proposal.proposal_id == proposal_id).first()
+    proposal = _find_proposal_by_identifier(db, proposal_id)
     if not proposal:
         raise HTTPException(status_code=404, detail="Proposal not found")
+    if not idempotency_key:
+        idempotency_key = f"proposal_finalize:{proposal.proposal_id}"
 
     _ensure_voting_status(db, proposal)
     now = datetime.now(timezone.utc)
@@ -424,11 +435,17 @@ def _generate_proposal_id(db: Session) -> str:
     raise RuntimeError("Failed to generate unique proposal id.")
 
 
-def _load_author_map(db: Session, author_ids: set[int]) -> dict[int, str]:
+def _find_proposal_by_identifier(db: Session, identifier: str) -> Proposal | None:
+    if identifier.isdigit():
+        return db.query(Proposal).filter(Proposal.id == int(identifier)).first()
+    return db.query(Proposal).filter(Proposal.proposal_id == identifier).first()
+
+
+def _load_author_map(db: Session, author_ids: set[int]) -> dict[int, tuple[str, str]]:
     if not author_ids:
         return {}
-    rows = db.query(Agent.id, Agent.agent_id).filter(Agent.id.in_(author_ids)).all()
-    return {row.id: row.agent_id for row in rows}
+    rows = db.query(Agent.id, Agent.agent_id, Agent.name).filter(Agent.id.in_(author_ids)).all()
+    return {row.id: (row.agent_id, row.name) for row in rows}
 
 def _load_author_reputation(db: Session, author_ids: set[int]) -> dict[int, int]:
     if not author_ids:
@@ -444,12 +461,20 @@ def _load_author_reputation(db: Session, author_ids: set[int]) -> dict[int, int]
     )
     return {int(r.agent_id): max(int(r.total or 0), 0) for r in rows}
 
-def _proposal_summary(proposal: Proposal, author_agent_id: str, author_reputation_points: int) -> ProposalSummary:
+def _proposal_summary(
+    proposal: Proposal,
+    author_agent_id: str,
+    author_name: str | None,
+    author_reputation_points: int,
+) -> ProposalSummary:
     return ProposalSummary(
+        proposal_num=proposal.id,
         proposal_id=proposal.proposal_id,
         title=proposal.title,
         status=ProposalStatusSchema(proposal.status),
+        author_agent_num=proposal.author_agent_id,
         author_agent_id=author_agent_id,
+        author_name=author_name,
         author_reputation_points=int(author_reputation_points or 0),
         discussion_thread_id=proposal.discussion_thread_id,
         created_at=proposal.created_at,
@@ -468,8 +493,9 @@ def _proposal_summary(proposal: Proposal, author_agent_id: str, author_reputatio
 def _proposal_detail(db: Session, proposal: Proposal) -> ProposalDetail:
     author_agent = db.query(Agent).filter(Agent.id == proposal.author_agent_id).first()
     author_agent_id = author_agent.agent_id if author_agent else ""
+    author_name = author_agent.name if author_agent else None
     author_rep = _load_author_reputation(db, {proposal.author_agent_id}).get(proposal.author_agent_id, 0)
-    summary = _proposal_summary(proposal, author_agent_id, author_rep)
+    summary = _proposal_summary(proposal, author_agent_id, author_name, author_rep)
     vote_summary = _vote_summary(db, proposal.id)
     related_bounties = _load_related_bounties(db, proposal.proposal_id)
     milestones = _load_related_milestones(db, proposal.proposal_id)
@@ -496,6 +522,7 @@ def _load_related_bounties(db: Session, proposal_id: str) -> list[BountyPublic]:
         b = row.Bounty
         out.append(
             BountyPublic(
+                bounty_num=b.id,
                 bounty_id=b.bounty_id,
                 project_id=row.project_id,
                 origin_proposal_id=b.origin_proposal_id,
@@ -507,7 +534,9 @@ def _load_related_bounties(db: Session, proposal_id: str) -> list[BountyPublic]:
                 priority=b.priority,
                 deadline_at=b.deadline_at,
                 status=BountyStatusSchema(b.status),
+                claimant_agent_num=b.claimant_agent_id,
                 claimant_agent_id=row.agent_id,
+                claimant_agent_name=None,
                 claimed_at=b.claimed_at,
                 submitted_at=b.submitted_at,
                 pr_url=b.pr_url,
@@ -570,7 +599,7 @@ def _ensure_proposal_discussion_thread(db: Session, proposal: Proposal) -> None:
         ref_id=proposal.proposal_id,
         scope="global",
         project_id=None,
-        title=f"Proposal {proposal.proposal_id}: {proposal.title}"[:255],
+        title=f"Proposal discussion: {proposal.title}"[:255],
         created_by_agent_id=proposal.author_agent_id,
     )
     thread, _created = insert_or_get_by_unique(
@@ -642,7 +671,7 @@ def _ensure_project_discussion_thread(db: Session, project: Project) -> None:
         ref_id=project.project_id,
         scope="project",
         project_id=project.id,
-        title=f"Project {project.project_id}: general"[:255],
+        title=f"{project.name}: general thread"[:255],
         created_by_agent_id=int(creator_agent_id),
     )
     thread, _created = insert_or_get_by_unique(

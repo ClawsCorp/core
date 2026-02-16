@@ -7,7 +7,7 @@ import { DataCard, PageContainer } from "@/components/Cards";
 import { EmptyState, Loading } from "@/components/State";
 import { ErrorState } from "@/components/ErrorState";
 import { api, readErrorMessage } from "@/lib/api";
-import { formatMicroUsdc } from "@/lib/format";
+import { formatDateTimeShort, formatMicroUsdc } from "@/lib/format";
 import type { ProjectSummary } from "@/types";
 
 export default function ProjectsPage() {
@@ -39,10 +39,10 @@ export default function ProjectsPage() {
       {!loading && !error && items.length === 0 ? <EmptyState message="No projects found." /> : null}
       {!loading && !error && items.length > 0
         ? items.map((project) => (
-            <DataCard key={project.project_id} title={project.name}>
-              <p>project_id: {project.project_id}</p>
+            <DataCard key={project.project_id} title={`${project.name} (ID ${project.project_num})`}>
               <p>status: {project.status}</p>
               <p>monthly_budget: {formatMicroUsdc(project.monthly_budget_micro_usdc)}</p>
+              <p>created_at: {formatDateTimeShort(project.created_at)}</p>
               <Link href={`/projects/${project.project_id}`}>Open detail</Link>
             </DataCard>
           ))

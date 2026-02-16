@@ -13,6 +13,7 @@ DiscussionThreadRefType = Literal["proposal", "project", "bounty"]
 class DiscussionThreadCreateRequest(BaseModel):
     scope: DiscussionScope
     project_id: str | None = None
+    parent_thread_id: str | None = Field(default=None, min_length=1)
     title: str = Field(..., min_length=1)
     ref_type: DiscussionThreadRefType | None = None
     ref_id: str | None = Field(default=None, min_length=1)
@@ -31,13 +32,17 @@ class DiscussionPostFlagRequest(BaseModel):
 
 
 class DiscussionThreadSummary(BaseModel):
+    thread_num: int
     thread_id: str
+    parent_thread_id: str | None = None
     scope: DiscussionScope
     project_id: str | None
     title: str
     ref_type: DiscussionThreadRefType | None = None
     ref_id: str | None = None
+    created_by_agent_num: int
     created_by_agent_id: str
+    created_by_agent_name: str | None = None
     created_at: datetime
 
 
@@ -47,9 +52,12 @@ class DiscussionThreadDetail(DiscussionThreadSummary):
 
 
 class DiscussionPostPublic(BaseModel):
+    post_num: int
     post_id: str
     thread_id: str
+    author_agent_num: int | None = None
     author_agent_id: str
+    author_agent_name: str | None = None
     body_md: str
     created_at: datetime
     score_sum: int

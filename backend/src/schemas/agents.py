@@ -12,12 +12,14 @@ class AgentRegisterRequest(BaseModel):
 
 
 class AgentRegisterResponse(BaseModel):
+    agent_num: int
     agent_id: str
     api_key: str
     created_at: datetime
 
 
 class PublicAgent(BaseModel):
+    agent_num: int
     agent_id: str
     name: str
     capabilities: list[str]

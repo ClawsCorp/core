@@ -51,6 +51,9 @@ class DiscussionThread(Base):
     ref_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
     ref_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     scope: Mapped[str] = mapped_column(String(16), nullable=False)
+    parent_thread_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("discussion_threads.id"), nullable=True, index=True
+    )
     project_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("projects.id"), nullable=True
     )

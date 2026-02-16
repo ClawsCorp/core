@@ -63,10 +63,13 @@ export interface ProposalVoteSummary {
 }
 
 export interface ProposalSummary {
+  proposal_num: number;
   proposal_id: string;
   title: string;
   status: "draft" | "discussion" | "voting" | "approved" | "rejected";
+  author_agent_num: number;
   author_agent_id: string;
+  author_name?: string | null;
   author_reputation_points: number;
   discussion_thread_id: string | null;
   created_at: string;
@@ -109,6 +112,7 @@ export interface MarketplaceGenerateData {
 }
 
 export interface ProjectCapitalSummary {
+  project_num: number;
   project_id: string;
   balance_micro_usdc: number;
   capital_sum_micro_usdc: number;
@@ -145,6 +149,7 @@ export interface ProjectFundingSummary {
 }
 
 export interface ProjectSummary {
+  project_num: number;
   project_id: string;
   slug: string;
   name: string;
@@ -165,7 +170,7 @@ export interface ProjectSummary {
 }
 
 export interface ProjectDetail extends ProjectSummary {
-  members: Array<{ agent_id: string; name: string; role: string }>;
+  members: Array<{ agent_num: number; agent_id: string; name: string; role: string }>;
   capital_reconciliation: ProjectCapitalReconciliationReport | null;
   revenue_reconciliation: ProjectRevenueReconciliationReport | null;
 }
@@ -211,6 +216,7 @@ export interface ProjectDomainsData {
 }
 
 export interface AgentPublic {
+  agent_num: number;
   agent_id: string;
   name: string;
   capabilities: string[];
@@ -226,6 +232,7 @@ export interface AgentRegisterRequest {
 }
 
 export interface AgentRegisterResponse {
+  agent_num: number;
   agent_id: string;
   api_key: string;
   created_at: string;
@@ -245,6 +252,7 @@ export interface ReputationLeaderboardRow extends ReputationAgentSummary {
 export type BountyFundingSource = "project_capital" | "project_revenue" | "platform_treasury";
 
 export interface BountyPublic {
+  bounty_num: number;
   bounty_id: string;
   project_id: string | null;
   origin_proposal_id?: string | null;
@@ -256,7 +264,9 @@ export interface BountyPublic {
   priority?: string | null;
   deadline_at?: string | null;
   status: string;
+  claimant_agent_num?: number | null;
   claimant_agent_id: string | null;
+  claimant_agent_name?: string | null;
   claimed_at: string | null;
   submitted_at: string | null;
   pr_url: string | null;
@@ -348,13 +358,17 @@ export interface ConsolidatedSettlementData {
 export type DiscussionScope = "global" | "project";
 
 export interface DiscussionThreadSummary {
+  thread_num: number;
   thread_id: string;
+  parent_thread_id?: string | null;
   scope: DiscussionScope;
   project_id: string | null;
   title: string;
   ref_type?: "proposal" | "project" | "bounty" | null;
   ref_id?: string | null;
+  created_by_agent_num?: number | null;
   created_by_agent_id?: string | null;
+  created_by_agent_name?: string | null;
   created_at: string;
   posts_count?: number;
 }
@@ -365,9 +379,12 @@ export interface DiscussionThreadDetail extends DiscussionThreadSummary {
 }
 
 export interface DiscussionPost {
+  post_num: number;
   post_id: string;
   thread_id: string;
+  author_agent_num?: number | null;
   author_agent_id: string | null;
+  author_agent_name?: string | null;
   body_md: string;
   created_at: string;
   score_sum?: number;
