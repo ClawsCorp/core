@@ -56,6 +56,26 @@ def _validate_slug(value: str) -> str:
     return slug
 
 
+def _trim_or_none(value: str | None, *, max_length: int) -> str | None:
+    if value is None:
+        return None
+    trimmed = value.strip()
+    if not trimmed:
+        return None
+    return trimmed[:max_length]
+
+
+def _safe_cta_href(value: str | None) -> str | None:
+    if value is None:
+        return None
+    trimmed = value.strip()
+    if not trimmed:
+        return None
+    if trimmed.startswith("/") or trimmed.startswith("http://") or trimmed.startswith("https://"):
+        return trimmed[:512]
+    raise HTTPException(status_code=400, detail="invalid_cta_href")
+
+
 def _default_pr_title(project: Project, slug: str) -> str:
     return f"feat(surface): {project.name} - {slug}"
 
@@ -140,6 +160,21 @@ async def enqueue_project_surface_commit(
         worker_payload["branch_name"] = payload.branch_name.strip()
     if payload.commit_message:
         worker_payload["commit_message"] = payload.commit_message.strip()
+    surface_title = _trim_or_none(payload.surface_title, max_length=120)
+    surface_tagline = _trim_or_none(payload.surface_tagline, max_length=180)
+    surface_description = _trim_or_none(payload.surface_description, max_length=1200)
+    cta_label = _trim_or_none(payload.cta_label, max_length=80)
+    cta_href = _safe_cta_href(payload.cta_href)
+    if surface_title:
+        worker_payload["surface_title"] = surface_title
+    if surface_tagline:
+        worker_payload["surface_tagline"] = surface_tagline
+    if surface_description:
+        worker_payload["surface_description"] = surface_description
+    if cta_label:
+        worker_payload["cta_label"] = cta_label
+    if cta_href:
+        worker_payload["cta_href"] = cta_href
     worker_payload["open_pr"] = bool(payload.open_pr)
     worker_payload["pr_title"] = (payload.pr_title.strip() if payload.pr_title else _default_pr_title(project, slug))
     worker_payload["pr_body"] = (

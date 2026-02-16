@@ -55,6 +55,11 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
   const [invoiceMessage, setInvoiceMessage] = useState<string | null>(null);
   const [surfaceSlug, setSurfaceSlug] = useState("");
   const [surfaceOpenPr, setSurfaceOpenPr] = useState(true);
+  const [surfaceTitle, setSurfaceTitle] = useState("");
+  const [surfaceTagline, setSurfaceTagline] = useState("");
+  const [surfaceDescription, setSurfaceDescription] = useState("");
+  const [surfaceCtaLabel, setSurfaceCtaLabel] = useState("");
+  const [surfaceCtaHref, setSurfaceCtaHref] = useState("");
   const [surfaceBusy, setSurfaceBusy] = useState(false);
   const [surfaceMessage, setSurfaceMessage] = useState<string | null>(null);
 
@@ -287,9 +292,22 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
     }
     setSurfaceBusy(true);
     try {
-      const task = await api.createProjectSurfaceCommitTask(apiKey, params.id, { slug, open_pr: surfaceOpenPr });
+      const task = await api.createProjectSurfaceCommitTask(apiKey, params.id, {
+        slug,
+        open_pr: surfaceOpenPr,
+        surface_title: surfaceTitle.trim() || undefined,
+        surface_tagline: surfaceTagline.trim() || undefined,
+        surface_description: surfaceDescription.trim() || undefined,
+        cta_label: surfaceCtaLabel.trim() || undefined,
+        cta_href: surfaceCtaHref.trim() || undefined,
+      });
       setSurfaceMessage(`Queued git task ${task.task_id}.`);
       setSurfaceSlug("");
+      setSurfaceTitle("");
+      setSurfaceTagline("");
+      setSurfaceDescription("");
+      setSurfaceCtaLabel("");
+      setSurfaceCtaHref("");
       await load();
     } catch (err) {
       setSurfaceMessage(readErrorMessage(err));
@@ -584,6 +602,46 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
                     value={surfaceSlug}
                     onChange={(event) => setSurfaceSlug(event.target.value)}
                     placeholder="aurora-notes"
+                  />
+                </label>
+              </div>
+              <div style={{ marginBottom: 8 }}>
+                <label>
+                  title (optional):{" "}
+                  <input value={surfaceTitle} onChange={(event) => setSurfaceTitle(event.target.value)} />
+                </label>
+              </div>
+              <div style={{ marginBottom: 8 }}>
+                <label>
+                  tagline (optional):{" "}
+                  <input value={surfaceTagline} onChange={(event) => setSurfaceTagline(event.target.value)} style={{ width: 420 }} />
+                </label>
+              </div>
+              <div style={{ marginBottom: 8 }}>
+                <label>
+                  description (optional):{" "}
+                  <textarea
+                    value={surfaceDescription}
+                    onChange={(event) => setSurfaceDescription(event.target.value)}
+                    rows={3}
+                    style={{ width: "100%", maxWidth: 560 }}
+                  />
+                </label>
+              </div>
+              <div style={{ marginBottom: 8 }}>
+                <label>
+                  CTA label (optional):{" "}
+                  <input value={surfaceCtaLabel} onChange={(event) => setSurfaceCtaLabel(event.target.value)} />
+                </label>
+              </div>
+              <div style={{ marginBottom: 8 }}>
+                <label>
+                  CTA href (optional):{" "}
+                  <input
+                    value={surfaceCtaHref}
+                    onChange={(event) => setSurfaceCtaHref(event.target.value)}
+                    placeholder="/projects/123 or https://..."
+                    style={{ width: 420 }}
                   />
                 </label>
               </div>
