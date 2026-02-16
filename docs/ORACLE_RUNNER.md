@@ -32,6 +32,10 @@ Server-side only (not used directly by the runner):
 - `ORACLE_SIGNER_PRIVATE_KEY`
 - `CONTRACTS_DIR` (optional)
 
+`git-worker` environment variables (runs locally, applies git tasks):
+
+- `DAO_GIT_REPO_DIR` (optional; repo root with `scripts/new_product_surface.mjs`)
+
 ## Commands
 
 Global flag:
@@ -61,6 +65,8 @@ PYTHONPATH=src python -m oracle_runner run-month --execute-payload auto
 PYTHONPATH=src python -m oracle_runner run-month --month 202601 --execute-payload /path/execute.json
 PYTHONPATH=src python -m oracle_runner tx-worker --max-tasks 10
 PYTHONPATH=src python -m oracle_runner tx-worker --loop --max-tasks 10
+PYTHONPATH=src python -m oracle_runner git-worker --max-tasks 5
+PYTHONPATH=src python -m oracle_runner git-worker --loop --max-tasks 5 --repo-dir /path/to/repo
 PYTHONPATH=src python -m oracle_runner autonomy-loop --loop
 PYTHONPATH=src python -m oracle_runner --json reconcile --month 202601
 PYTHONPATH=src python -m oracle_runner --json reconcile-project-capital --project-id proj_...

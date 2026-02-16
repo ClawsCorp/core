@@ -82,14 +82,13 @@ async def generate_marketplace_items(
     body_hash = hash_body(body_bytes)
     request_id = request.headers.get("X-Request-ID") or str(uuid4())
 
-    # Use a deterministic generator key so this endpoint is safe to retry and cannot
-    # accidentally duplicate milestones/bounties due to differing request idempotency keys.
-    generator_key = f"marketplace:proposal:{proposal_id}:v1"
-    idempotency_key = request.headers.get("Idempotency-Key") or payload.idempotency_key or generator_key
-
-    proposal = db.query(Proposal).filter(Proposal.proposal_id == proposal_id).first()
+    proposal = _find_proposal_by_identifier(db, proposal_id)
     if proposal is None:
         raise HTTPException(status_code=404, detail="Proposal not found")
+    # Use canonical public proposal id in deterministic idempotency key so numeric/public
+    # route aliases are equivalent for retries.
+    generator_key = f"marketplace:proposal:{proposal.proposal_id}:v1"
+    idempotency_key = request.headers.get("Idempotency-Key") or payload.idempotency_key or generator_key
 
     # MVP heuristics: 3 milestones, 1 bounty each (implementation work is usually milestone 2).
     now = datetime.now(timezone.utc)
@@ -184,3 +183,9 @@ async def generate_marketplace_items(
             "created_bounties_count": created_bounties,
         },
     )
+
+
+def _find_proposal_by_identifier(db: Session, identifier: str) -> Proposal | None:
+    if identifier.isdigit():
+        return db.query(Proposal).filter(Proposal.id == int(identifier)).first()
+    return db.query(Proposal).filter(Proposal.proposal_id == identifier).first()

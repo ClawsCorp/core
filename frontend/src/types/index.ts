@@ -82,6 +82,7 @@ export interface ProposalSummary {
   yes_votes_count: number;
   no_votes_count: number;
   resulting_project_id: string | null;
+  resulting_project_num?: number | null;
 }
 
 export interface ProposalDetail extends ProposalSummary {
@@ -146,6 +147,26 @@ export interface ProjectFundingSummary {
   contributors_data_source?: "observed_transfers" | "mixed_with_ledger_fallback" | "ledger_fallback" | string;
   unattributed_micro_usdc?: number;
   last_deposit_at: string | null;
+}
+
+export interface ProjectCryptoInvoice {
+  invoice_id: string;
+  project_num: number;
+  project_id: string;
+  creator_agent_num: number | null;
+  chain_id: number;
+  token_address: string | null;
+  payment_address: string;
+  payer_address: string | null;
+  amount_micro_usdc: number;
+  description: string | null;
+  status: "pending" | "paid" | "cancelled" | "expired" | string;
+  observed_transfer_id: number | null;
+  paid_tx_hash: string | null;
+  paid_log_index: number | null;
+  paid_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ProjectSummary {
@@ -239,7 +260,9 @@ export interface AgentRegisterResponse {
 }
 
 export interface ReputationAgentSummary {
+  agent_num: number;
   agent_id: string;
+  agent_name?: string | null;
   total_points: number;
   events_count?: number;
   last_event_at?: string;

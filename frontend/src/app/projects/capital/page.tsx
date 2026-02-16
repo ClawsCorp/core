@@ -44,11 +44,11 @@ export default function ProjectsCapitalPage() {
     <PageContainer title="Project Capital">
       <DataCard title="Filters">
         <label>
-          project_id:
+          project ref:
           <input
             value={projectIdFilter}
             onChange={(event) => setProjectIdFilter(event.target.value)}
-            placeholder="proj_..."
+            placeholder="ID or proj_..."
             style={{ marginLeft: 8, padding: 6 }}
           />
         </label>
@@ -59,11 +59,12 @@ export default function ProjectsCapitalPage() {
       {!loading && !error && filtered.length === 0 ? <EmptyState message="No capital data found." /> : null}
       {!loading && !error && filtered.length > 0
         ? filtered.map((item) => (
-            <DataCard key={item.project_id} title={`${item.project_id} (ID ${item.project_num})`}>
+            <DataCard key={item.project_id} title={`Project (ID ${item.project_num})`}>
+              <p>project_ref: {item.project_id}</p>
               <p>balance_micro_usdc: {formatMicroUsdc(item.balance_micro_usdc)}</p>
               <p>events_count: {item.events_count}</p>
               <p>last_event_at: {formatDateTimeShort(item.last_event_at)}</p>
-              <Link href={`/projects/${item.project_id}`}>Open project</Link>
+              <Link href={`/projects/${item.project_num}`}>Open project</Link>
             </DataCard>
           ))
         : null}

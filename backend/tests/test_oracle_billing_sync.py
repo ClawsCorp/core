@@ -27,6 +27,7 @@ import src.models  # noqa: F401
 from src.models.billing_event import BillingEvent
 from src.models.observed_usdc_transfer import ObservedUsdcTransfer
 from src.models.project import Project, ProjectStatus
+from src.models.project_crypto_invoice import ProjectCryptoInvoice
 from src.models.revenue_event import RevenueEvent
 
 ORACLE_SECRET = "test-oracle-secret"
@@ -135,6 +136,25 @@ def test_billing_sync_creates_billing_and_revenue_events(_client: TestClient, _d
                 log_index=1,
             )
         )
+        db.add(
+            ProjectCryptoInvoice(
+                invoice_id="inv_test_1",
+                idempotency_key="invoice-idem-1",
+                project_id=project.id,
+                creator_agent_id=None,
+                chain_id=84532,
+                token_address="0x0000000000000000000000000000000000000bbb",
+                payment_address=revenue_addr,
+                payer_address="0x00000000000000000000000000000000000000cc",
+                amount_micro_usdc=1234,
+                description="Test invoice",
+                status="pending",
+                observed_transfer_id=None,
+                paid_tx_hash=None,
+                paid_log_index=None,
+                paid_at=None,
+            )
+        )
         db.commit()
     finally:
         db.close()
@@ -146,6 +166,7 @@ def test_billing_sync_creates_billing_and_revenue_events(_client: TestClient, _d
     assert resp.json()["success"] is True
     assert resp.json()["data"]["billing_events_inserted"] == 1
     assert resp.json()["data"]["revenue_events_inserted"] == 1
+    assert resp.json()["data"]["invoices_paid"] == 1
 
     db = _db()
     try:
@@ -154,6 +175,11 @@ def test_billing_sync_creates_billing_and_revenue_events(_client: TestClient, _d
         assert rev is not None
         assert rev.profit_month_id == "202602"
         assert rev.amount_micro_usdc == 1234
+        inv = db.query(ProjectCryptoInvoice).filter(ProjectCryptoInvoice.invoice_id == "inv_test_1").first()
+        assert inv is not None
+        assert inv.status == "paid"
+        assert inv.paid_tx_hash == "0x" + ("11" * 32)
+        assert inv.paid_log_index == 1
     finally:
         db.close()
 
@@ -162,3 +188,4 @@ def test_billing_sync_creates_billing_and_revenue_events(_client: TestClient, _d
     assert resp2.status_code == 200
     assert resp2.json()["data"]["billing_events_inserted"] == 0
     assert resp2.json()["data"]["revenue_events_inserted"] == 0
+    assert resp2.json()["data"]["invoices_paid"] == 0

@@ -198,7 +198,7 @@ export default function BountiesPage() {
               <p>amount: {formatMicroUsdc(bounty.amount_micro_usdc)}</p>
               <p>priority: {bounty.priority ?? "—"}</p>
               <p>deadline_at: {formatDateTimeShort(bounty.deadline_at)}</p>
-              <Link href={`/bounties/${bounty.bounty_id}`}>Open detail</Link>
+              <Link href={`/bounties/${bounty.bounty_num}`}>Open detail</Link>
             </DataCard>
           ))
         : null}

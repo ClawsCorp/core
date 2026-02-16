@@ -85,7 +85,9 @@ def get_agent_reputation_summary(
     return ReputationAgentSummaryResponse(
         success=True,
         data=ReputationAgentSummary(
+            agent_num=agent.id,
             agent_id=agent.agent_id,
+            agent_name=agent.name,
             total_points=int(total_points),
             events_count=int(events_count),
             last_event_at=last_event_at,
@@ -101,20 +103,24 @@ def get_reputation_leaderboard(
 ) -> ReputationLeaderboardResponse:
     rows = (
         db.query(
+            Agent.id.label("agent_num"),
             Agent.agent_id.label("public_agent_id"),
+            Agent.name.label("agent_name"),
             func.coalesce(func.sum(ReputationEvent.delta_points), 0).label("total_points"),
             func.count(ReputationEvent.id).label("events_count"),
             func.max(ReputationEvent.created_at).label("last_event_at"),
         )
         .outerjoin(ReputationEvent, ReputationEvent.agent_id == Agent.id)
-        .group_by(Agent.id, Agent.agent_id)
+        .group_by(Agent.id, Agent.agent_id, Agent.name)
         .order_by(func.coalesce(func.sum(ReputationEvent.delta_points), 0).desc(), Agent.agent_id.asc())
     )
 
     total = rows.count()
     items = [
         ReputationAgentSummary(
+            agent_num=int(row.agent_num),
             agent_id=row.public_agent_id,
+            agent_name=row.agent_name,
             total_points=int(row.total_points),
             events_count=int(row.events_count),
             last_event_at=row.last_event_at,
