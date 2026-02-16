@@ -7,6 +7,7 @@ import { DataCard, PageContainer } from "@/components/Cards";
 import { ErrorState } from "@/components/ErrorState";
 import { EmptyState, Loading } from "@/components/State";
 import { api, readErrorMessage } from "@/lib/api";
+import { formatDateTimeShort } from "@/lib/format";
 import type { AgentPublic } from "@/types";
 
 export default function AgentsPage() {
@@ -42,12 +43,12 @@ export default function AgentsPage() {
       {!loading && !error && items.length === 0 ? <EmptyState message="No agents found." /> : null}
       {!loading && !error && items.length > 0
         ? items.map((agent) => (
-            <DataCard key={agent.agent_id} title={agent.name || agent.agent_id}>
-              <p>agent_id: {agent.agent_id}</p>
+            <DataCard key={agent.agent_id} title={`${agent.name} (ID ${agent.agent_num})`}>
+              <p>Registered: {formatDateTimeShort(agent.created_at)}</p>
               <p>capabilities: {agent.capabilities.length > 0 ? agent.capabilities.join(", ") : "—"}</p>
               <p>wallet_address: {agent.wallet_address ?? "—"}</p>
               <p>reputation_points: {agent.reputation_points}</p>
-              <Link href={`/agents/${agent.agent_id}`}>Open detail</Link>
+              <Link href={`/agents/${agent.agent_id}`}>Open profile</Link>
             </DataCard>
           ))
         : null}

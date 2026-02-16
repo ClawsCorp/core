@@ -57,6 +57,7 @@ def project_capital_leaderboard(
     db: Session = Depends(get_db),
 ) -> ProjectCapitalLeaderboardResponse:
     base = db.query(
+        Project.id.label("project_num"),
         Project.project_id.label("project_id"),
         func.coalesce(func.sum(ProjectCapitalEvent.delta_micro_usdc), 0).label("capital_sum_micro_usdc"),
         func.count(ProjectCapitalEvent.id).label("events_count"),
@@ -67,6 +68,7 @@ def project_capital_leaderboard(
     rows = base.order_by(desc("capital_sum_micro_usdc"), Project.project_id.asc()).offset(offset).limit(limit).all()
     items = [
         ProjectCapitalSummary(
+            project_num=int(row.project_num),
             project_id=row.project_id,
             balance_micro_usdc=int(row.capital_sum_micro_usdc or 0),
             capital_sum_micro_usdc=int(row.capital_sum_micro_usdc or 0),
@@ -135,7 +137,7 @@ def get_project_by_slug(
 
 @router.get("/{project_id}/capital", response_model=ProjectCapitalSummaryResponse, summary="Get project capital summary")
 def get_project_capital(project_id: str, db: Session = Depends(get_db)) -> ProjectCapitalSummaryResponse:
-    project = db.query(Project).filter(Project.project_id == project_id).first()
+    project = _find_project_by_identifier(db, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
@@ -148,6 +150,7 @@ def get_project_capital(project_id: str, db: Session = Depends(get_db)) -> Proje
     return ProjectCapitalSummaryResponse(
         success=True,
         data=ProjectCapitalSummary(
+            project_num=project.id,
             project_id=project.project_id,
             balance_micro_usdc=int(row[0] or 0),
             capital_sum_micro_usdc=int(row[0] or 0),
@@ -172,7 +175,7 @@ def _funding_round_public(project_id: str, row: ProjectFundingRound) -> ProjectF
 
 @router.get("/{project_id}/funding", response_model=ProjectFundingSummaryResponse, summary="Get project funding summary")
 def get_project_funding_summary(project_id: str, db: Session = Depends(get_db)) -> ProjectFundingSummaryResponse:
-    project = db.query(Project).filter(Project.project_id == project_id).first()
+    project = _find_project_by_identifier(db, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
@@ -296,7 +299,7 @@ def get_project_capital_reconciliation_latest(
     project_id: str,
     db: Session = Depends(get_db),
 ) -> ProjectCapitalReconciliationLatestResponse:
-    project = db.query(Project).filter(Project.project_id == project_id).first()
+    project = _find_project_by_identifier(db, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
@@ -318,7 +321,7 @@ def get_project_revenue_reconciliation_latest(
     project_id: str,
     db: Session = Depends(get_db),
 ) -> ProjectRevenueReconciliationLatestResponse:
-    project = db.query(Project).filter(Project.project_id == project_id).first()
+    project = _find_project_by_identifier(db, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
@@ -342,7 +345,7 @@ def get_project(
     response: Response,
     db: Session = Depends(get_db),
 ) -> ProjectDetailResponse:
-    project = db.query(Project).filter(Project.project_id == project_id).first()
+    project = _find_project_by_identifier(db, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     detail = _project_detail(db, project)
@@ -399,7 +402,7 @@ async def approve_project(
     idempotency_key = request.headers.get("Idempotency-Key")
     body_hash = request.state.body_hash
 
-    project = db.query(Project).filter(Project.project_id == project_id).first()
+    project = _find_project_by_identifier(db, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     if project.status == ProjectStatus.archived:
@@ -428,7 +431,7 @@ async def update_project_status(
     idempotency_key = request.headers.get("Idempotency-Key")
     body_hash = request.state.body_hash
 
-    project = db.query(Project).filter(Project.project_id == project_id).first()
+    project = _find_project_by_identifier(db, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     if project.status == ProjectStatus.archived and payload.status != ProjectStatus.archived:
@@ -466,6 +469,12 @@ def _record_oracle_audit(
     )
 
 
+def _find_project_by_identifier(db: Session, identifier: str) -> Project | None:
+    if identifier.isdigit():
+        return db.query(Project).filter(Project.id == int(identifier)).first()
+    return db.query(Project).filter(Project.project_id == identifier).first()
+
+
 def _generate_project_id(db: Session) -> str:
     for _ in range(5):
         candidate = f"proj_{secrets.token_hex(8)}"
@@ -498,6 +507,7 @@ def _slugify_name(name: str) -> str:
 
 def _project_summary(project: Project) -> ProjectSummary:
     return ProjectSummary(
+        project_num=project.id,
         project_id=project.project_id,
         slug=project.slug,
         name=project.name,
@@ -578,7 +588,7 @@ def _revenue_reconciliation_public(
 
 def _load_project_members(db: Session, project_pk: int) -> list[ProjectMemberInfo]:
     rows = (
-        db.query(Agent.agent_id, Agent.name, ProjectMember.role)
+        db.query(Agent.id, Agent.agent_id, Agent.name, ProjectMember.role)
         .join(ProjectMember, ProjectMember.agent_id == Agent.id)
         .filter(ProjectMember.project_id == project_pk)
         .order_by(Agent.agent_id)
@@ -586,6 +596,7 @@ def _load_project_members(db: Session, project_pk: int) -> list[ProjectMemberInf
     )
     return [
         ProjectMemberInfo(
+            agent_num=int(row.id),
             agent_id=row.agent_id,
             name=row.name,
             role=ProjectMemberRole(row.role),

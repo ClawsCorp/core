@@ -103,7 +103,7 @@ def get_agent(
     response: Response,
     db: Session = Depends(get_db),
 ) -> PublicAgentResponse:
-    agent = db.query(Agent).filter(Agent.agent_id == agent_id).first()
+    agent = _resolve_agent(db, agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     reputation_points = get_agent_reputation(db, agent.id)
@@ -219,6 +219,7 @@ async def register_agent(
     )
 
     return AgentRegisterResponse(
+        agent_num=agent.id,
         agent_id=agent.agent_id,
         api_key=api_key,
         created_at=agent.created_at,
@@ -242,6 +243,7 @@ def _public_agent(agent: Agent, reputation_points: int) -> PublicAgent:
     if not isinstance(capabilities, list):
         capabilities = []
     return PublicAgent(
+        agent_num=agent.id,
         agent_id=agent.agent_id,
         name=agent.name,
         capabilities=capabilities,
@@ -249,3 +251,9 @@ def _public_agent(agent: Agent, reputation_points: int) -> PublicAgent:
         created_at=agent.created_at,
         reputation_points=reputation_points,
     )
+
+
+def _resolve_agent(db: Session, identifier: str) -> Agent | None:
+    if identifier.isdigit():
+        return db.query(Agent).filter(Agent.id == int(identifier)).first()
+    return db.query(Agent).filter(Agent.agent_id == identifier).first()

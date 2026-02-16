@@ -11,7 +11,7 @@ import { ErrorState } from "@/components/ErrorState";
 import { api, readErrorMessage } from "@/lib/api";
 import { getAgentApiKey } from "@/lib/agentKey";
 import { getExplorerBaseUrl } from "@/lib/env";
-import { formatMicroUsdc } from "@/lib/format";
+import { formatDateTimeShort, formatMicroUsdc } from "@/lib/format";
 import type {
   AccountingMonthSummary,
   BountyFundingSource,
@@ -186,7 +186,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
         description_md: createDescription.trim() ? createDescription.trim() : null,
         amount_micro_usdc: Number(createAmount),
       });
-      setCreateMessage(`Created bounty ${created.bounty_id}.`);
+      setCreateMessage(`Created bounty ID ${created.bounty_num}.`);
       setCreateTitle("");
       setCreateDescription("");
       await load();
@@ -239,7 +239,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
   };
 
   return (
-    <PageContainer title={`Project ${params.id}`}>
+    <PageContainer title={project ? `${project.name} (ID ${project.project_num})` : `Project ${params.id}`}>
       <AgentKeyPanel />
       {loading ? <Loading message="Loading project..." /> : null}
       {!loading && error ? <ErrorState message={error} onRetry={load} /> : null}
@@ -249,6 +249,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
             <p>status: {project.status}</p>
             <p>description_md: {project.description_md ?? "—"}</p>
             <p>monthly_budget: {formatMicroUsdc(project.monthly_budget_micro_usdc)}</p>
+            <p>created_at: {formatDateTimeShort(project.created_at)}</p>
             <p>
               treasury: {project.treasury_address ? `${project.treasury_address.slice(0, 8)}...${project.treasury_address.slice(-6)}` : "—"}
               {treasuryLink ? (
@@ -309,7 +310,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
             ) : (
               <p>cap_table: —</p>
             )}
-            <p>last_deposit_at: {funding?.last_deposit_at ?? "—"}</p>
+            <p>last_deposit_at: {formatDateTimeShort(funding?.last_deposit_at)}</p>
             <p>
               app_surface: <Link href={`/apps/${project.slug}`}>/apps/{project.slug}</Link>
             </p>
@@ -331,7 +332,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
             <ul>
               {project.members.map((member) => (
                 <li key={member.agent_id}>
-                  {member.name} ({member.agent_id}) — {member.role}
+                  {member.name} (ID {member.agent_num}) — {member.role}
                 </li>
               ))}
             </ul>
@@ -433,12 +434,12 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
           <DataCard title="Capital">
             <p>balance_micro_usdc: {formatMicroUsdc(capital?.balance_micro_usdc)}</p>
             <p>events_count: {capital?.events_count ?? "—"}</p>
-            <p>last_event_at: {capital?.last_event_at ? new Date(capital.last_event_at).toLocaleString() : "—"}</p>
+            <p>last_event_at: {formatDateTimeShort(capital?.last_event_at)}</p>
             <h3>Reconciliation</h3>
             <p>status: {reconciliationBadge}</p>
             <p>onchain_balance: {formatMicroUsdc(reconciliation?.onchain_balance_micro_usdc)}</p>
             <p>delta: {formatMicroUsdc(reconciliation?.delta_micro_usdc)}</p>
-            <p>computed_at: {reconciliation?.computed_at ? new Date(reconciliation.computed_at).toLocaleString() : "—"}</p>
+            <p>computed_at: {formatDateTimeShort(reconciliation?.computed_at)}</p>
             <Link href="/projects/capital">Open Project Capital leaderboard</Link>
           </DataCard>
 
@@ -448,14 +449,14 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
             <p>status: {revenueReconciliationBadge}</p>
             <p>onchain_balance: {formatMicroUsdc(revenueReconciliation?.onchain_balance_micro_usdc)}</p>
             <p>delta: {formatMicroUsdc(revenueReconciliation?.delta_micro_usdc)}</p>
-            <p>computed_at: {revenueReconciliation?.computed_at ? new Date(revenueReconciliation.computed_at).toLocaleString() : "—"}</p>
+            <p>computed_at: {formatDateTimeShort(revenueReconciliation?.computed_at)}</p>
           </DataCard>
 
           <DataCard title="Bounties for this project">
             {bounties.length === 0 ? <p>No bounties for this project.</p> : null}
             {bounties.map((bounty) => (
               <div key={bounty.bounty_id} style={{ borderTop: "1px solid #eee", paddingTop: 8, marginTop: 8 }}>
-                <p>{bounty.title}</p>
+                <p>{bounty.title} (ID {bounty.bounty_num})</p>
                 <p>amount: {formatMicroUsdc(bounty.amount_micro_usdc)}</p>
                 <p>status: {bounty.status}</p>
                 <p>funding_source: {bounty.funding_source}</p>

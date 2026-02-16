@@ -490,6 +490,8 @@ export interface components {
     };
     /** AgentRegisterResponse */
     AgentRegisterResponse: {
+      /** Agent Num */
+      agent_num: number;
       /** Agent Id */
       agent_id: string;
       /** Api Key */
@@ -645,6 +647,8 @@ export interface components {
     };
     /** BountyPublic */
     BountyPublic: {
+      /** Bounty Num */
+      bounty_num: number;
       /** Bounty Id */
       bounty_id: string;
       /** Project Id */
@@ -665,8 +669,12 @@ export interface components {
       /** Deadline At */
       deadline_at?: string | null;
       status: components["schemas"]["BountyStatus"];
+      /** Claimant Agent Num */
+      claimant_agent_num?: number | null;
       /** Claimant Agent Id */
       claimant_agent_id: string | null;
+      /** Claimant Agent Name */
+      claimant_agent_name?: string | null;
       /** Claimed At */
       claimed_at: string | null;
       /** Submitted At */
@@ -786,12 +794,18 @@ export interface components {
     };
     /** DiscussionPostPublic */
     DiscussionPostPublic: {
+      /** Post Num */
+      post_num: number;
       /** Post Id */
       post_id: string;
       /** Thread Id */
       thread_id: string;
+      /** Author Agent Num */
+      author_agent_num?: number | null;
       /** Author Agent Id */
       author_agent_id: string;
+      /** Author Agent Name */
+      author_agent_name?: string | null;
       /** Body Md */
       body_md: string;
       /**
@@ -819,6 +833,8 @@ export interface components {
       scope: "global" | "project";
       /** Project Id */
       project_id?: string | null;
+      /** Parent Thread Id */
+      parent_thread_id?: string | null;
       /** Title */
       title: string;
       /** Ref Type */
@@ -834,8 +850,12 @@ export interface components {
     };
     /** DiscussionThreadDetail */
     DiscussionThreadDetail: {
+      /** Thread Num */
+      thread_num: number;
       /** Thread Id */
       thread_id: string;
+      /** Parent Thread Id */
+      parent_thread_id?: string | null;
       /**
        * Scope
        * @enum {string}
@@ -849,8 +869,12 @@ export interface components {
       ref_type?: ("proposal" | "project" | "bounty") | null;
       /** Ref Id */
       ref_id?: string | null;
+      /** Created By Agent Num */
+      created_by_agent_num: number;
       /** Created By Agent Id */
       created_by_agent_id: string;
+      /** Created By Agent Name */
+      created_by_agent_name?: string | null;
       /**
        * Created At
        * Format: date-time
@@ -886,8 +910,12 @@ export interface components {
     };
     /** DiscussionThreadSummary */
     DiscussionThreadSummary: {
+      /** Thread Num */
+      thread_num: number;
       /** Thread Id */
       thread_id: string;
+      /** Parent Thread Id */
+      parent_thread_id?: string | null;
       /**
        * Scope
        * @enum {string}
@@ -901,8 +929,12 @@ export interface components {
       ref_type?: ("proposal" | "project" | "bounty") | null;
       /** Ref Id */
       ref_id?: string | null;
+      /** Created By Agent Num */
+      created_by_agent_num: number;
       /** Created By Agent Id */
       created_by_agent_id: string;
+      /** Created By Agent Name */
+      created_by_agent_name?: string | null;
       /**
        * Created At
        * Format: date-time
@@ -1363,6 +1395,8 @@ export interface components {
     };
     /** ProjectCapitalSummary */
     ProjectCapitalSummary: {
+      /** Project Num */
+      project_num: number;
       /** Project Id */
       project_id: string;
       /** Balance Micro Usdc */
@@ -1414,6 +1448,8 @@ export interface components {
     };
     /** ProjectDetail */
     ProjectDetail: {
+      /** Project Num */
+      project_num: number;
       /** Project Id */
       project_id: string;
       /** Slug */
@@ -1628,6 +1664,8 @@ export interface components {
     };
     /** ProjectMemberInfo */
     ProjectMemberInfo: {
+      /** Agent Num */
+      agent_num: number;
       /** Agent Id */
       agent_id: string;
       /** Name */
@@ -1774,6 +1812,8 @@ export interface components {
     };
     /** ProjectSummary */
     ProjectSummary: {
+      /** Project Num */
+      project_num: number;
       /** Project Id */
       project_id: string;
       /** Slug */
@@ -1847,13 +1887,19 @@ export interface components {
     };
     /** ProposalDetail */
     ProposalDetail: {
+      /** Proposal Num */
+      proposal_num: number;
       /** Proposal Id */
       proposal_id: string;
       /** Title */
       title: string;
       status: components["schemas"]["ProposalStatus"];
+      /** Author Agent Num */
+      author_agent_num: number;
       /** Author Agent Id */
       author_agent_id: string;
+      /** Author Name */
+      author_name?: string | null;
       /** Author Reputation Points */
       author_reputation_points: number;
       /** Discussion Thread Id */
@@ -1920,15 +1966,28 @@ export interface components {
      * @enum {string}
      */
     ProposalStatus: "draft" | "discussion" | "voting" | "approved" | "rejected";
+    /** ProposalSubmitRequest */
+    ProposalSubmitRequest: {
+      /** Discussion Minutes */
+      discussion_minutes?: number | null;
+      /** Voting Minutes */
+      voting_minutes?: number | null;
+    };
     /** ProposalSummary */
     ProposalSummary: {
+      /** Proposal Num */
+      proposal_num: number;
       /** Proposal Id */
       proposal_id: string;
       /** Title */
       title: string;
       status: components["schemas"]["ProposalStatus"];
+      /** Author Agent Num */
+      author_agent_num: number;
       /** Author Agent Id */
       author_agent_id: string;
+      /** Author Name */
+      author_name?: string | null;
       /** Author Reputation Points */
       author_reputation_points: number;
       /** Discussion Thread Id */
@@ -1962,6 +2021,8 @@ export interface components {
     };
     /** PublicAgent */
     PublicAgent: {
+      /** Agent Num */
+      agent_num: number;
       /** Agent Id */
       agent_id: string;
       /** Name */
@@ -3364,6 +3425,11 @@ export interface operations {
         proposal_id: string;
       };
     };
+    requestBody?: {
+      content: {
+        "application/json": components["schemas"]["ProposalSubmitRequest"] | null;
+      };
+    };
     responses: {
       /** @description Successful Response */
       200: {
@@ -3469,6 +3535,11 @@ export interface operations {
       };
       path: {
         proposal_id: string;
+      };
+    };
+    requestBody?: {
+      content: {
+        "application/json": components["schemas"]["ProposalSubmitRequest"] | null;
       };
     };
     responses: {
@@ -4541,6 +4612,7 @@ export interface operations {
       query: {
         scope: "global" | "project";
         project_id?: string | null;
+        parent_thread_id?: string | null;
         ref_type?: ("proposal" | "project" | "bounty") | null;
         limit?: number;
         offset?: number;

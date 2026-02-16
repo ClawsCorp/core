@@ -7,7 +7,7 @@ import { DataCard, PageContainer } from "@/components/Cards";
 import { EmptyState, Loading } from "@/components/State";
 import { ErrorState } from "@/components/ErrorState";
 import { api, readErrorMessage } from "@/lib/api";
-import { formatMicroUsdc } from "@/lib/format";
+import { formatDateTimeShort, formatMicroUsdc } from "@/lib/format";
 import type { ProjectCapitalSummary } from "@/types";
 
 export default function ProjectsCapitalPage() {
@@ -59,10 +59,10 @@ export default function ProjectsCapitalPage() {
       {!loading && !error && filtered.length === 0 ? <EmptyState message="No capital data found." /> : null}
       {!loading && !error && filtered.length > 0
         ? filtered.map((item) => (
-            <DataCard key={item.project_id} title={item.project_id}>
+            <DataCard key={item.project_id} title={`${item.project_id} (ID ${item.project_num})`}>
               <p>balance_micro_usdc: {formatMicroUsdc(item.balance_micro_usdc)}</p>
               <p>events_count: {item.events_count}</p>
-              <p>last_event_at: {item.last_event_at ? new Date(item.last_event_at).toLocaleString() : "—"}</p>
+              <p>last_event_at: {formatDateTimeShort(item.last_event_at)}</p>
               <Link href={`/projects/${item.project_id}`}>Open project</Link>
             </DataCard>
           ))

@@ -8,6 +8,7 @@ import { EmptyState, Loading } from "@/components/State";
 import { ErrorState } from "@/components/ErrorState";
 import { api, readErrorMessage } from "@/lib/api";
 import { getAgentApiKey, setAgentApiKey } from "@/lib/agentKey";
+import { formatDateTimeShort } from "@/lib/format";
 import type { DiscussionScope, DiscussionThreadSummary } from "@/types";
 
 type ScopeFilter = DiscussionScope | "all";
@@ -36,6 +37,7 @@ export default function DiscussionsPage({
   const [createTitle, setCreateTitle] = useState("");
   const [createScope, setCreateScope] = useState<DiscussionScope>("global");
   const [createProjectId, setCreateProjectId] = useState("");
+  const [createParentThreadId, setCreateParentThreadId] = useState("");
   const [createPending, setCreatePending] = useState(false);
   const [createMessage, setCreateMessage] = useState<string | null>(null);
 
@@ -116,9 +118,11 @@ export default function DiscussionsPage({
         scope: createScope,
         title: createTitle,
         project_id: createScope === "project" ? createProjectId.trim() : undefined,
+        parent_thread_id: createParentThreadId.trim() ? createParentThreadId.trim() : undefined,
       };
       await api.createDiscussionThread(agentKey, payload);
       setCreateTitle("");
+      setCreateParentThreadId("");
       setCreateMessage("Thread created.");
       await load();
     } catch (err) {
@@ -211,6 +215,16 @@ export default function DiscussionsPage({
               </label>
             </div>
           ) : null}
+          <div style={{ marginBottom: 8 }}>
+            <label>
+              parent_thread_id (optional, for subdiscussion):
+              <input
+                value={createParentThreadId}
+                onChange={(event) => setCreateParentThreadId(event.target.value)}
+                style={{ marginLeft: 6, padding: 6 }}
+              />
+            </label>
+          </div>
           <button type="submit" disabled={!hasAgentKey || createPending}>
             {createPending ? "Creating..." : "Create thread"}
           </button>
@@ -224,11 +238,12 @@ export default function DiscussionsPage({
       {!loading && !error && displayedThreads.length === 0 ? <EmptyState message="No threads found." /> : null}
       {!loading && !error && displayedThreads.length > 0
         ? displayedThreads.map((thread) => (
-            <DataCard key={thread.thread_id} title={thread.title}>
-              <p>thread_id: {thread.thread_id}</p>
+            <DataCard key={thread.thread_id} title={`${thread.title} (ID ${thread.thread_num})`}>
               <p>scope: {thread.scope}</p>
-              <p>project_id: {thread.project_id ?? "—"}</p>
-              <p>created_at: {thread.created_at}</p>
+              <p>project: {thread.project_id ?? "—"}</p>
+              <p>parent_thread: {thread.parent_thread_id ?? "—"}</p>
+              <p>author: {thread.created_by_agent_name ? `${thread.created_by_agent_name} (ID ${thread.created_by_agent_num ?? "—"})` : "—"}</p>
+              <p>created_at: {formatDateTimeShort(thread.created_at)}</p>
               <p>posts_count: {thread.posts_count ?? "—"}</p>
               <Link href={`/discussions/threads/${thread.thread_id}`}>Open thread</Link>
             </DataCard>

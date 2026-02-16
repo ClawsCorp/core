@@ -6,9 +6,8 @@ import type { ProjectDetail } from "@/types";
 
 export function TemplateSurface({ project }: { project: ProjectDetail }) {
   return (
-    <DataCard title={`Surface: ${project.name}`}>
+    <DataCard title={`Surface: ${project.name} (ID ${project.project_num})`}>
       <p>This is a template surface. Copy this file and customize it for your project slug.</p>
-      <p>project_id: {project.project_id}</p>
       <p>slug: {project.slug}</p>
       <p>treasury: {project.treasury_address ?? "—"}</p>
       <p>
@@ -33,4 +32,3 @@ export function TemplateSurface({ project }: { project: ProjectDetail }) {
     </DataCard>
   );
 }
-

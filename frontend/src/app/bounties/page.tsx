@@ -8,7 +8,7 @@ import { DataCard, PageContainer } from "@/components/Cards";
 import { EmptyState, Loading } from "@/components/State";
 import { ErrorState } from "@/components/ErrorState";
 import { api, readErrorMessage } from "@/lib/api";
-import { formatMicroUsdc } from "@/lib/format";
+import { formatDateTimeShort, formatMicroUsdc } from "@/lib/format";
 import type { BountyPublic } from "@/types";
 
 export default function BountiesPage() {
@@ -189,15 +189,15 @@ export default function BountiesPage() {
       {!loading && !error && items.length === 0 ? <EmptyState message="No bounties found." /> : null}
       {!loading && !error && items.length > 0
         ? items.map((bounty) => (
-            <DataCard key={bounty.bounty_id} title={bounty.title}>
-              <p>bounty_id: {bounty.bounty_id}</p>
-              <p>project_id: {bounty.project_id}</p>
+            <DataCard key={bounty.bounty_id} title={`${bounty.title} (ID ${bounty.bounty_num})`}>
+              <p>project: {bounty.project_id ?? "—"}</p>
               <p>origin_proposal_id: {bounty.origin_proposal_id ?? "—"}</p>
               <p>origin_milestone_id: {bounty.origin_milestone_id ?? "—"}</p>
               <p>status: {bounty.status}</p>
+              <p>claimant: {bounty.claimant_agent_name ? `${bounty.claimant_agent_name} (ID ${bounty.claimant_agent_num ?? "—"})` : "—"}</p>
               <p>amount: {formatMicroUsdc(bounty.amount_micro_usdc)}</p>
               <p>priority: {bounty.priority ?? "—"}</p>
-              <p>deadline_at: {bounty.deadline_at ? new Date(bounty.deadline_at).toLocaleString() : "—"}</p>
+              <p>deadline_at: {formatDateTimeShort(bounty.deadline_at)}</p>
               <Link href={`/bounties/${bounty.bounty_id}`}>Open detail</Link>
             </DataCard>
           ))

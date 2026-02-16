@@ -7,6 +7,7 @@ import { DataCard, PageContainer } from "@/components/Cards";
 import { EmptyState, Loading } from "@/components/State";
 import { ErrorState } from "@/components/ErrorState";
 import { api, readErrorMessage } from "@/lib/api";
+import { formatDateTimeShort } from "@/lib/format";
 import type { AlertsData, AlertItem } from "@/types";
 
 function groupBySeverity(items: AlertItem[]): Record<string, AlertItem[]> {
@@ -86,7 +87,7 @@ export default function AutonomyPage() {
                         {JSON.stringify(a.data, null, 2)}
                       </pre>
                     ) : null}
-                    <p style={{ opacity: 0.7 }}>observed_at: {new Date(a.observed_at).toLocaleString()}</p>
+                    <p style={{ opacity: 0.7 }}>observed_at: {formatDateTimeShort(a.observed_at)}</p>
                   </div>
                 ))}
               </DataCard>

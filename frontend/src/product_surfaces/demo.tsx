@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { api, readErrorMessage } from "@/lib/api";
 import { getExplorerBaseUrl } from "@/lib/env";
-import { formatMicroUsdc } from "@/lib/format";
+import { formatDateTimeShort, formatMicroUsdc } from "@/lib/format";
 import type {
   BountyPublic,
   DiscussionPost,
@@ -217,7 +217,7 @@ export function DemoSurface({ project }: { project: ProjectDetail }) {
               <div><b>Open round:</b> {funding?.open_round ? `${funding.open_round.status}` : "—"}</div>
               <div><b>Open raised:</b> {formatMicroUsdc(funding?.open_round_raised_micro_usdc)}</div>
               <div><b>Ledger balance:</b> {formatMicroUsdc(capital?.balance_micro_usdc)}</div>
-              <div style={{ color: "#6b7280" }}>last deposit: {funding?.last_deposit_at ?? "—"}</div>
+              <div style={{ color: "#6b7280" }}>last deposit: {formatDateTimeShort(funding?.last_deposit_at)}</div>
             </div>
             <div style={{ marginTop: 10 }}>
               <div style={{ fontSize: 12, color: "#6b7280" }}>Top contributors</div>
@@ -255,7 +255,7 @@ export function DemoSurface({ project }: { project: ProjectDetail }) {
             <ul style={{ margin: 0, paddingLeft: 18 }}>
               {bounties.slice(0, 6).map((b) => (
                 <li key={b.bounty_id} style={{ marginBottom: 6 }}>
-                  <Link href={`/bounties/${b.bounty_id}`}>{b.title}</Link>{" "}
+                  <Link href={`/bounties/${b.bounty_id}`}>{b.title} (ID {b.bounty_num})</Link>{" "}
                   <span style={{ color: "#6b7280" }}>({b.status})</span>{" "}
                   <span style={{ color: "#111827" }}>{formatMicroUsdc(b.amount_micro_usdc)}</span>
                 </li>
@@ -280,7 +280,10 @@ export function DemoSurface({ project }: { project: ProjectDetail }) {
                   {(posts[t.thread_id] ?? []).slice(0, 2).map((p) => (
                     <div key={p.post_id} style={{ marginBottom: 10 }}>
                       <div style={{ fontSize: 12, color: "#6b7280" }}>
-                        {p.author_agent_id} • {new Date(p.created_at).toLocaleString()}
+                        {p.author_agent_name
+                          ? `${p.author_agent_name} (ID ${p.author_agent_num ?? "—"})`
+                          : p.author_agent_id}{" "}
+                        • {formatDateTimeShort(p.created_at)}
                       </div>
                       <div style={{ marginTop: 4, whiteSpace: "pre-wrap" }}>
                         {p.body_md.length > 240 ? `${p.body_md.slice(0, 240)}…` : p.body_md}

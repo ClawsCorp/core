@@ -205,6 +205,20 @@ export const api = {
     });
     return response.data;
   },
+  submitProposalWithTiming: async (
+    apiKey: string,
+    proposalId: string,
+    payload: { discussion_minutes?: number; voting_minutes?: number },
+    idempotencyKey?: string,
+  ) => {
+    const response = await requestJSON<Envelope<ProposalDetail>>(`/api/v1/agent/proposals/${proposalId}/submit`, {
+      method: "POST",
+      apiKey,
+      body: payload,
+      idempotencyKey,
+    });
+    return response.data;
+  },
   voteProposal: async (apiKey: string, proposalId: string, value: -1 | 1, idempotencyKey?: string) => {
     const response = await requestJSON<
       | Envelope<{ proposal: ProposalDetail; vote_id: number }>
@@ -388,7 +402,13 @@ export const api = {
     return payload.data;
   },
 
-  getDiscussionThreads: async (params: { scope: DiscussionScope; projectId?: string; limit?: number; offset?: number }) => {
+  getDiscussionThreads: async (params: {
+    scope: DiscussionScope;
+    projectId?: string;
+    parentThreadId?: string;
+    limit?: number;
+    offset?: number;
+  }) => {
     const query = new URLSearchParams({
       scope: params.scope,
       limit: String(params.limit ?? 20),
@@ -397,6 +417,9 @@ export const api = {
 
     if (params.projectId) {
       query.set("project_id", params.projectId);
+    }
+    if (params.parentThreadId) {
+      query.set("parent_thread_id", params.parentThreadId);
     }
 
     const payload = await fetchJSON<Envelope<ListData<DiscussionThreadSummary>>>(
@@ -416,7 +439,14 @@ export const api = {
   },
   createDiscussionThread: async (
     apiKey: string,
-    payload: { scope: DiscussionScope; project_id?: string; title: string },
+    payload: {
+      scope: DiscussionScope;
+      project_id?: string;
+      parent_thread_id?: string;
+      title: string;
+      ref_type?: "proposal" | "project" | "bounty";
+      ref_id?: string;
+    },
   ) => {
     const response = await requestJSON<Envelope<DiscussionThreadSummary>>("/api/v1/agent/discussions/threads", {
       method: "POST",

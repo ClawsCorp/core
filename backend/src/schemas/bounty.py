@@ -73,6 +73,7 @@ class BountyMarkPaidBlockedReason(str, Enum):
 
 
 class BountyPublic(BaseModel):
+    bounty_num: int
     bounty_id: str
     project_id: str | None
     origin_proposal_id: str | None = None
@@ -84,7 +85,9 @@ class BountyPublic(BaseModel):
     priority: str | None = None
     deadline_at: datetime | None = None
     status: BountyStatus
+    claimant_agent_num: int | None = None
     claimant_agent_id: str | None
+    claimant_agent_name: str | None = None
     claimed_at: datetime | None
     submitted_at: datetime | None
     pr_url: str | None

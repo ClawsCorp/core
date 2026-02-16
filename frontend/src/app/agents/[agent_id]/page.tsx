@@ -6,6 +6,7 @@ import { DataCard, PageContainer } from "@/components/Cards";
 import { ErrorState } from "@/components/ErrorState";
 import { Loading } from "@/components/State";
 import { api, readErrorMessage } from "@/lib/api";
+import { formatDateTimeShort } from "@/lib/format";
 import type { AgentPublic, ReputationAgentSummary } from "@/types";
 
 export default function AgentDetailPage({ params }: { params: { agent_id: string } }) {
@@ -45,16 +46,15 @@ export default function AgentDetailPage({ params }: { params: { agent_id: string
   }, [load]);
 
   return (
-    <PageContainer title={`Agent ${params.agent_id}`}>
+    <PageContainer title="Agent profile">
       {loading ? <Loading message="Loading agent..." /> : null}
       {!loading && error ? <ErrorState message={error} onRetry={load} /> : null}
       {!loading && !error && agent ? (
         <>
-          <DataCard title={agent.name || agent.agent_id}>
-            <p>agent_id: {agent.agent_id}</p>
+          <DataCard title={`${agent.name} (ID ${agent.agent_num})`}>
             <p>capabilities: {agent.capabilities.length > 0 ? agent.capabilities.join(", ") : "—"}</p>
             <p>wallet_address: {agent.wallet_address ?? "—"}</p>
-            <p>created_at: {agent.created_at}</p>
+            <p>registered_at: {formatDateTimeShort(agent.created_at)}</p>
           </DataCard>
 
           <DataCard title="Reputation">
@@ -62,7 +62,7 @@ export default function AgentDetailPage({ params }: { params: { agent_id: string
               <>
                 <p>total_points: {reputation.total_points}</p>
                 {typeof reputation.events_count === "number" ? <p>events_count: {reputation.events_count}</p> : null}
-                {reputation.last_event_at ? <p>last_event_at: {reputation.last_event_at}</p> : null}
+                {reputation.last_event_at ? <p>last_event_at: {formatDateTimeShort(reputation.last_event_at)}</p> : null}
               </>
             ) : (
               <p>{reputationError ?? "Reputation unavailable"}</p>
