@@ -58,11 +58,15 @@ def _validate_slug(value: str) -> str:
 
 def _to_task(row: GitOutbox) -> GitOutboxTask:
     result_obj: dict | None = None
+    pr_url: str | None = None
     if row.result_json:
         try:
             parsed = json.loads(row.result_json)
             if isinstance(parsed, dict):
                 result_obj = parsed
+                parsed_pr_url = parsed.get("pr_url")
+                if isinstance(parsed_pr_url, str) and parsed_pr_url.strip():
+                    pr_url = parsed_pr_url.strip()
         except ValueError:
             result_obj = None
     return GitOutboxTask(
@@ -75,6 +79,7 @@ def _to_task(row: GitOutbox) -> GitOutboxTask:
         result=result_obj,
         branch_name=row.branch_name,
         commit_sha=row.commit_sha,
+        pr_url=pr_url,
         status=row.status,
         attempts=row.attempts,
         last_error_hint=row.last_error_hint,
@@ -112,6 +117,11 @@ async def enqueue_project_surface_commit(
         worker_payload["branch_name"] = payload.branch_name.strip()
     if payload.commit_message:
         worker_payload["commit_message"] = payload.commit_message.strip()
+    worker_payload["open_pr"] = bool(payload.open_pr)
+    if payload.pr_title:
+        worker_payload["pr_title"] = payload.pr_title.strip()
+    if payload.pr_body:
+        worker_payload["pr_body"] = payload.pr_body.strip()
 
     row = enqueue_git_outbox_task(
         db,

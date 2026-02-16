@@ -346,7 +346,15 @@ export const api = {
   createProjectSurfaceCommitTask: async (
     apiKey: string,
     projectId: string,
-    payload: { slug: string; branch_name?: string; commit_message?: string; idempotency_key?: string },
+    payload: {
+      slug: string;
+      branch_name?: string;
+      commit_message?: string;
+      open_pr?: boolean;
+      pr_title?: string;
+      pr_body?: string;
+      idempotency_key?: string;
+    },
   ) => {
     const response = await requestJSON<Envelope<GitOutboxTask>>(
       `/api/v1/agent/projects/${projectId}/git-outbox/surface-commit`,

@@ -116,6 +116,21 @@ def _validate_surface_slug(slug: str) -> str:
     return value
 
 
+def _coerce_bool(value: Any, *, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "y", "on"}:
+        return True
+    if text in {"0", "false", "no", "n", "off"}:
+        return False
+    return default
+
+
 def _load_execute_payload(path: str) -> tuple[bytes, dict[str, Any]]:
     if path.strip().lower() == "auto":
         raise OracleRunnerError("Use build-execute-payload or run-month with --execute-payload auto.")
@@ -1462,6 +1477,9 @@ def run(argv: list[str] | None = None) -> int:
                             slug = _validate_surface_slug(str(payload.get("slug") or ""))
                             branch_name = str(payload.get("branch_name") or f"codex/dao-surface-{slug}-{task_id[:6]}")
                             commit_message = str(payload.get("commit_message") or f"feat(surface): add {slug} app surface")
+                            open_pr = _coerce_bool(payload.get("open_pr"), default=True)
+                            pr_title = str(payload.get("pr_title") or f"feat(surface): add {slug} app surface")
+                            pr_body = str(payload.get("pr_body") or f"Autonomous surface generation for `{slug}` via git_outbox task `{task_id}`.")
 
                             # Ensure clean deterministic baseline for the task branch.
                             _run_local_cmd(["git", "checkout", base_branch], cwd=repo_root)
@@ -1470,13 +1488,48 @@ def run(argv: list[str] | None = None) -> int:
                             _run_local_cmd(["git", "add", f"frontend/src/product_surfaces/{slug}.tsx"], cwd=repo_root)
                             _run_local_cmd(["git", "add", "frontend/src/product_surfaces/registry.gen.ts"], cwd=repo_root)
                             _run_local_cmd(["git", "commit", "-m", commit_message], cwd=repo_root)
+                            _run_local_cmd(["git", "push", "-u", "origin", branch_name], cwd=repo_root)
                             commit_sha = _run_local_cmd(["git", "rev-parse", "HEAD"], cwd=repo_root)
+
+                            pr_url: str | None = None
+                            pr_error: str | None = None
+                            if open_pr:
+                                try:
+                                    pr_create = _run_local_cmd(
+                                        [
+                                            "gh",
+                                            "pr",
+                                            "create",
+                                            "--base",
+                                            base_branch,
+                                            "--head",
+                                            branch_name,
+                                            "--title",
+                                            pr_title,
+                                            "--body",
+                                            pr_body,
+                                        ],
+                                        cwd=repo_root,
+                                    )
+                                    if pr_create:
+                                        for line in pr_create.splitlines():
+                                            candidate = line.strip()
+                                            if candidate.startswith("http://") or candidate.startswith("https://"):
+                                                pr_url = candidate
+                                                break
+                                        if pr_url is None:
+                                            pr_url = pr_create.strip()
+                                except OracleRunnerError as exc:
+                                    pr_error = str(exc)
 
                             result = {
                                 "stage": "committed",
                                 "slug": slug,
                                 "branch_name": branch_name,
                                 "commit_sha": commit_sha,
+                                "open_pr": open_pr,
+                                "pr_url": pr_url,
+                                "pr_error": pr_error,
                                 "files": [
                                     f"frontend/src/product_surfaces/{slug}.tsx",
                                     "frontend/src/product_surfaces/registry.gen.ts",
@@ -1492,6 +1545,8 @@ def run(argv: list[str] | None = None) -> int:
                                     "slug": slug,
                                     "branch_name": branch_name,
                                     "commit_sha": commit_sha,
+                                    "pr_url": pr_url,
+                                    "pr_error": pr_error,
                                 }
                             )
                             processed_this_loop += 1
