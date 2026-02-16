@@ -619,6 +619,9 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
                         </a>
                       </>
                     ) : null}
+                    {!task.pr_url && task.result && typeof task.result["pr_error"] === "string"
+                      ? ` · pr_error=${String(task.result["pr_error"])}`
+                      : ""}
                     {task.last_error_hint ? ` · error=${task.last_error_hint}` : ""}
                     {` · created_at=${formatDateTimeShort(task.created_at)}`}
                   </li>
