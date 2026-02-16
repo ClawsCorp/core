@@ -213,7 +213,7 @@ export function DemoSurface({ project }: { project: ProjectDetail }) {
         {!loading && !error ? (
           <div style={{ border: "1px solid #e5e7eb", borderRadius: 10, padding: 12, background: "#ffffff" }}>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <div><b>Total raised (observed):</b> {formatMicroUsdc(funding?.total_raised_micro_usdc)}</div>
+              <div><b>Total raised:</b> {formatMicroUsdc(funding?.total_raised_micro_usdc)}</div>
               <div><b>Open round:</b> {funding?.open_round ? `${funding.open_round.status}` : "—"}</div>
               <div><b>Open raised:</b> {formatMicroUsdc(funding?.open_round_raised_micro_usdc)}</div>
               <div><b>Ledger balance:</b> {formatMicroUsdc(capital?.balance_micro_usdc)}</div>
@@ -235,6 +235,12 @@ export function DemoSurface({ project }: { project: ProjectDetail }) {
               {(funding?.contributors ?? []).length === 0 ? (
                 <div style={{ marginTop: 8, fontSize: 12, color: "#6b7280" }}>
                   Contributor list is populated from observed on-chain USDC transfers. If the indexer is catching up, this may temporarily show as empty.
+                </div>
+              ) : null}
+              {(funding?.unattributed_micro_usdc ?? 0) > 0 ? (
+                <div style={{ marginTop: 8, fontSize: 12, color: "#92400e" }}>
+                  Unattributed inflow (indexer lag fallback): {formatMicroUsdc(funding?.unattributed_micro_usdc)}.
+                  Source: {funding?.contributors_data_source ?? "unknown"}.
                 </div>
               ) : null}
             </div>

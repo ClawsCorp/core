@@ -168,4 +168,69 @@ def test_project_funding_summary_uses_open_round_and_deposits(_client: TestClien
     assert data["contributors_total_count"] == 1
     assert data["contributors"][0]["address"] == from_addr.lower()
     assert data["contributors"][0]["amount_micro_usdc"] == 1234
+    assert data["contributors_data_source"] == "observed_transfers"
+    assert data["unattributed_micro_usdc"] == 0
 
+
+def test_project_funding_summary_falls_back_to_ledger_inflow_when_indexer_lags(
+    _client: TestClient, _db: sessionmaker[Session]
+) -> None:
+    treasury = "0x00000000000000000000000000000000000000ab"
+
+    with _db() as db:
+        project = Project(
+            project_id="prj_fallback",
+            slug="fund-fallback",
+            name="Funding fallback",
+            description_md=None,
+            status=ProjectStatus.fundraising,
+            proposal_id=None,
+            origin_proposal_id=None,
+            originator_agent_id=None,
+            discussion_thread_id=None,
+            treasury_wallet_address=None,
+            treasury_address=treasury,
+            revenue_wallet_address=None,
+            revenue_address=None,
+            monthly_budget_micro_usdc=None,
+            created_by_agent_id=None,
+            approved_at=None,
+        )
+        db.add(project)
+        db.commit()
+
+    # Open a funding round.
+    path_open = "/api/v1/oracle/projects/prj_fallback/funding-rounds"
+    body_open = json.dumps({"idempotency_key": "fr-open-fallback", "title": "Round F", "cap_micro_usdc": 9999}).encode("utf-8")
+    resp_open = _client.post(path_open, content=body_open, headers=_oracle_headers(path_open, body_open, "req-open-fallback", idem="idem-open-fallback"))
+    assert resp_open.status_code == 200
+    assert resp_open.json()["success"] is True
+
+    # Simulate append-only manual capital ingestion while observed transfers are not yet synced.
+    path_event = "/api/v1/oracle/project-capital-events"
+    body_event = json.dumps(
+        {
+            "event_id": None,
+            "idempotency_key": "pcap-fallback-1",
+            "profit_month_id": "202602",
+            "project_id": "prj_fallback",
+            "delta_micro_usdc": 777,
+            "source": "e2e_manual_deposit",
+            "evidence_tx_hash": "0x" + ("33" * 32),
+            "evidence_url": None,
+        }
+    ).encode("utf-8")
+    resp_event = _client.post(path_event, content=body_event, headers=_oracle_headers(path_event, body_event, "req-event-fallback", idem="idem-event-fallback"))
+    assert resp_event.status_code == 200
+    assert resp_event.json()["success"] is True
+
+    # Funding summary remains truthful even without observed transfer rows.
+    resp = _client.get("/api/v1/projects/prj_fallback/funding")
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["total_raised_micro_usdc"] == 777
+    assert data["open_round_raised_micro_usdc"] == 777
+    assert data["contributors"] == []
+    assert data["contributors_total_count"] == 0
+    assert data["contributors_data_source"] == "ledger_fallback"
+    assert data["unattributed_micro_usdc"] == 777

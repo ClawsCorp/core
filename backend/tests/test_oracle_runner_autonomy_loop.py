@@ -7,6 +7,7 @@ from src.oracle_runner import cli
 
 class _FakeClientAutonomy:
     def __init__(self, _config: object):
+        self.post_calls: list[str] = []
         # Minimal happy-path responses.
         self._post_responses: dict[str, dict] = {
             "/api/v1/oracle/project-capital-events/sync": {
@@ -32,6 +33,15 @@ class _FakeClientAutonomy:
                 "task_id": "txo_1",
                 "amount_micro_usdc": 123,
             },
+            "/api/v1/oracle/settlement/202502/deposit-profit": {
+                "profit_month_id": "202502",
+                "status": "submitted",
+                "tx_hash": "0xdep2",
+                "blocked_reason": None,
+                "idempotency_key": "deposit_profit:202502:456",
+                "task_id": "txo_2",
+                "amount_micro_usdc": 456,
+            },
             "/api/v1/oracle/distributions/202501/create": {"status": "submitted", "tx_hash": "0xcreate"},
             "/api/v1/oracle/distributions/202501/execute/payload": {
                 "status": "ok",
@@ -52,9 +62,39 @@ class _FakeClientAutonomy:
                 (),
                 {"data": {"success": True, "data": {"items": [{"project_id": "proj_1"}], "limit": 100, "offset": 0, "total": 1}}},
             )()
+        if path.startswith("/api/v1/settlement/months"):
+            return type(
+                "Resp",
+                (),
+                {
+                    "data": {
+                        "success": True,
+                        "data": {
+                            "items": [
+                                {
+                                    "profit_month_id": "202502",
+                                    "profit_sum_micro_usdc": 456,
+                                    "delta_micro_usdc": -456,
+                                    "blocked_reason": "balance_mismatch",
+                                },
+                                {
+                                    "profit_month_id": "202501",
+                                    "profit_sum_micro_usdc": 123,
+                                    "delta_micro_usdc": 0,
+                                    "blocked_reason": None,
+                                },
+                            ],
+                            "limit": 24,
+                            "offset": 0,
+                            "total": 2,
+                        },
+                    }
+                },
+            )()
         raise AssertionError(f"unexpected GET path {path}")
 
     def post(self, path: str, *, body_bytes: bytes, idempotency_key: str | None = None):
+        self.post_calls.append(path)
         data = self._post_responses.get(path)
         if data is None:
             raise AssertionError(f"unexpected POST path {path}")
@@ -78,3 +118,5 @@ def test_autonomy_loop_once_prints_single_json(monkeypatch, capsys) -> None:
     assert payload["success"] is True
     assert "run_month" in payload
     assert payload["run_month"]["success"] is True
+    assert "deposit_backlog" in payload
+    assert payload["deposit_backlog"][0]["month"] == "202502"

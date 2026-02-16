@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from sqlalchemy import desc, func
+from sqlalchemy import case, desc, func
 from sqlalchemy.orm import Session
 
 from src.api.v1.dependencies import require_oracle_hmac
@@ -183,21 +183,44 @@ def get_project_funding_summary(project_id: str, db: Session = Depends(get_db)) 
         .first()
     )
 
-    open_round_raised = 0
+    open_round_raised_observed = 0
     if open_round is not None:
-        open_round_raised = int(
+        open_round_raised_observed = int(
             db.query(func.coalesce(func.sum(ProjectFundingDeposit.amount_micro_usdc), 0))
             .filter(ProjectFundingDeposit.project_id == project.id, ProjectFundingDeposit.funding_round_id == open_round.id)
             .scalar()
             or 0
         )
 
-    total_raised = int(
+    total_raised_observed = int(
         db.query(func.coalesce(func.sum(ProjectFundingDeposit.amount_micro_usdc), 0))
         .filter(ProjectFundingDeposit.project_id == project.id)
         .scalar()
         or 0
     )
+
+    # Indexer lag fallback:
+    # derive inflow totals from append-only capital events so funding summary remains truthful
+    # even when observed transfer ingestion is temporarily stale.
+    inflow_case = case((ProjectCapitalEvent.delta_micro_usdc > 0, ProjectCapitalEvent.delta_micro_usdc), else_=0)
+    total_inflow_ledger = int(
+        db.query(func.coalesce(func.sum(inflow_case), 0))
+        .filter(ProjectCapitalEvent.project_id == project.id)
+        .scalar()
+        or 0
+    )
+    open_round_inflow_ledger = 0
+    if open_round is not None:
+        open_round_inflow_query = (
+            db.query(func.coalesce(func.sum(inflow_case), 0))
+            .filter(
+                ProjectCapitalEvent.project_id == project.id,
+                ProjectCapitalEvent.created_at >= open_round.opened_at,
+            )
+        )
+        if open_round.closed_at is not None:
+            open_round_inflow_query = open_round_inflow_query.filter(ProjectCapitalEvent.created_at <= open_round.closed_at)
+        open_round_inflow_ledger = int(open_round_inflow_query.scalar() or 0)
 
     contributors_rows = (
         db.query(
@@ -229,6 +252,19 @@ def get_project_funding_summary(project_id: str, db: Session = Depends(get_db)) 
             or 0
         )
 
+    total_raised = total_raised_observed
+    open_round_raised = open_round_raised_observed
+    contributors_data_source = "observed_transfers"
+    unattributed_micro_usdc = 0
+    if total_inflow_ledger > total_raised_observed:
+        total_raised = total_inflow_ledger
+        if open_round is not None:
+            open_round_raised = max(open_round_raised_observed, open_round_inflow_ledger, total_inflow_ledger)
+        else:
+            open_round_raised = max(open_round_raised_observed, open_round_inflow_ledger)
+        contributors_data_source = "mixed_with_ledger_fallback" if total_raised_observed > 0 else "ledger_fallback"
+        unattributed_micro_usdc = int(total_inflow_ledger - total_raised_observed)
+
     last_deposit_at = (
         db.query(func.max(ProjectFundingDeposit.observed_at))
         .filter(ProjectFundingDeposit.project_id == project.id)
@@ -244,6 +280,8 @@ def get_project_funding_summary(project_id: str, db: Session = Depends(get_db)) 
             total_raised_micro_usdc=total_raised,
             contributors=contributors,
             contributors_total_count=contributors_total_count,
+            contributors_data_source=contributors_data_source,
+            unattributed_micro_usdc=unattributed_micro_usdc,
             last_deposit_at=last_deposit_at,
         ),
     )
