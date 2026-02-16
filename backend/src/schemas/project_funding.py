@@ -44,6 +44,8 @@ class ProjectFundingSummary(BaseModel):
     total_raised_micro_usdc: int
     contributors: list[ProjectFundingContributor]
     contributors_total_count: int
+    contributors_data_source: str = "observed_transfers"
+    unattributed_micro_usdc: int = 0
     last_deposit_at: datetime | None
 
 

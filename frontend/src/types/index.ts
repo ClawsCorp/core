@@ -139,6 +139,8 @@ export interface ProjectFundingSummary {
   total_raised_micro_usdc: number;
   contributors: ProjectFundingContributor[];
   contributors_total_count: number;
+  contributors_data_source?: "observed_transfers" | "mixed_with_ledger_fallback" | "ledger_fallback" | string;
+  unattributed_micro_usdc?: number;
   last_deposit_at: string | null;
 }
 

@@ -1590,6 +1590,16 @@ export interface components {
       contributors: components["schemas"]["ProjectFundingContributor"][];
       /** Contributors Total Count */
       contributors_total_count: number;
+      /**
+       * Contributors Data Source
+       * @default observed_transfers
+       */
+      contributors_data_source?: string;
+      /**
+       * Unattributed Micro Usdc
+       * @default 0
+       */
+      unattributed_micro_usdc?: number;
       /** Last Deposit At */
       last_deposit_at: string | null;
     };

@@ -344,6 +344,18 @@ def build_parser() -> argparse.ArgumentParser:
     autonomy_loop.add_argument("--reconcile-projects", action="store_true", help="Refresh project capital reconciliation for active/fundraising projects.")
     autonomy_loop.add_argument("--reconcile-project-revenue", action="store_true", help="Refresh project revenue reconciliation where configured.")
     autonomy_loop.add_argument("--run-month", action="store_true", help="Run platform month flow each loop (idempotent).")
+    autonomy_loop.add_argument(
+        "--deposit-backlog-limit",
+        type=int,
+        default=3,
+        help="After run-month, enqueue/submit deposit-profit for up to N under-funded platform months from settlement index (0 disables).",
+    )
+    autonomy_loop.add_argument(
+        "--deposit-backlog-scan-limit",
+        type=int,
+        default=24,
+        help="How many settlement months to scan for under-funded backlog.",
+    )
     autonomy_loop.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout (one object for --once).")
 
     return parser
@@ -356,6 +368,42 @@ def _post_action(client: OracleClient, path: str, body_bytes: bytes, idempotency
 def _get_action(client: OracleClient, path: str) -> dict[str, Any]:
     response = client.get(path)
     return _extract_data(response.data)
+
+
+def _list_underfunded_months_for_deposit(
+    client: OracleClient,
+    *,
+    scan_limit: int = 24,
+    result_limit: int = 3,
+) -> list[str]:
+    """Return months that are under-funded (delta < 0, balance_mismatch) and need deposit-profit."""
+    if scan_limit <= 0 or result_limit <= 0:
+        return []
+
+    data = _get_action(client, f"/api/v1/settlement/months?limit={int(scan_limit)}&offset=0")
+    items = list(data.get("items") or []) if isinstance(data, dict) else []
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        month = str(item.get("profit_month_id") or "").strip()
+        if not _MONTH_RE.fullmatch(month):
+            continue
+        if month in seen:
+            continue
+        blocked_reason = str(item.get("blocked_reason") or "")
+        try:
+            delta = int(item.get("delta_micro_usdc") or 0)
+            profit_sum = int(item.get("profit_sum_micro_usdc") or 0)
+        except Exception:
+            continue
+        if blocked_reason == "balance_mismatch" and delta < 0 and profit_sum > 0:
+            seen.add(month)
+            out.append(month)
+        if len(out) >= int(result_limit):
+            break
+    return out
 
 
 def _run_month_flow(
@@ -985,8 +1033,47 @@ def run(argv: list[str] | None = None) -> int:
                         )
                         cycle["run_month_exit_code"] = exit_code
                         cycle["run_month"] = rm
-                        if exit_code not in (0, 10, 4, 6, 7, 9):
+                        if exit_code not in (0, 10, 11, 4, 6, 7, 9):
                             cycle["success"] = False
+
+                    backlog_limit = max(0, int(args.deposit_backlog_limit))
+                    backlog_scan_limit = max(1, int(args.deposit_backlog_scan_limit))
+                    if bool(args.run_month) and backlog_limit > 0:
+                        try:
+                            backlog_months = _list_underfunded_months_for_deposit(
+                                client,
+                                scan_limit=backlog_scan_limit,
+                                result_limit=backlog_limit + 1,
+                            )
+                        except OracleRunnerError as exc:
+                            cycle["success"] = False
+                            cycle["deposit_backlog_error"] = str(exc)
+                            _print_progress("deposit_backlog", "error", str(exc))
+                            backlog_months = []
+
+                        # Avoid duplicate call for month already handled by run-month.
+                        backlog_months = [m for m in backlog_months if m != month][:backlog_limit]
+                        backlog_results: list[dict[str, Any]] = []
+                        for m in backlog_months:
+                            try:
+                                _print_progress("deposit_backlog", "start", detail=m)
+                                dep = _post_action(client, f"/api/v1/oracle/settlement/{m}/deposit-profit", b"")
+                                backlog_results.append({"month": m, "result": dep})
+                                dstatus = str(dep.get("status") or "")
+                                if dstatus == "blocked":
+                                    _print_progress(
+                                        "deposit_backlog",
+                                        "blocked",
+                                        detail=f"{m}:{dep.get('blocked_reason')}",
+                                    )
+                                else:
+                                    _print_progress("deposit_backlog", "ok", detail=f"{m}:{dstatus or 'submitted'}")
+                            except OracleRunnerError as exc:
+                                cycle["success"] = False
+                                backlog_results.append({"month": m, "error": str(exc)})
+                                _print_progress("deposit_backlog", "error", detail=f"{m}:{exc}")
+                        if backlog_results:
+                            cycle["deposit_backlog"] = backlog_results
 
                 except OracleRunnerError as exc:
                     cycle["success"] = False
