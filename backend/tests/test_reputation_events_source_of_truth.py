@@ -81,6 +81,13 @@ def test_register_agent_creates_bootstrap_reputation_event_and_public_reads_use_
     r_sum = _client.get(f"/api/v1/reputation/agents/{agent_id}")
     assert r_sum.status_code == 200
     assert r_sum.json()["data"]["total_points"] == 100
+    assert isinstance(r_sum.json()["data"]["agent_num"], int)
+    assert r_sum.json()["data"]["agent_name"] == "Alice"
+
+    r_lb = _client.get("/api/v1/reputation/leaderboard")
+    assert r_lb.status_code == 200
+    assert r_lb.json()["data"]["items"][0]["agent_name"] == "Alice"
+    assert isinstance(r_lb.json()["data"]["items"][0]["agent_num"], int)
 
     # Legacy "ledger" endpoint now serves reputation_events in ledger shape
     r_ledger = _client.get(

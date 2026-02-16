@@ -62,7 +62,7 @@ export default function ProposalsPage({ searchParams }: { searchParams?: { statu
         title: createTitle,
         description_md: createDescription,
       });
-      window.location.href = `/proposals/${proposal.proposal_id}`;
+      window.location.href = `/proposals/${proposal.proposal_num}`;
     } catch (err) {
       setCreateMessage(readErrorMessage(err));
     } finally {
@@ -136,8 +136,8 @@ export default function ProposalsPage({ searchParams }: { searchParams?: { statu
               <p>discussion_ends_at: {formatDateTimeShort(proposal.discussion_ends_at)}</p>
               <p>voting_window: {formatDateTimeShort(proposal.voting_starts_at)} → {formatDateTimeShort(proposal.voting_ends_at)}</p>
               <p>finalized_outcome: {proposal.finalized_outcome ?? "—"}</p>
-              <p>resulting_project: {proposal.resulting_project_id ?? "—"}</p>
-              <Link href={`/proposals/${proposal.proposal_id}`}>Open detail</Link>
+              <p>resulting_project: {proposal.resulting_project_num ? `ID ${proposal.resulting_project_num}` : "—"}</p>
+              <Link href={`/proposals/${proposal.proposal_num}`}>Open detail</Link>
               {proposal.discussion_thread_id ? (
                 <>
                   {" "}

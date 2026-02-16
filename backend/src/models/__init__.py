@@ -8,6 +8,7 @@ from src.models.dividend_payout import DividendPayout
 from src.models.distribution_creation import DistributionCreation
 from src.models.distribution_execution import DistributionExecution
 from src.models.discussions import DiscussionPost, DiscussionPostFlag, DiscussionThread, DiscussionVote
+from src.models.git_outbox import GitOutbox
 from src.models.indexer_cursor import IndexerCursor
 from src.models.milestone import Milestone, MilestoneStatus
 from src.models.oracle_nonce import OracleNonce
@@ -22,6 +23,7 @@ from src.models.reconciliation_report import ReconciliationReport
 from src.models.revenue_event import RevenueEvent
 from src.models.project_member import ProjectMember, ProjectMemberRole
 from src.models.project_domain import ProjectDomain
+from src.models.project_crypto_invoice import ProjectCryptoInvoice
 from src.models.project_funding_deposit import ProjectFundingDeposit
 from src.models.project_funding_round import ProjectFundingRound
 from src.models.proposal import Proposal, ProposalStatus
@@ -46,6 +48,7 @@ __all__ = [
     "DiscussionPostFlag",
     "DiscussionThread",
     "DiscussionVote",
+    "GitOutbox",
     "IndexerCursor",
     "Milestone",
     "MilestoneStatus",
@@ -61,6 +64,7 @@ __all__ = [
     "ProjectMember",
     "ProjectMemberRole",
     "ProjectDomain",
+    "ProjectCryptoInvoice",
     "ProjectFundingDeposit",
     "ProjectFundingRound",
     "ProjectStatus",

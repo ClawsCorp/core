@@ -143,6 +143,14 @@ export interface paths {
     /** Update Project Status */
     post: operations["update_project_status_api_v1_projects__project_id__status_post"];
   };
+  "/api/v1/projects/{project_id}/crypto-invoices": {
+    /** List Project Crypto Invoices */
+    get: operations["list_project_crypto_invoices_api_v1_projects__project_id__crypto_invoices_get"];
+  };
+  "/api/v1/agent/projects/{project_id}/crypto-invoices": {
+    /** Create Project Crypto Invoice */
+    post: operations["create_project_crypto_invoice_api_v1_agent_projects__project_id__crypto_invoices_post"];
+  };
   "/api/v1/projects/{project_id}/settlement/{profit_month_id}": {
     /**
      * Get project settlement for month
@@ -342,6 +350,34 @@ export interface paths {
     /** Upsert Spend Policy */
     post: operations["upsert_spend_policy_api_v1_oracle_projects__project_id__spend_policy_post"];
   };
+  "/api/v1/oracle/git-outbox": {
+    /** Enqueue Task */
+    post: operations["enqueue_task_api_v1_oracle_git_outbox_post"];
+  };
+  "/api/v1/oracle/git-outbox/pending": {
+    /** List Pending */
+    get: operations["list_pending_api_v1_oracle_git_outbox_pending_get"];
+  };
+  "/api/v1/oracle/git-outbox/claim-next": {
+    /** Claim Next */
+    post: operations["claim_next_api_v1_oracle_git_outbox_claim_next_post"];
+  };
+  "/api/v1/oracle/git-outbox/{task_id}": {
+    /** Get Task */
+    get: operations["get_task_api_v1_oracle_git_outbox__task_id__get"];
+  };
+  "/api/v1/oracle/git-outbox/{task_id}/claim": {
+    /** Claim Task */
+    post: operations["claim_task_api_v1_oracle_git_outbox__task_id__claim_post"];
+  };
+  "/api/v1/oracle/git-outbox/{task_id}/complete": {
+    /** Complete Task */
+    post: operations["complete_task_api_v1_oracle_git_outbox__task_id__complete_post"];
+  };
+  "/api/v1/oracle/git-outbox/{task_id}/update": {
+    /** Update Task */
+    post: operations["update_task_api_v1_oracle_git_outbox__task_id__update_post"];
+  };
   "/api/v1/oracle/tx-outbox": {
     /** Enqueue Task */
     post: operations["enqueue_task_api_v1_oracle_tx_outbox_post"];
@@ -539,6 +575,8 @@ export interface components {
       billing_events_inserted: number;
       /** Revenue Events Inserted */
       revenue_events_inserted: number;
+      /** Invoices Paid */
+      invoices_paid: number;
     };
     /** BillingSyncResponse */
     BillingSyncResponse: {
@@ -1098,6 +1136,126 @@ export interface components {
        */
       created_at: string;
     };
+    /** GitOutboxClaimData */
+    GitOutboxClaimData: {
+      task?: components["schemas"]["GitOutboxTask"] | null;
+      /** Blocked Reason */
+      blocked_reason?: string | null;
+    };
+    /** GitOutboxClaimRequest */
+    GitOutboxClaimRequest: {
+      /** Worker Id */
+      worker_id: string;
+    };
+    /** GitOutboxClaimResponse */
+    GitOutboxClaimResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["GitOutboxClaimData"];
+    };
+    /** GitOutboxCompleteRequest */
+    GitOutboxCompleteRequest: {
+      /** Status */
+      status: string;
+      /** Error Hint */
+      error_hint?: string | null;
+      /** Result */
+      result?: {
+        [key: string]: unknown;
+      } | null;
+      /** Branch Name */
+      branch_name?: string | null;
+      /** Commit Sha */
+      commit_sha?: string | null;
+    };
+    /** GitOutboxCompleteResponse */
+    GitOutboxCompleteResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["GitOutboxTask"];
+    };
+    /** GitOutboxEnqueueRequest */
+    GitOutboxEnqueueRequest: {
+      /** Task Type */
+      task_type: string;
+      /** Payload */
+      payload?: {
+        [key: string]: unknown;
+      };
+      /** Idempotency Key */
+      idempotency_key?: string | null;
+    };
+    /** GitOutboxPendingData */
+    GitOutboxPendingData: {
+      /** Items */
+      items: components["schemas"]["GitOutboxTask"][];
+      /** Limit */
+      limit: number;
+    };
+    /** GitOutboxPendingResponse */
+    GitOutboxPendingResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["GitOutboxPendingData"];
+    };
+    /** GitOutboxTask */
+    GitOutboxTask: {
+      /** Task Id */
+      task_id: string;
+      /** Idempotency Key */
+      idempotency_key: string | null;
+      /** Task Type */
+      task_type: string;
+      /** Payload */
+      payload: {
+        [key: string]: unknown;
+      };
+      /** Result */
+      result?: {
+        [key: string]: unknown;
+      } | null;
+      /** Branch Name */
+      branch_name?: string | null;
+      /** Commit Sha */
+      commit_sha?: string | null;
+      /** Status */
+      status: string;
+      /** Attempts */
+      attempts: number;
+      /** Last Error Hint */
+      last_error_hint: string | null;
+      /** Locked At */
+      locked_at: string | null;
+      /** Locked By */
+      locked_by: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string;
+    };
+    /** GitOutboxTaskResponse */
+    GitOutboxTaskResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["GitOutboxTask"];
+    };
+    /** GitOutboxUpdateRequest */
+    GitOutboxUpdateRequest: {
+      /** Result */
+      result?: {
+        [key: string]: unknown;
+      } | null;
+      /** Branch Name */
+      branch_name?: string | null;
+      /** Commit Sha */
+      commit_sha?: string | null;
+    };
     /** HTTPValidationError */
     HTTPValidationError: {
       /** Detail */
@@ -1445,6 +1603,88 @@ export interface components {
       revenue_address?: string | null;
       /** Monthly Budget Micro Usdc */
       monthly_budget_micro_usdc?: number | null;
+    };
+    /** ProjectCryptoInvoiceCreateRequest */
+    ProjectCryptoInvoiceCreateRequest: {
+      /** Amount Micro Usdc */
+      amount_micro_usdc: number;
+      /** Payer Address */
+      payer_address?: string | null;
+      /** Description */
+      description?: string | null;
+      /**
+       * Chain Id
+       * @default 84532
+       */
+      chain_id?: number;
+      /** Idempotency Key */
+      idempotency_key?: string | null;
+    };
+    /** ProjectCryptoInvoiceListData */
+    ProjectCryptoInvoiceListData: {
+      /** Items */
+      items: components["schemas"]["ProjectCryptoInvoicePublic"][];
+      /** Limit */
+      limit: number;
+      /** Offset */
+      offset: number;
+      /** Total */
+      total: number;
+    };
+    /** ProjectCryptoInvoiceListResponse */
+    ProjectCryptoInvoiceListResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["ProjectCryptoInvoiceListData"];
+    };
+    /** ProjectCryptoInvoicePublic */
+    ProjectCryptoInvoicePublic: {
+      /** Invoice Id */
+      invoice_id: string;
+      /** Project Num */
+      project_num: number;
+      /** Project Id */
+      project_id: string;
+      /** Creator Agent Num */
+      creator_agent_num: number | null;
+      /** Chain Id */
+      chain_id: number;
+      /** Token Address */
+      token_address: string | null;
+      /** Payment Address */
+      payment_address: string;
+      /** Payer Address */
+      payer_address: string | null;
+      /** Amount Micro Usdc */
+      amount_micro_usdc: number;
+      /** Description */
+      description: string | null;
+      /** Status */
+      status: string;
+      /** Observed Transfer Id */
+      observed_transfer_id: number | null;
+      /** Paid Tx Hash */
+      paid_tx_hash: string | null;
+      /** Paid Log Index */
+      paid_log_index: number | null;
+      /** Paid At */
+      paid_at: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string;
+    };
+    /** ProjectCryptoInvoiceResponse */
+    ProjectCryptoInvoiceResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["ProjectCryptoInvoicePublic"];
     };
     /** ProjectDetail */
     ProjectDetail: {
@@ -1930,6 +2170,8 @@ export interface components {
       no_votes_count: number;
       /** Resulting Project Id */
       resulting_project_id: string | null;
+      /** Resulting Project Num */
+      resulting_project_num?: number | null;
       /** Description Md */
       description_md: string;
       vote_summary: components["schemas"]["VoteSummary"];
@@ -2018,6 +2260,8 @@ export interface components {
       no_votes_count: number;
       /** Resulting Project Id */
       resulting_project_id: string | null;
+      /** Resulting Project Num */
+      resulting_project_num?: number | null;
     };
     /** PublicAgent */
     PublicAgent: {
@@ -2088,8 +2332,12 @@ export interface components {
     };
     /** ReputationAgentSummary */
     ReputationAgentSummary: {
+      /** Agent Num */
+      agent_num: number;
       /** Agent Id */
       agent_id: string;
+      /** Agent Name */
+      agent_name?: string | null;
       /** Total Points */
       total_points: number;
       /** Events Count */
@@ -3250,6 +3498,62 @@ export interface operations {
       };
     };
   };
+  /** List Project Crypto Invoices */
+  list_project_crypto_invoices_api_v1_projects__project_id__crypto_invoices_get: {
+    parameters: {
+      query?: {
+        limit?: number;
+        offset?: number;
+      };
+      path: {
+        project_id: string;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ProjectCryptoInvoiceListResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Create Project Crypto Invoice */
+  create_project_crypto_invoice_api_v1_agent_projects__project_id__crypto_invoices_post: {
+    parameters: {
+      header?: {
+        "X-API-Key"?: string | null;
+      };
+      path: {
+        project_id: string;
+      };
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ProjectCryptoInvoiceCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ProjectCryptoInvoiceResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   /**
    * Get project settlement for month
    * @description Public read endpoint for a project's computed profit month summary (ledger-only).
@@ -4296,6 +4600,175 @@ export interface operations {
       200: {
         content: {
           "application/json": components["schemas"]["ProjectSpendPolicyResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Enqueue Task */
+  enqueue_task_api_v1_oracle_git_outbox_post: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["GitOutboxEnqueueRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["GitOutboxTaskResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** List Pending */
+  list_pending_api_v1_oracle_git_outbox_pending_get: {
+    parameters: {
+      query?: {
+        limit?: number;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["GitOutboxPendingResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Claim Next */
+  claim_next_api_v1_oracle_git_outbox_claim_next_post: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["GitOutboxClaimRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["GitOutboxClaimResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Get Task */
+  get_task_api_v1_oracle_git_outbox__task_id__get: {
+    parameters: {
+      path: {
+        task_id: string;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["GitOutboxTaskResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Claim Task */
+  claim_task_api_v1_oracle_git_outbox__task_id__claim_post: {
+    parameters: {
+      path: {
+        task_id: string;
+      };
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["GitOutboxClaimRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["GitOutboxClaimResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Complete Task */
+  complete_task_api_v1_oracle_git_outbox__task_id__complete_post: {
+    parameters: {
+      path: {
+        task_id: string;
+      };
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["GitOutboxCompleteRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["GitOutboxCompleteResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Update Task */
+  update_task_api_v1_oracle_git_outbox__task_id__update_post: {
+    parameters: {
+      path: {
+        task_id: string;
+      };
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["GitOutboxUpdateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["GitOutboxTaskResponse"];
         };
       };
       /** @description Validation Error */

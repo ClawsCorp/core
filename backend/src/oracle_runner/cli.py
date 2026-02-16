@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import re
+import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 import os
@@ -59,6 +60,60 @@ def _print_progress(stage: str, status: str, detail: str | None = None) -> None:
     # `detail` is best-effort diagnostic text only and may change over time.
     suffix = f" detail={detail}" if detail else ""
     print(f"stage={stage} status={status}{suffix}", file=sys.stderr)
+
+
+def _run_local_cmd(args: list[str], *, cwd: Path) -> str:
+    try:
+        proc = subprocess.run(
+            args,
+            cwd=str(cwd),
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except OSError as exc:
+        raise OracleRunnerError(f"Failed to execute command: {' '.join(args)}") from exc
+
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout or "").strip()
+        hint = detail[:500] if detail else f"exit_code={proc.returncode}"
+        raise OracleRunnerError(f"Command failed: {' '.join(args)} ({hint})")
+    return (proc.stdout or "").strip()
+
+
+def _discover_repo_root(explicit: str | None) -> Path:
+    if explicit and explicit.strip():
+        path = Path(explicit).expanduser().resolve()
+        if not (path / "scripts" / "new_product_surface.mjs").exists():
+            raise OracleRunnerError("DAO_GIT_REPO_DIR is invalid: missing scripts/new_product_surface.mjs")
+        return path
+
+    candidates = [
+        Path.cwd(),
+        Path(__file__).resolve().parents[3],
+        Path(__file__).resolve().parents[2],
+        Path(__file__).resolve().parents[1],
+    ]
+    seen: set[Path] = set()
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        if (candidate / "scripts" / "new_product_surface.mjs").exists():
+            return candidate
+    raise OracleRunnerError("Unable to discover repository root for git-worker")
+
+
+def _validate_surface_slug(slug: str) -> str:
+    value = str(slug or "").strip().lower()
+    if not value:
+        raise OracleRunnerError("Task payload missing slug")
+    if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", value):
+        raise OracleRunnerError("Invalid slug: use lowercase letters, digits, and dashes")
+    if len(value) > 64:
+        raise OracleRunnerError("Invalid slug: must be <= 64 chars")
+    return value
 
 
 def _load_execute_payload(path: str) -> tuple[bytes, dict[str, Any]]:
@@ -322,6 +377,26 @@ def build_parser() -> argparse.ArgumentParser:
     tx_worker.add_argument("--loop", action="store_true", help="Run continuously until interrupted.")
     tx_worker.add_argument("--sleep-seconds", type=int, default=5, help="Sleep time between loop iterations when idle.")
     tx_worker.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
+
+    git_worker = subparsers.add_parser(
+        "git-worker",
+        help="Process git_outbox tasks for autonomous repo changes (MVP).",
+    )
+    git_worker.add_argument("--worker-id", default="oracle_runner")
+    git_worker.add_argument("--max-tasks", type=int, default=1)
+    git_worker.add_argument("--loop", action="store_true", help="Run continuously until interrupted.")
+    git_worker.add_argument("--sleep-seconds", type=int, default=5, help="Sleep time between loop iterations when idle.")
+    git_worker.add_argument(
+        "--repo-dir",
+        default=os.getenv("DAO_GIT_REPO_DIR", ""),
+        help="Repository root path that contains scripts/new_product_surface.mjs (default: auto-discover).",
+    )
+    git_worker.add_argument(
+        "--base-branch",
+        default="main",
+        help="Base branch to checkout before creating task branch (default: main).",
+    )
+    git_worker.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
 
     autonomy_loop = subparsers.add_parser(
         "autonomy-loop",
@@ -1302,6 +1377,173 @@ def run(argv: list[str] | None = None) -> int:
                     return 0
 
                 # Loop mode: avoid unbounded memory growth.
+                processed.clear()
+                if processed_this_loop == 0:
+                    time.sleep(sleep_seconds)
+
+        if args.command == "git-worker":
+            if bool(args.loop) and json_mode:
+                raise OracleRunnerError("--loop is not compatible with --json (streaming mode).")
+
+            worker_id = str(args.worker_id).strip() or "oracle_runner"
+            max_tasks = max(1, min(int(args.max_tasks), 50))
+            sleep_seconds = max(1, int(args.sleep_seconds))
+            repo_root = _discover_repo_root(getattr(args, "repo_dir", ""))
+            base_branch = str(getattr(args, "base_branch", "main") or "main").strip() or "main"
+
+            processed: list[dict[str, Any]] = []
+            while True:
+                processed_this_loop = 0
+                for _ in range(max_tasks):
+                    claim_path = "/api/v1/oracle/git-outbox/claim-next"
+                    claim_body = to_json_bytes({"worker_id": worker_id})
+                    claim_resp = client.post(claim_path, body_bytes=claim_body)
+                    claim_data = _extract_data(claim_resp.data)
+                    task = claim_data.get("task")
+                    blocked_reason = claim_data.get("blocked_reason")
+                    if not isinstance(task, dict):
+                        if bool(args.loop):
+                            _print_progress("git_worker", "pending", detail=str(blocked_reason or "no_tasks"))
+                            break
+                        if json_mode:
+                            _print_json(
+                                {
+                                    "success": True,
+                                    "command": command,
+                                    "status": "pending",
+                                    "blocked_reason": blocked_reason,
+                                    "processed": processed,
+                                }
+                            )
+                        else:
+                            _print_progress("git_worker", "pending", detail=str(blocked_reason or "no_tasks"))
+                        return 0
+
+                    task_id = str(task.get("task_id") or "")
+                    task_type = str(task.get("task_type") or "")
+                    payload = task.get("payload") if isinstance(task.get("payload"), dict) else {}
+
+                    def _update(result: dict[str, Any] | None, branch_name: str | None, commit_sha: str | None) -> None:
+                        update_path = f"/api/v1/oracle/git-outbox/{task_id}/update"
+                        client.post(
+                            update_path,
+                            body_bytes=to_json_bytes(
+                                {
+                                    "result": result,
+                                    "branch_name": branch_name,
+                                    "commit_sha": commit_sha,
+                                }
+                            ),
+                        )
+
+                    def _complete(
+                        status: str,
+                        error_hint: str | None,
+                        result: dict[str, Any] | None,
+                        branch_name: str | None,
+                        commit_sha: str | None,
+                    ) -> None:
+                        complete_path = f"/api/v1/oracle/git-outbox/{task_id}/complete"
+                        client.post(
+                            complete_path,
+                            body_bytes=to_json_bytes(
+                                {
+                                    "status": status,
+                                    "error_hint": error_hint,
+                                    "result": result,
+                                    "branch_name": branch_name,
+                                    "commit_sha": commit_sha,
+                                }
+                            ),
+                        )
+
+                    try:
+                        if task_type == "create_app_surface_commit":
+                            slug = _validate_surface_slug(str(payload.get("slug") or ""))
+                            branch_name = str(payload.get("branch_name") or f"codex/dao-surface-{slug}-{task_id[:6]}")
+                            commit_message = str(payload.get("commit_message") or f"feat(surface): add {slug} app surface")
+
+                            # Ensure clean deterministic baseline for the task branch.
+                            _run_local_cmd(["git", "checkout", base_branch], cwd=repo_root)
+                            _run_local_cmd(["git", "checkout", "-B", branch_name], cwd=repo_root)
+                            _run_local_cmd(["node", "scripts/new_product_surface.mjs", "--slug", slug], cwd=repo_root)
+                            _run_local_cmd(["git", "add", f"frontend/src/product_surfaces/{slug}.tsx"], cwd=repo_root)
+                            _run_local_cmd(["git", "add", "frontend/src/product_surfaces/registry.gen.ts"], cwd=repo_root)
+                            _run_local_cmd(["git", "commit", "-m", commit_message], cwd=repo_root)
+                            commit_sha = _run_local_cmd(["git", "rev-parse", "HEAD"], cwd=repo_root)
+
+                            result = {
+                                "stage": "committed",
+                                "slug": slug,
+                                "branch_name": branch_name,
+                                "commit_sha": commit_sha,
+                                "files": [
+                                    f"frontend/src/product_surfaces/{slug}.tsx",
+                                    "frontend/src/product_surfaces/registry.gen.ts",
+                                ],
+                            }
+                            _update(result, branch_name, commit_sha)
+                            _complete("succeeded", None, result, branch_name, commit_sha)
+                            processed.append(
+                                {
+                                    "task_id": task_id,
+                                    "task_type": task_type,
+                                    "status": "succeeded",
+                                    "slug": slug,
+                                    "branch_name": branch_name,
+                                    "commit_sha": commit_sha,
+                                }
+                            )
+                            processed_this_loop += 1
+                            if bool(args.loop):
+                                _print_progress("git_worker_task", "ok", detail=f"{task_type} {task_id}")
+                            continue
+
+                        if task_type == "noop":
+                            result = {"stage": "noop"}
+                            _update(result, None, None)
+                            _complete("succeeded", None, result, None, None)
+                            processed.append({"task_id": task_id, "task_type": task_type, "status": "succeeded"})
+                            processed_this_loop += 1
+                            if bool(args.loop):
+                                _print_progress("git_worker_task", "ok", detail=f"{task_type} {task_id}")
+                            continue
+
+                        _complete("failed", "unknown_task_type", {"stage": "failed"}, None, None)
+                        processed.append(
+                            {
+                                "task_id": task_id,
+                                "task_type": task_type,
+                                "status": "failed",
+                                "error_hint": "unknown_task_type",
+                            }
+                        )
+                        processed_this_loop += 1
+                        if bool(args.loop):
+                            _print_progress("git_worker_task", "error", detail=f"{task_type} {task_id} unknown_task_type")
+                    except OracleRunnerError as exc:
+                        hint = str(exc)
+                        _update({"stage": "failed", "error_hint": hint}, None, None)
+                        _complete("failed", hint, {"stage": "failed", "error_hint": hint}, None, None)
+                        processed.append(
+                            {
+                                "task_id": task_id,
+                                "task_type": task_type,
+                                "status": "failed",
+                                "error_hint": hint,
+                            }
+                        )
+                        processed_this_loop += 1
+                        if bool(args.loop):
+                            _print_progress("git_worker_task", "error", detail=f"{task_type} {task_id} {hint}")
+
+                if not bool(args.loop):
+                    if json_mode:
+                        _print_json({"success": True, "command": command, "status": "ok", "processed": processed})
+                    else:
+                        _print_progress("git_worker", "ok", detail=f"processed={len(processed)}")
+                    return 0
+
                 processed.clear()
                 if processed_this_loop == 0:
                     time.sleep(sleep_seconds)

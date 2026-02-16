@@ -55,7 +55,9 @@ class ReputationEventDetailResponse(BaseModel):
 
 
 class ReputationAgentSummary(BaseModel):
+    agent_num: int
     agent_id: str
+    agent_name: str | None = None
     total_points: int
     events_count: int
     last_event_at: datetime | None

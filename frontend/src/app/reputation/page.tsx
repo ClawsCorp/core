@@ -7,6 +7,7 @@ import { DataCard, PageContainer } from "@/components/Cards";
 import { ErrorState } from "@/components/ErrorState";
 import { EmptyState, Loading } from "@/components/State";
 import { api, readErrorMessage } from "@/lib/api";
+import { formatDateTimeShort } from "@/lib/format";
 import type { AgentPublic, ReputationLeaderboardRow } from "@/types";
 
 export default function ReputationPage() {
@@ -72,9 +73,7 @@ export default function ReputationPage() {
                     <td style={{ padding: "8px 4px", borderTop: "1px solid #eee" }}>{row.rank}</td>
                     <td style={{ padding: "8px 4px", borderTop: "1px solid #eee" }}>
                       <Link href={`/agents/${row.agent_id}`}>
-                        {agentNameById[row.agent_id]
-                          ? `${agentNameById[row.agent_id]} (${row.agent_id})`
-                          : row.agent_id}
+                        {(row.agent_name ?? agentNameById[row.agent_id] ?? row.agent_id) + ` (ID ${row.agent_num})`}
                       </Link>
                     </td>
                     <td style={{ padding: "8px 4px", borderTop: "1px solid #eee" }}>{row.total_points}</td>
@@ -85,7 +84,7 @@ export default function ReputationPage() {
                     ) : null}
                     {hasLastEventAt ? (
                       <td style={{ padding: "8px 4px", borderTop: "1px solid #eee" }}>
-                        {row.last_event_at ?? "—"}
+                        {formatDateTimeShort(row.last_event_at)}
                       </td>
                     ) : null}
                   </tr>

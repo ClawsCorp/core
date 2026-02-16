@@ -17,6 +17,7 @@ import type {
   BountyFundingSource,
   BountyPublic,
   ProjectCapitalSummary,
+  ProjectCryptoInvoice,
   ProjectDetail,
   ProjectDomainPublic,
   ProjectFundingSummary,
@@ -33,6 +34,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
   const [stats, setStats] = useState<StatsData | null>(null);
   const [accountingMonths, setAccountingMonths] = useState<AccountingMonthSummary[]>([]);
   const [domains, setDomains] = useState<ProjectDomainPublic[]>([]);
+  const [cryptoInvoices, setCryptoInvoices] = useState<ProjectCryptoInvoice[]>([]);
 
   const [domainValue, setDomainValue] = useState("");
   const [domainBusy, setDomainBusy] = useState(false);
@@ -44,12 +46,17 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
   const [fundingSource, setFundingSource] = useState<BountyFundingSource>("project_capital");
   const [createMessage, setCreateMessage] = useState<string | null>(null);
   const [createBusy, setCreateBusy] = useState(false);
+  const [invoiceAmount, setInvoiceAmount] = useState("1500000");
+  const [invoicePayer, setInvoicePayer] = useState("");
+  const [invoiceDescription, setInvoiceDescription] = useState("");
+  const [invoiceBusy, setInvoiceBusy] = useState(false);
+  const [invoiceMessage, setInvoiceMessage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [projectResult, capitalResult, fundingResult, bountiesResult, statsResult, accountingResult, domainsResult] = await Promise.all([
+      const [projectResult, capitalResult, fundingResult, bountiesResult, statsResult, accountingResult, domainsResult, invoicesResult] = await Promise.all([
         api.getProject(params.id),
         api.getProjectCapitalSummary(params.id),
         api.getProjectFundingSummary(params.id).catch(() => null),
@@ -57,6 +64,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
         api.getStats().catch(() => null),
         api.getAccountingMonths({ projectId: params.id, limit: 6, offset: 0 }).catch(() => null),
         api.getProjectDomains(params.id).catch(() => ({ items: [] })),
+        api.getProjectCryptoInvoices(params.id, 20, 0).catch(() => ({ items: [], limit: 0, offset: 0, total: 0 })),
       ]);
       setProject(projectResult);
       setCapital(capitalResult);
@@ -65,6 +73,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
       setStats(statsResult);
       setAccountingMonths(accountingResult?.items ?? []);
       setDomains(domainsResult.items ?? []);
+      setCryptoInvoices(invoicesResult.items ?? []);
     } catch (err) {
       setError(readErrorMessage(err));
     } finally {
@@ -217,6 +226,40 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
       setDomainMessage(readErrorMessage(err));
     } finally {
       setDomainBusy(false);
+    }
+  };
+
+  const onCreateInvoice = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setInvoiceMessage(null);
+
+    const apiKey = getAgentApiKey();
+    if (!apiKey) {
+      setInvoiceMessage("Missing agent key. Save X-API-Key above, then retry.");
+      return;
+    }
+    const amount = Number(invoiceAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setInvoiceMessage("amount_micro_usdc must be a positive integer.");
+      return;
+    }
+
+    setInvoiceBusy(true);
+    try {
+      const created = await api.createProjectCryptoInvoice(apiKey, params.id, {
+        amount_micro_usdc: amount,
+        payer_address: invoicePayer.trim() ? invoicePayer.trim() : undefined,
+        description: invoiceDescription.trim() ? invoiceDescription.trim() : undefined,
+        chain_id: 84532,
+      });
+      setInvoiceMessage(`Created invoice ${created.invoice_id} (ID ${created.project_num}).`);
+      setInvoicePayer("");
+      setInvoiceDescription("");
+      await load();
+    } catch (err) {
+      setInvoiceMessage(readErrorMessage(err));
+    } finally {
+      setInvoiceBusy(false);
     }
   };
 
@@ -452,6 +495,50 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
             <p>computed_at: {formatDateTimeShort(revenueReconciliation?.computed_at)}</p>
           </DataCard>
 
+          <DataCard title="Crypto billing (USDC)">
+            <p>
+              Invoices are paid by direct USDC transfers to project `revenue_address`; oracle billing sync matches transfers to pending
+              invoices and marks them as `paid`.
+            </p>
+            <form onSubmit={(event) => void onCreateInvoice(event)} style={{ marginBottom: 12 }}>
+              <div style={{ marginBottom: 8 }}>
+                <label>
+                  amount_micro_usdc:{" "}
+                  <input value={invoiceAmount} onChange={(event) => setInvoiceAmount(event.target.value)} />
+                </label>
+              </div>
+              <div style={{ marginBottom: 8 }}>
+                <label>
+                  payer_address (optional):{" "}
+                  <input value={invoicePayer} onChange={(event) => setInvoicePayer(event.target.value)} style={{ width: 360 }} />
+                </label>
+              </div>
+              <div style={{ marginBottom: 8 }}>
+                <label>
+                  description (optional):{" "}
+                  <input value={invoiceDescription} onChange={(event) => setInvoiceDescription(event.target.value)} style={{ width: 420 }} />
+                </label>
+              </div>
+              <button type="submit" disabled={invoiceBusy}>
+                {invoiceBusy ? "Creating..." : "Create invoice"}
+              </button>
+            </form>
+            {invoiceMessage ? <p>{invoiceMessage}</p> : null}
+            {cryptoInvoices.length === 0 ? (
+              <p>No crypto invoices yet.</p>
+            ) : (
+              <ul>
+                {cryptoInvoices.map((inv) => (
+                  <li key={inv.invoice_id}>
+                    {inv.invoice_id} · {inv.status} · {formatMicroUsdc(inv.amount_micro_usdc)}
+                    {inv.paid_at ? ` · paid_at=${formatDateTimeShort(inv.paid_at)}` : ""}
+                    {inv.description ? ` · ${inv.description}` : ""}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </DataCard>
+
           <DataCard title="Bounties for this project">
             {bounties.length === 0 ? <p>No bounties for this project.</p> : null}
             {bounties.map((bounty) => (
@@ -460,7 +547,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
                 <p>amount: {formatMicroUsdc(bounty.amount_micro_usdc)}</p>
                 <p>status: {bounty.status}</p>
                 <p>funding_source: {bounty.funding_source}</p>
-                <Link href={`/bounties/${bounty.bounty_id}`}>Open bounty</Link>
+                <Link href={`/bounties/${bounty.bounty_num}`}>Open bounty</Link>
               </div>
             ))}
           </DataCard>

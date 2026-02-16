@@ -1,0 +1,78 @@
+# SPDX-License-Identifier: BSL-1.1
+
+from __future__ import annotations
+
+from datetime import datetime
+
+from pydantic import BaseModel, Field
+
+
+class GitOutboxEnqueueRequest(BaseModel):
+    task_type: str = Field(..., min_length=1, max_length=64)
+    payload: dict = Field(default_factory=dict)
+    idempotency_key: str | None = Field(default=None, min_length=1, max_length=255)
+
+
+class GitOutboxTask(BaseModel):
+    task_id: str
+    idempotency_key: str | None
+    task_type: str
+    payload: dict
+    result: dict | None = None
+    branch_name: str | None = None
+    commit_sha: str | None = None
+    status: str
+    attempts: int
+    last_error_hint: str | None
+    locked_at: datetime | None
+    locked_by: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class GitOutboxTaskResponse(BaseModel):
+    success: bool
+    data: GitOutboxTask
+
+
+class GitOutboxClaimRequest(BaseModel):
+    worker_id: str = Field(..., min_length=1, max_length=64)
+
+
+class GitOutboxClaimData(BaseModel):
+    task: GitOutboxTask | None = None
+    blocked_reason: str | None = None
+
+
+class GitOutboxClaimResponse(BaseModel):
+    success: bool
+    data: GitOutboxClaimData
+
+
+class GitOutboxCompleteRequest(BaseModel):
+    status: str = Field(..., min_length=1, max_length=16)  # succeeded|failed
+    error_hint: str | None = Field(default=None, max_length=2000)
+    result: dict | None = None
+    branch_name: str | None = Field(default=None, max_length=128)
+    commit_sha: str | None = Field(default=None, max_length=64)
+
+
+class GitOutboxCompleteResponse(BaseModel):
+    success: bool
+    data: GitOutboxTask
+
+
+class GitOutboxPendingData(BaseModel):
+    items: list[GitOutboxTask]
+    limit: int
+
+
+class GitOutboxPendingResponse(BaseModel):
+    success: bool
+    data: GitOutboxPendingData
+
+
+class GitOutboxUpdateRequest(BaseModel):
+    result: dict | None = None
+    branch_name: str | None = Field(default=None, max_length=128)
+    commit_sha: str | None = Field(default=None, max_length=64)

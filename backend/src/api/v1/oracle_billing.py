@@ -14,6 +14,7 @@ from src.core.db_utils import insert_or_get_by_unique
 from src.models.billing_event import BillingEvent
 from src.models.observed_usdc_transfer import ObservedUsdcTransfer
 from src.models.project import Project
+from src.models.project_crypto_invoice import ProjectCryptoInvoice
 from src.models.revenue_event import RevenueEvent
 from src.services.blockchain import BlockchainReadError, read_block_timestamp_utc
 from src.schemas.billing import BillingSyncResponse
@@ -67,7 +68,7 @@ async def sync_billing(
             request_id=request_id,
             commit=True,
         )
-        return BillingSyncResponse(success=True, data={"billing_events_inserted": 0, "revenue_events_inserted": 0})
+        return BillingSyncResponse(success=True, data={"billing_events_inserted": 0, "revenue_events_inserted": 0, "invoices_paid": 0})
 
     # Process newest first to keep UI current; idempotency protects duplicates.
     transfers = (
@@ -80,6 +81,7 @@ async def sync_billing(
 
     billing_inserted = 0
     revenue_inserted = 0
+    invoices_paid = 0
     block_ts_cache: dict[int, str] = {}
 
     for t in transfers:
@@ -142,6 +144,34 @@ async def sync_billing(
         if rev_created:
             revenue_inserted += 1
 
+        # Crypto billing reconciliation:
+        # mark the oldest matching pending invoice as paid (same project/address/amount/chain),
+        # and respect optional payer filter if set by the project.
+        invoice_query = (
+            db.query(ProjectCryptoInvoice)
+            .filter(
+                ProjectCryptoInvoice.project_id == project_db_id,
+                ProjectCryptoInvoice.status == "pending",
+                ProjectCryptoInvoice.chain_id == int(t.chain_id),
+                ProjectCryptoInvoice.payment_address == dest,
+                ProjectCryptoInvoice.amount_micro_usdc == int(t.amount_micro_usdc),
+            )
+            .order_by(ProjectCryptoInvoice.created_at.asc(), ProjectCryptoInvoice.id.asc())
+        )
+        from_addr = str(t.from_address).lower()
+        invoice_query = invoice_query.filter(
+            (ProjectCryptoInvoice.payer_address.is_(None)) | (ProjectCryptoInvoice.payer_address == from_addr)
+        )
+        invoice = invoice_query.first()
+        if invoice is not None:
+            invoice.status = "paid"
+            invoice.observed_transfer_id = int(t.id)
+            invoice.paid_tx_hash = str(t.tx_hash)
+            invoice.paid_log_index = int(t.log_index)
+            invoice.paid_at = t.observed_at
+            db.add(invoice)
+            invoices_paid += 1
+
     record_audit(
         db,
         actor_type="oracle",
@@ -157,5 +187,5 @@ async def sync_billing(
     db.commit()
     return BillingSyncResponse(
         success=True,
-        data={"billing_events_inserted": billing_inserted, "revenue_events_inserted": revenue_inserted},
+        data={"billing_events_inserted": billing_inserted, "revenue_events_inserted": revenue_inserted, "invoices_paid": invoices_paid},
     )

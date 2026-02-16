@@ -10,6 +10,7 @@ import type {
   ProjectCapitalSummary,
   ProjectCapitalReconciliationReport,
   ProjectFundingSummary,
+  ProjectCryptoInvoice,
   ProjectDetail,
   ProjectSummary,
   ProjectDomainsData,
@@ -303,6 +304,34 @@ export const api = {
   getProjectFundingSummary: async (projectId: string) => {
     const payload = await fetchJSON<Envelope<ProjectFundingSummary>>(`/api/v1/projects/${projectId}/funding`);
     return payload.data;
+  },
+  getProjectCryptoInvoices: async (projectId: string, limit = 50, offset = 0) => {
+    const payload = await fetchJSON<Envelope<ListData<ProjectCryptoInvoice>>>(
+      `/api/v1/projects/${projectId}/crypto-invoices?limit=${limit}&offset=${offset}`,
+    );
+    return payload.data;
+  },
+  createProjectCryptoInvoice: async (
+    apiKey: string,
+    projectId: string,
+    payload: {
+      amount_micro_usdc: number;
+      payer_address?: string | null;
+      description?: string | null;
+      chain_id?: number;
+      idempotency_key?: string;
+    },
+  ) => {
+    const response = await requestJSON<Envelope<ProjectCryptoInvoice>>(
+      `/api/v1/agent/projects/${projectId}/crypto-invoices`,
+      {
+        method: "POST",
+        apiKey,
+        body: payload,
+        idempotencyKey: payload.idempotency_key,
+      },
+    );
+    return response.data;
   },
   getProjectCapitalReconciliationLatest: async (projectId: string) => {
     const payload = await fetchJSON<Envelope<ProjectCapitalReconciliationReport | null>>(

@@ -88,12 +88,17 @@ def list_proposals(
     author_ids = {proposal.author_agent_id for proposal in proposals}
     author_map = _load_author_map(db, author_ids)
     author_rep = _load_author_reputation(db, author_ids)
+    resulting_project_nums = _load_project_num_map(
+        db,
+        {proposal.resulting_project_id for proposal in proposals if proposal.resulting_project_id},
+    )
     items = [
         _proposal_summary(
             proposal,
             author_map.get(proposal.author_agent_id, ("", None))[0],
             author_map.get(proposal.author_agent_id, ("", None))[1],
             author_rep.get(proposal.author_agent_id, 0),
+            resulting_project_nums.get(proposal.resulting_project_id) if proposal.resulting_project_id else None,
         )
         for proposal in proposals
     ]
@@ -447,6 +452,13 @@ def _load_author_map(db: Session, author_ids: set[int]) -> dict[int, tuple[str, 
     rows = db.query(Agent.id, Agent.agent_id, Agent.name).filter(Agent.id.in_(author_ids)).all()
     return {row.id: (row.agent_id, row.name) for row in rows}
 
+
+def _load_project_num_map(db: Session, project_ids: set[str]) -> dict[str, int]:
+    if not project_ids:
+        return {}
+    rows = db.query(Project.project_id, Project.id).filter(Project.project_id.in_(project_ids)).all()
+    return {str(row.project_id): int(row.id) for row in rows}
+
 def _load_author_reputation(db: Session, author_ids: set[int]) -> dict[int, int]:
     if not author_ids:
         return {}
@@ -466,6 +478,7 @@ def _proposal_summary(
     author_agent_id: str,
     author_name: str | None,
     author_reputation_points: int,
+    resulting_project_num: int | None = None,
 ) -> ProposalSummary:
     return ProposalSummary(
         proposal_num=proposal.id,
@@ -487,6 +500,7 @@ def _proposal_summary(
         yes_votes_count=proposal.yes_votes_count,
         no_votes_count=proposal.no_votes_count,
         resulting_project_id=proposal.resulting_project_id,
+        resulting_project_num=resulting_project_num,
     )
 
 
@@ -495,7 +509,10 @@ def _proposal_detail(db: Session, proposal: Proposal) -> ProposalDetail:
     author_agent_id = author_agent.agent_id if author_agent else ""
     author_name = author_agent.name if author_agent else None
     author_rep = _load_author_reputation(db, {proposal.author_agent_id}).get(proposal.author_agent_id, 0)
-    summary = _proposal_summary(proposal, author_agent_id, author_name, author_rep)
+    resulting_project_num = None
+    if proposal.resulting_project_id:
+        resulting_project_num = _load_project_num_map(db, {proposal.resulting_project_id}).get(proposal.resulting_project_id)
+    summary = _proposal_summary(proposal, author_agent_id, author_name, author_rep, resulting_project_num)
     vote_summary = _vote_summary(db, proposal.id)
     related_bounties = _load_related_bounties(db, proposal.proposal_id)
     milestones = _load_related_milestones(db, proposal.proposal_id)

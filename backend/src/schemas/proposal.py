@@ -47,6 +47,7 @@ class ProposalSummary(BaseModel):
     yes_votes_count: int
     no_votes_count: int
     resulting_project_id: str | None
+    resulting_project_num: int | None = None
 
 
 class VoteSummary(BaseModel):

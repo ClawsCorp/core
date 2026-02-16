@@ -89,7 +89,10 @@ def list_bounties(
     if status is not None:
         query = query.filter(Bounty.status == BountyStatus(status))
     if project_id is not None:
-        query = query.filter(Project.project_id == project_id)
+        if project_id.isdigit():
+            query = query.filter(Project.id == int(project_id))
+        else:
+            query = query.filter(Project.project_id == project_id)
     if origin_proposal_id is not None:
         query = query.filter(Bounty.origin_proposal_id == origin_proposal_id)
     if origin_milestone_id is not None:
@@ -175,7 +178,7 @@ async def create_bounty(
     idempotency_key = request.headers.get("Idempotency-Key")
     body_hash = request.state.body_hash
 
-    project = db.query(Project).filter(Project.project_id == payload.project_id).first()
+    project = _find_project_by_identifier(db, payload.project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
@@ -215,7 +218,7 @@ async def create_bounty_agent(
 
     project: Project | None = None
     if payload.project_id:
-        project = db.query(Project).filter(Project.project_id == payload.project_id).first()
+        project = _find_project_by_identifier(db, payload.project_id)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
 
@@ -664,6 +667,12 @@ def _find_bounty_by_identifier(db: Session, identifier: str) -> Bounty | None:
     if identifier.isdigit():
         return db.query(Bounty).filter(Bounty.id == int(identifier)).first()
     return db.query(Bounty).filter(Bounty.bounty_id == identifier).first()
+
+
+def _find_project_by_identifier(db: Session, identifier: str) -> Project | None:
+    if identifier.isdigit():
+        return db.query(Project).filter(Project.id == int(identifier)).first()
+    return db.query(Project).filter(Project.project_id == identifier).first()
 
 
 def _bounty_public(

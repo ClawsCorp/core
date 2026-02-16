@@ -147,20 +147,20 @@ export default function ProposalDetailPage({ params }: { params: { id: string } 
           {proposal.resulting_project_id ? (
             <DataCard title="Activated project">
               <p>This proposal activated a project.</p>
-              <Link href={`/projects/${proposal.resulting_project_id}`}>Open project</Link>
+              <Link href={`/projects/${proposal.resulting_project_num ?? proposal.resulting_project_id}`}>Open project</Link>
             </DataCard>
           ) : null}
 
           <DataCard title="Related bounties">
             <p>
               Filter in bounties list:{" "}
-              <Link href={`/bounties?origin_proposal_id=${encodeURIComponent(params.id)}`}>Open bounties for this proposal</Link>
+              <Link href={`/bounties?origin_proposal_id=${encodeURIComponent(proposal.proposal_id)}`}>Open bounties for this proposal</Link>
             </p>
             {proposal.related_bounties && proposal.related_bounties.length > 0 ? (
               <ul>
                 {proposal.related_bounties.map((b) => (
                   <li key={b.bounty_id}>
-                    <Link href={`/bounties/${b.bounty_id}`}>{b.bounty_id}</Link> · {b.status} · {formatMicroUsdc(b.amount_micro_usdc)}
+                    <Link href={`/bounties/${b.bounty_num}`}>Bounty {b.bounty_num}</Link> · {b.status} · {formatMicroUsdc(b.amount_micro_usdc)}
                     {b.priority ? ` · priority=${b.priority}` : ""}
                     {b.deadline_at ? ` · deadline=${formatDateTimeShort(b.deadline_at)}` : ""}
                   </li>

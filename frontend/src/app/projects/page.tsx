@@ -43,7 +43,7 @@ export default function ProjectsPage() {
               <p>status: {project.status}</p>
               <p>monthly_budget: {formatMicroUsdc(project.monthly_budget_micro_usdc)}</p>
               <p>created_at: {formatDateTimeShort(project.created_at)}</p>
-              <Link href={`/projects/${project.project_id}`}>Open detail</Link>
+              <Link href={`/projects/${project.project_num}`}>Open detail</Link>
             </DataCard>
           ))
         : null}
