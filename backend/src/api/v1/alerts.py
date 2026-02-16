@@ -267,16 +267,19 @@ def get_alerts(response: Response, db: Session = Depends(get_db)) -> AlertsRespo
                     .first()
                 )
                 if task is None:
-                    items.append(
-                        AlertItem(
-                            alert_type="platform_profit_deposit_missing",
-                            severity="warning",
-                            message="Platform is under-funded but no profit deposit task exists yet (autonomy loop may not be running).",
-                            ref=month,
-                            observed_at=now,
-                            data={"idempotency_key": idem, "amount_micro_usdc": amount},
+                    # In direct submit mode (TX_OUTBOX_ENABLED=false), absence of tx_outbox task is expected.
+                    # Avoid false-positive "missing task" warning in this mode.
+                    if settings.tx_outbox_enabled:
+                        items.append(
+                            AlertItem(
+                                alert_type="platform_profit_deposit_missing",
+                                severity="warning",
+                                message="Platform is under-funded but no profit deposit task exists yet (autonomy loop may not be running).",
+                                ref=month,
+                                observed_at=now,
+                                data={"idempotency_key": idem, "amount_micro_usdc": amount},
+                            )
                         )
-                    )
                 elif task.status in {"pending", "processing"}:
                     items.append(
                         AlertItem(
