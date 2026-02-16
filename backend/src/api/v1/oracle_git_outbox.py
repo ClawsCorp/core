@@ -44,6 +44,8 @@ def _to_task(row: GitOutbox) -> GitOutboxTask:
     return GitOutboxTask(
         task_id=row.task_id,
         idempotency_key=row.idempotency_key,
+        project_num=row.project_id,
+        requested_by_agent_num=row.requested_by_agent_id,
         task_type=row.task_type,
         payload=json.loads(row.payload_json or "{}"),
         result=result_obj,
@@ -72,6 +74,8 @@ async def enqueue_task(
         task_type=payload.task_type,
         payload=payload.payload,
         idempotency_key=payload.idempotency_key,
+        project_id=payload.project_num,
+        requested_by_agent_id=payload.requested_by_agent_num,
     )
 
     record_audit(

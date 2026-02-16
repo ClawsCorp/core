@@ -85,6 +85,14 @@ export interface paths {
     /** Verify Domain Endpoint */
     post: operations["verify_domain_endpoint_api_v1_agent_projects__project_id__domains__domain_id__verify_post"];
   };
+  "/api/v1/agent/projects/{project_id}/git-outbox/surface-commit": {
+    /** Enqueue Project Surface Commit */
+    post: operations["enqueue_project_surface_commit_api_v1_agent_projects__project_id__git_outbox_surface_commit_post"];
+  };
+  "/api/v1/agent/projects/{project_id}/git-outbox": {
+    /** List Project Git Outbox */
+    get: operations["list_project_git_outbox_api_v1_agent_projects__project_id__git_outbox_get"];
+  };
   "/api/v1/agent/marketplace/proposals/{proposal_id}/generate": {
     /**
      * Generate milestones and bounties for a proposal (agent)
@@ -514,6 +522,32 @@ export interface components {
       /** Success */
       success: boolean;
       data: components["schemas"]["AccountingMonthsData"];
+    };
+    /** AgentGitOutboxCreateSurfaceRequest */
+    AgentGitOutboxCreateSurfaceRequest: {
+      /** Slug */
+      slug: string;
+      /** Branch Name */
+      branch_name?: string | null;
+      /** Commit Message */
+      commit_message?: string | null;
+      /** Idempotency Key */
+      idempotency_key?: string | null;
+    };
+    /** AgentGitOutboxListData */
+    AgentGitOutboxListData: {
+      /** Items */
+      items: components["schemas"]["GitOutboxTask"][];
+      /** Limit */
+      limit: number;
+      /** Total */
+      total: number;
+    };
+    /** AgentGitOutboxListResponse */
+    AgentGitOutboxListResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["AgentGitOutboxListData"];
     };
     /** AgentRegisterRequest */
     AgentRegisterRequest: {
@@ -1184,6 +1218,10 @@ export interface components {
       };
       /** Idempotency Key */
       idempotency_key?: string | null;
+      /** Project Num */
+      project_num?: number | null;
+      /** Requested By Agent Num */
+      requested_by_agent_num?: number | null;
     };
     /** GitOutboxPendingData */
     GitOutboxPendingData: {
@@ -1204,6 +1242,10 @@ export interface components {
       task_id: string;
       /** Idempotency Key */
       idempotency_key: string | null;
+      /** Project Num */
+      project_num?: number | null;
+      /** Requested By Agent Num */
+      requested_by_agent_num?: number | null;
       /** Task Type */
       task_type: string;
       /** Payload */
@@ -3196,6 +3238,64 @@ export interface operations {
       200: {
         content: {
           "application/json": components["schemas"]["ProjectDomainVerifyResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Enqueue Project Surface Commit */
+  enqueue_project_surface_commit_api_v1_agent_projects__project_id__git_outbox_surface_commit_post: {
+    parameters: {
+      header?: {
+        "X-API-Key"?: string | null;
+      };
+      path: {
+        project_id: string;
+      };
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AgentGitOutboxCreateSurfaceRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["GitOutboxTaskResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** List Project Git Outbox */
+  list_project_git_outbox_api_v1_agent_projects__project_id__git_outbox_get: {
+    parameters: {
+      query?: {
+        limit?: number;
+      };
+      header?: {
+        "X-API-Key"?: string | null;
+      };
+      path: {
+        project_id: string;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["AgentGitOutboxListResponse"];
         };
       };
       /** @description Validation Error */

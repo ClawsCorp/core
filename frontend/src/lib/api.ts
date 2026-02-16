@@ -10,6 +10,7 @@ import type {
   ProjectCapitalSummary,
   ProjectCapitalReconciliationReport,
   ProjectFundingSummary,
+  GitOutboxTask,
   ProjectCryptoInvoice,
   ProjectDetail,
   ProjectSummary,
@@ -324,6 +325,31 @@ export const api = {
   ) => {
     const response = await requestJSON<Envelope<ProjectCryptoInvoice>>(
       `/api/v1/agent/projects/${projectId}/crypto-invoices`,
+      {
+        method: "POST",
+        apiKey,
+        body: payload,
+        idempotencyKey: payload.idempotency_key,
+      },
+    );
+    return response.data;
+  },
+  listProjectGitOutbox: async (apiKey: string, projectId: string, limit = 20) => {
+    const payload = await requestJSON<Envelope<{ items: GitOutboxTask[]; limit: number; total: number }>>(
+      `/api/v1/agent/projects/${projectId}/git-outbox?limit=${limit}`,
+      {
+        apiKey,
+      },
+    );
+    return payload.data;
+  },
+  createProjectSurfaceCommitTask: async (
+    apiKey: string,
+    projectId: string,
+    payload: { slug: string; branch_name?: string; commit_message?: string; idempotency_key?: string },
+  ) => {
+    const response = await requestJSON<Envelope<GitOutboxTask>>(
+      `/api/v1/agent/projects/${projectId}/git-outbox/surface-commit`,
       {
         method: "POST",
         apiKey,
