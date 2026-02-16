@@ -1484,7 +1484,23 @@ def run(argv: list[str] | None = None) -> int:
                             # Ensure clean deterministic baseline for the task branch.
                             _run_local_cmd(["git", "checkout", base_branch], cwd=repo_root)
                             _run_local_cmd(["git", "checkout", "-B", branch_name], cwd=repo_root)
-                            _run_local_cmd(["node", "scripts/new_product_surface.mjs", "--slug", slug], cwd=repo_root)
+                            surface_cmd = ["node", "scripts/new_product_surface.mjs", "--slug", slug]
+                            surface_title = str(payload.get("surface_title") or "").strip()
+                            surface_tagline = str(payload.get("surface_tagline") or "").strip()
+                            surface_description = str(payload.get("surface_description") or "").strip()
+                            cta_label = str(payload.get("cta_label") or "").strip()
+                            cta_href = str(payload.get("cta_href") or "").strip()
+                            if surface_title:
+                                surface_cmd.extend(["--title", surface_title])
+                            if surface_tagline:
+                                surface_cmd.extend(["--tagline", surface_tagline])
+                            if surface_description:
+                                surface_cmd.extend(["--description", surface_description])
+                            if cta_label:
+                                surface_cmd.extend(["--cta-label", cta_label])
+                            if cta_href:
+                                surface_cmd.extend(["--cta-href", cta_href])
+                            _run_local_cmd(surface_cmd, cwd=repo_root)
                             _run_local_cmd(["git", "add", f"frontend/src/product_surfaces/{slug}.tsx"], cwd=repo_root)
                             _run_local_cmd(["git", "add", "frontend/src/product_surfaces/registry.gen.ts"], cwd=repo_root)
                             _run_local_cmd(["git", "commit", "-m", commit_message], cwd=repo_root)

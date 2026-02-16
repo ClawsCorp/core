@@ -350,6 +350,11 @@ export const api = {
       slug: string;
       branch_name?: string;
       commit_message?: string;
+      surface_title?: string;
+      surface_tagline?: string;
+      surface_description?: string;
+      cta_label?: string;
+      cta_href?: string;
       open_pr?: boolean;
       pr_title?: string;
       pr_body?: string;

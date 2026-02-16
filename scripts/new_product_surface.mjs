@@ -6,16 +6,33 @@ import { fileURLToPath } from "node:url";
 
 function usage() {
   process.stderr.write(
-    "usage: node scripts/new_product_surface.mjs --slug <project-slug>\n"
+    "usage: node scripts/new_product_surface.mjs --slug <project-slug> [--title <text>] [--tagline <text>] [--description <text>] [--cta-label <text>] [--cta-href <path-or-url>]\n"
   );
 }
 
 function parseArgs(argv) {
-  const args = { slug: null };
+  const args = {
+    slug: null,
+    title: null,
+    tagline: null,
+    description: null,
+    ctaLabel: null,
+    ctaHref: null,
+  };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--slug") {
       args.slug = argv[++i] ?? null;
+    } else if (a === "--title") {
+      args.title = argv[++i] ?? null;
+    } else if (a === "--tagline") {
+      args.tagline = argv[++i] ?? null;
+    } else if (a === "--description") {
+      args.description = argv[++i] ?? null;
+    } else if (a === "--cta-label") {
+      args.ctaLabel = argv[++i] ?? null;
+    } else if (a === "--cta-href") {
+      args.ctaHref = argv[++i] ?? null;
     } else if (a === "-h" || a === "--help") {
       usage();
       process.exit(0);
@@ -48,8 +65,28 @@ function assertValidSlug(slug) {
   }
 }
 
-const { slug } = parseArgs(process.argv);
+function trimOrNull(value, maxLength) {
+  if (!value) return null;
+  const trimmed = String(value).trim();
+  if (!trimmed) return null;
+  return trimmed.slice(0, maxLength);
+}
+
+function assertValidCtaHref(value) {
+  if (!value) return null;
+  if (value.startsWith("/") || value.startsWith("http://") || value.startsWith("https://")) {
+    return value;
+  }
+  throw new Error("invalid cta href: use absolute URL or app-relative path");
+}
+
+const { slug, title, tagline, description, ctaLabel, ctaHref } = parseArgs(process.argv);
 assertValidSlug(slug);
+const surfaceTitle = trimOrNull(title, 120);
+const surfaceTagline = trimOrNull(tagline, 180);
+const surfaceDescription = trimOrNull(description, 1200);
+const surfaceCtaLabel = trimOrNull(ctaLabel, 80);
+const surfaceCtaHref = assertValidCtaHref(trimOrNull(ctaHref, 512));
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, "..");
@@ -70,7 +107,16 @@ const surfaceSource = `import { TemplateSurface } from "./template";
 import type { ProjectDetail } from "@/types";
 
 export function ${componentName}({ project }: { project: ProjectDetail }) {
-  return <TemplateSurface project={project} />;
+  return (
+    <TemplateSurface
+      project={project}
+      customTitle={${JSON.stringify(surfaceTitle)}}
+      customTagline={${JSON.stringify(surfaceTagline)}}
+      customDescription={${JSON.stringify(surfaceDescription)}}
+      ctaLabel={${JSON.stringify(surfaceCtaLabel)}}
+      ctaHref={${JSON.stringify(surfaceCtaHref)}}
+    />
+  );
 }
 `;
 
@@ -90,6 +136,13 @@ process.stdout.write(
       slug,
       file: path.relative(repoRoot, surfaceFile),
       component: componentName,
+      custom: {
+        title: surfaceTitle,
+        tagline: surfaceTagline,
+        description: surfaceDescription,
+        ctaLabel: surfaceCtaLabel,
+        ctaHref: surfaceCtaHref,
+      },
     },
     null,
     2

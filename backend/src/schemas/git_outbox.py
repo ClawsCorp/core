@@ -87,6 +87,11 @@ class AgentGitOutboxCreateSurfaceRequest(BaseModel):
     slug: str = Field(..., min_length=1, max_length=64)
     branch_name: str | None = Field(default=None, min_length=1, max_length=128)
     commit_message: str | None = Field(default=None, min_length=1, max_length=200)
+    surface_title: str | None = Field(default=None, min_length=1, max_length=120)
+    surface_tagline: str | None = Field(default=None, min_length=1, max_length=180)
+    surface_description: str | None = Field(default=None, min_length=1, max_length=1200)
+    cta_label: str | None = Field(default=None, min_length=1, max_length=80)
+    cta_href: str | None = Field(default=None, min_length=1, max_length=512)
     open_pr: bool = True
     pr_title: str | None = Field(default=None, min_length=1, max_length=200)
     pr_body: str | None = Field(default=None, min_length=1, max_length=5000)

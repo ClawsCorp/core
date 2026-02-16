@@ -531,6 +531,16 @@ export interface components {
       branch_name?: string | null;
       /** Commit Message */
       commit_message?: string | null;
+      /** Surface Title */
+      surface_title?: string | null;
+      /** Surface Tagline */
+      surface_tagline?: string | null;
+      /** Surface Description */
+      surface_description?: string | null;
+      /** Cta Label */
+      cta_label?: string | null;
+      /** Cta Href */
+      cta_href?: string | null;
       /**
        * Open Pr
        * @default true

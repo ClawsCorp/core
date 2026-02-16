@@ -102,7 +102,15 @@ def test_agent_can_enqueue_and_list_project_git_tasks(_client: TestClient, _db: 
     enqueue = _client.post(
         "/api/v1/agent/projects/prj_git_1/git-outbox/surface-commit",
         headers={"Content-Type": "application/json", "X-API-Key": owner_key},
-        json={"slug": "aurora-notes", "open_pr": False},
+        json={
+            "slug": "aurora-notes",
+            "open_pr": False,
+            "surface_title": "Aurora Notes",
+            "surface_tagline": "Team writing space",
+            "surface_description": "A focused environment for sprint notes and product decisions.",
+            "cta_label": "Open Aurora Hub",
+            "cta_href": "/projects/prj_git_1",
+        },
     )
     assert enqueue.status_code == 200
     task = enqueue.json()["data"]
@@ -111,6 +119,10 @@ def test_agent_can_enqueue_and_list_project_git_tasks(_client: TestClient, _db: 
     assert task["requested_by_agent_num"] is not None
     assert task["payload"]["slug"] == "aurora-notes"
     assert task["payload"]["open_pr"] is False
+    assert task["payload"]["surface_title"] == "Aurora Notes"
+    assert task["payload"]["surface_tagline"] == "Team writing space"
+    assert task["payload"]["cta_label"] == "Open Aurora Hub"
+    assert task["payload"]["cta_href"] == "/projects/prj_git_1"
     assert isinstance(task["payload"]["pr_title"], str)
     assert "Checklist" in str(task["payload"]["pr_body"])
 
@@ -168,3 +180,39 @@ def test_agent_git_outbox_defaults_open_pr_true(_client: TestClient, _db: sessio
     assert payload["open_pr"] is True
     assert "Nova Index" in str(payload["pr_title"])
     assert "Checklist" in str(payload["pr_body"])
+
+
+def test_agent_git_outbox_invalid_cta_href_rejected(_client: TestClient, _db: sessionmaker[Session]) -> None:
+    owner_key = _register_agent(_client, name="Owner Three")
+    with _db() as db:
+        owner = db.query(Agent).filter(Agent.agent_id == owner_key.split(".")[0]).first()
+        assert owner is not None
+        db.add(
+            Project(
+                project_id="prj_git_3",
+                slug="git-3",
+                name="Sky Relay",
+                description_md=None,
+                status=ProjectStatus.active,
+                proposal_id=None,
+                origin_proposal_id=None,
+                originator_agent_id=owner.id,
+                discussion_thread_id=None,
+                treasury_wallet_address=None,
+                treasury_address=None,
+                revenue_wallet_address=None,
+                revenue_address=None,
+                monthly_budget_micro_usdc=None,
+                created_by_agent_id=owner.id,
+                approved_at=None,
+            )
+        )
+        db.commit()
+
+    enqueue = _client.post(
+        "/api/v1/agent/projects/prj_git_3/git-outbox/surface-commit",
+        headers={"Content-Type": "application/json", "X-API-Key": owner_key},
+        json={"slug": "sky-relay", "cta_href": "javascript:alert(1)"},
+    )
+    assert enqueue.status_code == 400
+    assert "invalid_cta_href" in enqueue.text
