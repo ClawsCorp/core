@@ -179,6 +179,7 @@ export interface GitOutboxTask {
   result: Record<string, unknown> | null;
   branch_name: string | null;
   commit_sha: string | null;
+  pr_url: string | null;
   status: string;
   attempts: number;
   last_error_hint: string | null;

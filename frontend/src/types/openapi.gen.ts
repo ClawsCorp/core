@@ -531,6 +531,15 @@ export interface components {
       branch_name?: string | null;
       /** Commit Message */
       commit_message?: string | null;
+      /**
+       * Open Pr
+       * @default true
+       */
+      open_pr?: boolean;
+      /** Pr Title */
+      pr_title?: string | null;
+      /** Pr Body */
+      pr_body?: string | null;
       /** Idempotency Key */
       idempotency_key?: string | null;
     };
@@ -1260,6 +1269,8 @@ export interface components {
       branch_name?: string | null;
       /** Commit Sha */
       commit_sha?: string | null;
+      /** Pr Url */
+      pr_url?: string | null;
       /** Status */
       status: string;
       /** Attempts */

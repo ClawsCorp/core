@@ -102,7 +102,7 @@ def test_agent_can_enqueue_and_list_project_git_tasks(_client: TestClient, _db: 
     enqueue = _client.post(
         "/api/v1/agent/projects/prj_git_1/git-outbox/surface-commit",
         headers={"Content-Type": "application/json", "X-API-Key": owner_key},
-        json={"slug": "aurora-notes"},
+        json={"slug": "aurora-notes", "open_pr": False},
     )
     assert enqueue.status_code == 200
     task = enqueue.json()["data"]
@@ -110,6 +110,7 @@ def test_agent_can_enqueue_and_list_project_git_tasks(_client: TestClient, _db: 
     assert task["project_num"] == project_num
     assert task["requested_by_agent_num"] is not None
     assert task["payload"]["slug"] == "aurora-notes"
+    assert task["payload"]["open_pr"] is False
 
     listed = _client.get(
         f"/api/v1/agent/projects/{project_num}/git-outbox",

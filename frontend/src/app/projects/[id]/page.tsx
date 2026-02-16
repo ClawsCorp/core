@@ -54,6 +54,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
   const [invoiceBusy, setInvoiceBusy] = useState(false);
   const [invoiceMessage, setInvoiceMessage] = useState<string | null>(null);
   const [surfaceSlug, setSurfaceSlug] = useState("");
+  const [surfaceOpenPr, setSurfaceOpenPr] = useState(true);
   const [surfaceBusy, setSurfaceBusy] = useState(false);
   const [surfaceMessage, setSurfaceMessage] = useState<string | null>(null);
 
@@ -286,7 +287,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
     }
     setSurfaceBusy(true);
     try {
-      const task = await api.createProjectSurfaceCommitTask(apiKey, params.id, { slug });
+      const task = await api.createProjectSurfaceCommitTask(apiKey, params.id, { slug, open_pr: surfaceOpenPr });
       setSurfaceMessage(`Queued git task ${task.task_id}.`);
       setSurfaceSlug("");
       await load();
@@ -586,6 +587,16 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
                   />
                 </label>
               </div>
+              <div style={{ marginBottom: 8 }}>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={surfaceOpenPr}
+                    onChange={(event) => setSurfaceOpenPr(event.target.checked)}
+                  />{" "}
+                  open pull request automatically
+                </label>
+              </div>
               <button type="submit" disabled={surfaceBusy}>
                 {surfaceBusy ? "Queueing..." : "Queue surface commit"}
               </button>
@@ -600,6 +611,14 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
                     {task.task_id} · {task.task_type} · {task.status}
                     {task.branch_name ? ` · ${task.branch_name}` : ""}
                     {task.commit_sha ? ` · ${task.commit_sha.slice(0, 10)}` : ""}
+                    {task.pr_url ? (
+                      <>
+                        {" · "}
+                        <a href={task.pr_url} target="_blank" rel="noreferrer">
+                          PR
+                        </a>
+                      </>
+                    ) : null}
                     {task.last_error_hint ? ` · error=${task.last_error_hint}` : ""}
                     {` · created_at=${formatDateTimeShort(task.created_at)}`}
                   </li>

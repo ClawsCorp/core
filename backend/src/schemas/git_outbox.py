@@ -25,6 +25,7 @@ class GitOutboxTask(BaseModel):
     result: dict | None = None
     branch_name: str | None = None
     commit_sha: str | None = None
+    pr_url: str | None = None
     status: str
     attempts: int
     last_error_hint: str | None
@@ -86,6 +87,9 @@ class AgentGitOutboxCreateSurfaceRequest(BaseModel):
     slug: str = Field(..., min_length=1, max_length=64)
     branch_name: str | None = Field(default=None, min_length=1, max_length=128)
     commit_message: str | None = Field(default=None, min_length=1, max_length=200)
+    open_pr: bool = True
+    pr_title: str | None = Field(default=None, min_length=1, max_length=200)
+    pr_body: str | None = Field(default=None, min_length=1, max_length=5000)
     idempotency_key: str | None = Field(default=None, min_length=1, max_length=255)
 
 
