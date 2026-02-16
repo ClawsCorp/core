@@ -112,7 +112,7 @@ def get_reputation_leaderboard(
         )
         .outerjoin(ReputationEvent, ReputationEvent.agent_id == Agent.id)
         .group_by(Agent.id, Agent.agent_id, Agent.name)
-        .order_by(func.coalesce(func.sum(ReputationEvent.delta_points), 0).desc(), Agent.agent_id.asc())
+        .order_by(func.coalesce(func.sum(ReputationEvent.delta_points), 0).desc(), Agent.id.asc())
     )
 
     total = rows.count()
