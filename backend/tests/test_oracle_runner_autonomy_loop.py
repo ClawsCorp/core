@@ -22,6 +22,16 @@ class _FakeClientAutonomy:
             },
             "/api/v1/oracle/projects/proj_1/capital/reconciliation": {"ready": True, "delta_micro_usdc": 0},
             "/api/v1/oracle/projects/proj_1/revenue/reconciliation": {"ready": True, "delta_micro_usdc": 0},
+            "/api/v1/oracle/marketing/settlement/deposit": {
+                "status": "submitted",
+                "tx_hash": None,
+                "blocked_reason": None,
+                "idempotency_key": "deposit_marketing_fee:100:0",
+                "task_id": "txo_m_1",
+                "amount_micro_usdc": 100,
+                "accrued_total_micro_usdc": 100,
+                "sent_total_micro_usdc": 0,
+            },
             "/api/v1/oracle/settlement/202501": {"status": "ok"},
             "/api/v1/oracle/reconciliation/202501": {"ready": True, "delta_micro_usdc": 0},
             "/api/v1/oracle/settlement/202501/deposit-profit": {
@@ -106,7 +116,17 @@ def test_autonomy_loop_once_prints_single_json(monkeypatch, capsys) -> None:
     monkeypatch.setattr(cli, "OracleClient", _FakeClientAutonomy)
     monkeypatch.setenv("ORACLE_AUTO_MONTH", "202501")
 
-    exit_code = cli.run(["autonomy-loop", "--sync-project-capital", "--billing-sync", "--reconcile-projects", "--reconcile-project-revenue", "--run-month"])
+    exit_code = cli.run(
+        [
+            "autonomy-loop",
+            "--sync-project-capital",
+            "--billing-sync",
+            "--reconcile-projects",
+            "--reconcile-project-revenue",
+            "--marketing-deposit",
+            "--run-month",
+        ]
+    )
 
     captured = capsys.readouterr()
     assert exit_code == 0
@@ -116,6 +136,8 @@ def test_autonomy_loop_once_prints_single_json(monkeypatch, capsys) -> None:
     assert payload["command"] == "autonomy-loop"
     assert payload["month"] == "202501"
     assert payload["success"] is True
+    assert "marketing_deposit" in payload
+    assert payload["marketing_deposit"]["status"] == "submitted"
     assert "run_month" in payload
     assert payload["run_month"]["success"] is True
     assert "deposit_backlog" in payload
