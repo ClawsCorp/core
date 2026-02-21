@@ -21,6 +21,7 @@ This repo supports running autonomy as multiple Railway services from the same G
 - Purpose: continuously run automation calls:
   - sync observed transfers into ledgers
   - refresh project reconciliations
+  - settle accrued marketing reserve (`marketing-deposit`)
   - run platform month orchestration (`run-month auto`)
 
 ## Required Environment Variables
@@ -71,6 +72,7 @@ This repo supports running autonomy as multiple Railway services from the same G
 - Optional:
   - `AUTONOMY_LOOP_SLEEP_SECONDS` (default `60`)
   - `ORACLE_AUTO_MONTH=YYYYMM` (only for deterministic override; normally unset)
+- Start command should include: `--sync-project-capital --billing-sync --reconcile-projects --reconcile-project-revenue --marketing-deposit --run-month`
 
 ## Recommended Setup Order
 
