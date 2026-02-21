@@ -14,7 +14,7 @@ from src.core.database import get_db
 from src.models.expense_event import ExpenseEvent
 from src.models.project import Project
 from src.services.project_spend_policy import check_spend_allowed
-from src.services.marketing_fee import accrue_marketing_fee_event
+from src.services.marketing_fee import accrue_marketing_fee_event, build_marketing_fee_idempotency_key
 from src.models.revenue_event import RevenueEvent
 from src.schemas.accounting import (
     ExpenseEventCreateRequest,
@@ -59,7 +59,10 @@ async def create_revenue_event(
         project_public_id = project.project_id if project is not None else "platform"
         _mfee_row, _mfee_created, _mfee_amount = accrue_marketing_fee_event(
             db,
-            idempotency_key=f"mfee:oracle_revenue:{payload.idempotency_key}",
+            idempotency_key=build_marketing_fee_idempotency_key(
+                prefix="mfee:oracle_revenue",
+                source_idempotency_key=payload.idempotency_key,
+            ),
             project_id=project.id if project is not None else None,
             profit_month_id=payload.profit_month_id,
             bucket="project_revenue" if project is not None else "platform_revenue",

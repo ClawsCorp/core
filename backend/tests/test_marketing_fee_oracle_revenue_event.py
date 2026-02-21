@@ -110,3 +110,31 @@ def test_oracle_revenue_event_accrues_marketing_fee(_client: TestClient, _db: se
         assert row is not None
         assert row.bucket == "platform_revenue"
         assert row.fee_amount_micro_usdc == 12
+
+
+def test_oracle_revenue_event_long_idempotency_key_keeps_marketing_key_bounded(
+    _client: TestClient, _db: sessionmaker[Session]
+) -> None:
+    path = "/api/v1/oracle/revenue-events"
+    source_idem = "k" * 255
+    body = json.dumps(
+        {
+            "profit_month_id": "202602",
+            "project_id": None,
+            "amount_micro_usdc": 2000,
+            "tx_hash": "0x" + ("cd" * 32),
+            "source": "platform_manual_receipt",
+            "idempotency_key": source_idem,
+            "evidence_url": "https://example.test/r/2",
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    resp = _client.post(path, content=body, headers=_oracle_headers(path, body, "req-r2", idem="idem-h-r2"))
+    assert resp.status_code == 200
+
+    with _db() as db:
+        row = db.query(MarketingFeeAccrualEvent).first()
+        assert row is not None
+        assert row.fee_amount_micro_usdc == 20
+        assert len(row.idempotency_key) <= 255
