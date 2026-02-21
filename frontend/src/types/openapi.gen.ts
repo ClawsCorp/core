@@ -273,6 +273,10 @@ export interface paths {
      */
     post: operations["deposit_profit_api_v1_oracle_settlement__profit_month_id__deposit_profit_post"];
   };
+  "/api/v1/oracle/marketing/settlement/deposit": {
+    /** Deposit Marketing Fee Reserve */
+    post: operations["deposit_marketing_fee_reserve_api_v1_oracle_marketing_settlement_deposit_post"];
+  };
   "/api/v1/oracle/distributions/{profit_month_id}/create": {
     /** Create Distribution */
     post: operations["create_distribution_api_v1_oracle_distributions__profit_month_id__create_post"];
@@ -1327,6 +1331,31 @@ export interface components {
     HTTPValidationError: {
       /** Detail */
       detail?: components["schemas"]["ValidationError"][];
+    };
+    /** MarketingFeeDepositData */
+    MarketingFeeDepositData: {
+      /** Status */
+      status: string;
+      /** Tx Hash */
+      tx_hash: string | null;
+      /** Blocked Reason */
+      blocked_reason: string | null;
+      /** Idempotency Key */
+      idempotency_key: string;
+      /** Task Id */
+      task_id?: string | null;
+      /** Amount Micro Usdc */
+      amount_micro_usdc?: number | null;
+      /** Accrued Total Micro Usdc */
+      accrued_total_micro_usdc?: number | null;
+      /** Sent Total Micro Usdc */
+      sent_total_micro_usdc?: number | null;
+    };
+    /** MarketingFeeDepositResponse */
+    MarketingFeeDepositResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["MarketingFeeDepositData"];
     };
     /** MarketplaceGenerateData */
     MarketplaceGenerateData: {
@@ -4262,6 +4291,17 @@ export interface operations {
       422: {
         content: {
           "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Deposit Marketing Fee Reserve */
+  deposit_marketing_fee_reserve_api_v1_oracle_marketing_settlement_deposit_post: {
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["MarketingFeeDepositResponse"];
         };
       };
     };
