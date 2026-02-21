@@ -16,6 +16,7 @@ from src.models.observed_usdc_transfer import ObservedUsdcTransfer
 from src.models.project import Project
 from src.models.project_crypto_invoice import ProjectCryptoInvoice
 from src.models.revenue_event import RevenueEvent
+from src.services.marketing_fee import accrue_marketing_fee_event
 from src.services.blockchain import BlockchainReadError, read_block_timestamp_utc
 from src.schemas.billing import BillingSyncResponse
 
@@ -68,7 +69,16 @@ async def sync_billing(
             request_id=request_id,
             commit=True,
         )
-        return BillingSyncResponse(success=True, data={"billing_events_inserted": 0, "revenue_events_inserted": 0, "invoices_paid": 0})
+        return BillingSyncResponse(
+            success=True,
+            data={
+                "billing_events_inserted": 0,
+                "revenue_events_inserted": 0,
+                "marketing_fee_events_inserted": 0,
+                "marketing_fee_total_micro_usdc": 0,
+                "invoices_paid": 0,
+            },
+        )
 
     # Process newest first to keep UI current; idempotency protects duplicates.
     transfers = (
@@ -81,6 +91,8 @@ async def sync_billing(
 
     billing_inserted = 0
     revenue_inserted = 0
+    marketing_fee_events_inserted = 0
+    marketing_fee_total_micro_usdc = 0
     invoices_paid = 0
     block_ts_cache: dict[int, str] = {}
 
@@ -144,6 +156,23 @@ async def sync_billing(
         if rev_created:
             revenue_inserted += 1
 
+        _mfee_row, mfee_created, mfee_amount = accrue_marketing_fee_event(
+            db,
+            idempotency_key=f"mfee:billing:{int(t.chain_id)}:{str(t.tx_hash).lower()}:{int(t.log_index)}:to:{project_public_id}",
+            project_id=project_db_id,
+            profit_month_id=profit_month_id,
+            bucket="project_revenue",
+            source="customer_billing_usdc_transfer",
+            gross_amount_micro_usdc=int(t.amount_micro_usdc),
+            chain_id=int(t.chain_id),
+            tx_hash=str(t.tx_hash).lower(),
+            log_index=int(t.log_index),
+            evidence_url=f"usdc_transfer:{t.tx_hash}#log:{int(t.log_index)};to:{project_public_id}",
+        )
+        if mfee_created:
+            marketing_fee_events_inserted += 1
+        marketing_fee_total_micro_usdc += int(mfee_amount)
+
         # Crypto billing reconciliation:
         # mark the oldest matching pending invoice as paid (same project/address/amount/chain),
         # and respect optional payer filter if set by the project.
@@ -187,5 +216,11 @@ async def sync_billing(
     db.commit()
     return BillingSyncResponse(
         success=True,
-        data={"billing_events_inserted": billing_inserted, "revenue_events_inserted": revenue_inserted, "invoices_paid": invoices_paid},
+        data={
+            "billing_events_inserted": billing_inserted,
+            "revenue_events_inserted": revenue_inserted,
+            "marketing_fee_events_inserted": marketing_fee_events_inserted,
+            "marketing_fee_total_micro_usdc": marketing_fee_total_micro_usdc,
+            "invoices_paid": invoices_paid,
+        },
     )

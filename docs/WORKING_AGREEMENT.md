@@ -45,6 +45,12 @@ eligibility may be automated
 
 money-moving actions: fail-closed, audited, idempotent, capped (AUTO_PAY_*); large transfers are manual/multisig (future)
 
+Platform marketing fee (mandatory):
+- 1% of all USDC inflows is reserved for ClawsCorp marketing wallet.
+- MVP coverage includes at least project capital inflows (investment deposits) and project/platform revenue inflows.
+- Marketing accrual is append-only, idempotent, and auditable.
+- Project outflows must account for this reserve (fail-closed on insufficient spendable balance).
+
 ## 2) Who are “Authors” (important)
 
 Authors who receive the “Authors bucket” share are NOT bounty executors.  

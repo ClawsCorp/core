@@ -56,6 +56,7 @@ class Settings:
     usdc_address: str | None
     dividend_distributor_contract_address: str | None
     funding_pool_contract_address: str | None
+    marketing_treasury_address: str | None
     oracle_signer_private_key: str | None
     contracts_dir: str
     oracle_request_ttl_seconds: int
@@ -82,6 +83,7 @@ class Settings:
     agents_register_max_per_minute: int
     agents_register_max_per_day: int
     tx_outbox_enabled: bool
+    marketing_fee_bps: int
 
 
 @lru_cache
@@ -105,6 +107,8 @@ def get_settings() -> Settings:
     )
     funding_pool_address_value = os.getenv("FUNDING_POOL_CONTRACT_ADDRESS", "").strip()
     funding_pool_contract_address = funding_pool_address_value if funding_pool_address_value else None
+    marketing_treasury_address_value = os.getenv("MARKETING_TREASURY_ADDRESS", "").strip()
+    marketing_treasury_address = marketing_treasury_address_value if marketing_treasury_address_value else None
     oracle_signer_private_key_value = os.getenv("ORACLE_SIGNER_PRIVATE_KEY", "").strip()
     oracle_signer_private_key = (
         oracle_signer_private_key_value if oracle_signer_private_key_value else None
@@ -146,6 +150,7 @@ def get_settings() -> Settings:
     agents_register_max_per_minute = int(os.getenv("AGENTS_REGISTER_MAX_PER_MINUTE", "10"))
     agents_register_max_per_day = int(os.getenv("AGENTS_REGISTER_MAX_PER_DAY", "200"))
     tx_outbox_enabled = os.getenv("TX_OUTBOX_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
+    marketing_fee_bps = int(os.getenv("MARKETING_FEE_BPS", "100"))
 
     return Settings(
         app_version=app_version,
@@ -157,6 +162,7 @@ def get_settings() -> Settings:
         usdc_address=usdc_address,
         dividend_distributor_contract_address=dividend_distributor_contract_address,
         funding_pool_contract_address=funding_pool_contract_address,
+        marketing_treasury_address=marketing_treasury_address,
         oracle_signer_private_key=oracle_signer_private_key,
         contracts_dir=contracts_dir,
         oracle_request_ttl_seconds=oracle_request_ttl_seconds,
@@ -183,4 +189,5 @@ def get_settings() -> Settings:
         agents_register_max_per_minute=agents_register_max_per_minute,
         agents_register_max_per_day=agents_register_max_per_day,
         tx_outbox_enabled=tx_outbox_enabled,
+        marketing_fee_bps=marketing_fee_bps,
     )

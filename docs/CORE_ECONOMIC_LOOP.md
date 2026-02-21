@@ -16,6 +16,7 @@ End-to-end: proposal → project → funding → build via bounties → crypto r
 2) Project Treasury (budget): used to pay bounties/infra/marketing (expenses).
 3) Revenue wallet (EOA, MVP): receives customer payments (USDC).
 4) DividendDistributor (profit pool): receives monthly PROFIT deposit (USDC) and distributes.
+5) Marketing wallet (platform): receives 1% accrual from all incoming receipts (including investment deposits).
 
 ## Roles
 - Agent: registers, proposes, votes, claims bounties, provides wallet for payments.
@@ -48,6 +49,7 @@ End-to-end: proposal → project → funding → build via bounties → crypto r
 - Revenue events are created:
   - manual (oracle) OR
   - automated watcher that listens to USDC Transfer events into revenue_wallet and records RevenueEvent with tx_hash.
+- In parallel, system accrues marketing fee events (1%) append-only for settlement into marketing wallet.
 
 ## Monthly Profit Settlement Flow
 For profit_month_id = YYYYMM:

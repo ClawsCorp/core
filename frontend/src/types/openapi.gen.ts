@@ -628,6 +628,10 @@ export interface components {
       billing_events_inserted: number;
       /** Revenue Events Inserted */
       revenue_events_inserted: number;
+      /** Marketing Fee Events Inserted */
+      marketing_fee_events_inserted: number;
+      /** Marketing Fee Total Micro Usdc */
+      marketing_fee_total_micro_usdc: number;
       /** Invoices Paid */
       invoices_paid: number;
     };
@@ -1641,6 +1645,10 @@ export interface components {
       transfers_seen: number;
       /** Capital Events Inserted */
       capital_events_inserted: number;
+      /** Marketing Fee Events Inserted */
+      marketing_fee_events_inserted: number;
+      /** Marketing Fee Total Micro Usdc */
+      marketing_fee_total_micro_usdc: number;
       /** Projects With Treasury Count */
       projects_with_treasury_count: number;
     };

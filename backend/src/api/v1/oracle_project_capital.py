@@ -43,6 +43,7 @@ from src.services.blockchain import (
     read_block_timestamp_utc,
 )
 from src.services.project_capital import get_latest_project_capital_reconciliation, is_reconciliation_fresh
+from src.services.marketing_fee import accrue_marketing_fee_event
 
 router = APIRouter(prefix="/api/v1/oracle", tags=["oracle-project-capital"])
 
@@ -155,6 +156,8 @@ async def sync_project_capital_from_observed_usdc_transfers(
             data=ProjectCapitalSyncData(
                 transfers_seen=0,
                 capital_events_inserted=0,
+                marketing_fee_events_inserted=0,
+                marketing_fee_total_micro_usdc=0,
                 projects_with_treasury_count=0,
             ),
         )
@@ -184,6 +187,8 @@ async def sync_project_capital_from_observed_usdc_transfers(
     block_ts_cache: dict[int, str] = {}
     transfers_seen = 0
     inserted = 0
+    marketing_fee_events_inserted = 0
+    marketing_fee_total_micro_usdc = 0
 
     for t in transfers:
         dest = str(t.to_address).lower()
@@ -191,6 +196,17 @@ async def sync_project_capital_from_observed_usdc_transfers(
             continue
         project_db_id, project_public_id = addr_to_project[dest]
         transfers_seen += 1
+
+        bn = int(t.block_number)
+        if bn in block_ts_cache:
+            profit_month_id = block_ts_cache[bn]
+        else:
+            try:
+                ts = read_block_timestamp_utc(bn)
+                profit_month_id = ts.astimezone(timezone.utc).strftime("%Y%m")
+            except BlockchainReadError:
+                profit_month_id = t.observed_at.astimezone(timezone.utc).strftime("%Y%m")
+            block_ts_cache[bn] = profit_month_id
 
         # Extra safety: if this on-chain transfer has already been accounted for in the ledger
         # (e.g. manual oracle ingestion using the tx hash as evidence), skip inserting a duplicate
@@ -208,18 +224,6 @@ async def sync_project_capital_from_observed_usdc_transfers(
             .first()
         )
         if already_accounted is None:
-            # Best-effort block timestamp (cache per block). If it fails, fall back to observed_at.
-            bn = int(t.block_number)
-            if bn in block_ts_cache:
-                profit_month_id = block_ts_cache[bn]
-            else:
-                try:
-                    ts = read_block_timestamp_utc(bn)
-                    profit_month_id = ts.astimezone(timezone.utc).strftime("%Y%m")
-                except BlockchainReadError:
-                    profit_month_id = t.observed_at.astimezone(timezone.utc).strftime("%Y%m")
-                block_ts_cache[bn] = profit_month_id
-
             idem = f"pcap:deposit:{int(t.chain_id)}:{t.tx_hash}:{int(t.log_index)}:to:{project_public_id}"
             event = ProjectCapitalEvent(
                 event_id=_generate_event_id(db),
@@ -261,6 +265,23 @@ async def sync_project_capital_from_observed_usdc_transfers(
             unique_filter={"observed_transfer_id": int(t.id)},
         )
 
+        _mfee_row, mfee_created, mfee_amount = accrue_marketing_fee_event(
+            db,
+            idempotency_key=f"mfee:pcap:{int(t.chain_id)}:{str(t.tx_hash).lower()}:{int(t.log_index)}:to:{project_public_id}",
+            project_id=project_db_id,
+            profit_month_id=profit_month_id,
+            bucket="project_capital",
+            source="treasury_usdc_deposit",
+            gross_amount_micro_usdc=int(t.amount_micro_usdc),
+            chain_id=int(t.chain_id),
+            tx_hash=str(t.tx_hash).lower(),
+            log_index=int(t.log_index),
+            evidence_url=f"usdc_transfer:{t.tx_hash}#log:{int(t.log_index)};to:{project_public_id}",
+        )
+        if mfee_created:
+            marketing_fee_events_inserted += 1
+        marketing_fee_total_micro_usdc += int(mfee_amount)
+
     _record_oracle_audit(request, db, body_hash, request_id, sync_idem, commit=False)
     db.commit()
     return ProjectCapitalSyncResponse(
@@ -268,6 +289,8 @@ async def sync_project_capital_from_observed_usdc_transfers(
         data=ProjectCapitalSyncData(
             transfers_seen=transfers_seen,
             capital_events_inserted=inserted,
+            marketing_fee_events_inserted=marketing_fee_events_inserted,
+            marketing_fee_total_micro_usdc=marketing_fee_total_micro_usdc,
             projects_with_treasury_count=len(addr_to_project),
         ),
     )

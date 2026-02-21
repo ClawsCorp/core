@@ -25,6 +25,7 @@ from src.main import app
 
 import src.models  # noqa: F401
 from src.models.observed_usdc_transfer import ObservedUsdcTransfer
+from src.models.marketing_fee_accrual_event import MarketingFeeAccrualEvent
 from src.models.project import Project, ProjectStatus
 from src.models.project_capital_event import ProjectCapitalEvent
 from src.models.project_funding_deposit import ProjectFundingDeposit
@@ -144,6 +145,8 @@ def test_project_capital_sync_creates_capital_events(_client: TestClient, _db: s
     assert payload["success"] is True
     assert payload["data"]["transfers_seen"] == 1
     assert payload["data"]["capital_events_inserted"] == 1
+    assert payload["data"]["marketing_fee_events_inserted"] == 1
+    assert payload["data"]["marketing_fee_total_micro_usdc"] == 12
 
     with _db() as db:
         assert db.query(ProjectCapitalEvent).count() == 1
@@ -153,15 +156,22 @@ def test_project_capital_sync_creates_capital_events(_client: TestClient, _db: s
         assert evt.profit_month_id == "202602"
         assert evt.delta_micro_usdc == 1234
         assert evt.source == "treasury_usdc_deposit"
+        mfee = db.query(MarketingFeeAccrualEvent).first()
+        assert mfee is not None
+        assert mfee.bucket == "project_capital"
+        assert mfee.fee_amount_micro_usdc == 12
 
     # Idempotent on second run.
     resp2 = _client.post(path, content=body, headers=_oracle_headers(path, body, "req-2", idem="idem-2"))
     assert resp2.status_code == 200
     assert resp2.json()["data"]["transfers_seen"] == 1
     assert resp2.json()["data"]["capital_events_inserted"] == 0
+    assert resp2.json()["data"]["marketing_fee_events_inserted"] == 0
+    assert resp2.json()["data"]["marketing_fee_total_micro_usdc"] == 12
 
     with _db() as db:
         assert db.query(ProjectFundingDeposit).count() == 1
+        assert db.query(MarketingFeeAccrualEvent).count() == 1
 
 
 def test_project_capital_sync_skips_transfer_already_accounted_by_evidence_tx_hash(
@@ -228,7 +238,10 @@ def test_project_capital_sync_skips_transfer_already_accounted_by_evidence_tx_ha
     assert payload["success"] is True
     assert payload["data"]["transfers_seen"] == 1
     assert payload["data"]["capital_events_inserted"] == 0
+    assert payload["data"]["marketing_fee_events_inserted"] == 1
+    assert payload["data"]["marketing_fee_total_micro_usdc"] == 50
 
     with _db() as db:
         assert db.query(ProjectCapitalEvent).count() == 1
         assert db.query(ProjectFundingDeposit).count() == 1
+        assert db.query(MarketingFeeAccrualEvent).count() == 1

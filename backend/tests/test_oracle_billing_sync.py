@@ -25,6 +25,7 @@ from src.main import app
 
 import src.models  # noqa: F401
 from src.models.billing_event import BillingEvent
+from src.models.marketing_fee_accrual_event import MarketingFeeAccrualEvent
 from src.models.observed_usdc_transfer import ObservedUsdcTransfer
 from src.models.project import Project, ProjectStatus
 from src.models.project_crypto_invoice import ProjectCryptoInvoice
@@ -166,6 +167,8 @@ def test_billing_sync_creates_billing_and_revenue_events(_client: TestClient, _d
     assert resp.json()["success"] is True
     assert resp.json()["data"]["billing_events_inserted"] == 1
     assert resp.json()["data"]["revenue_events_inserted"] == 1
+    assert resp.json()["data"]["marketing_fee_events_inserted"] == 1
+    assert resp.json()["data"]["marketing_fee_total_micro_usdc"] == 12
     assert resp.json()["data"]["invoices_paid"] == 1
 
     db = _db()
@@ -180,6 +183,10 @@ def test_billing_sync_creates_billing_and_revenue_events(_client: TestClient, _d
         assert inv.status == "paid"
         assert inv.paid_tx_hash == "0x" + ("11" * 32)
         assert inv.paid_log_index == 1
+        mfee = db.query(MarketingFeeAccrualEvent).first()
+        assert mfee is not None
+        assert mfee.bucket == "project_revenue"
+        assert mfee.fee_amount_micro_usdc == 12
     finally:
         db.close()
 
@@ -188,4 +195,6 @@ def test_billing_sync_creates_billing_and_revenue_events(_client: TestClient, _d
     assert resp2.status_code == 200
     assert resp2.json()["data"]["billing_events_inserted"] == 0
     assert resp2.json()["data"]["revenue_events_inserted"] == 0
+    assert resp2.json()["data"]["marketing_fee_events_inserted"] == 0
+    assert resp2.json()["data"]["marketing_fee_total_micro_usdc"] == 12
     assert resp2.json()["data"]["invoices_paid"] == 0

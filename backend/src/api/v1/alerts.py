@@ -3,12 +3,14 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Response
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from src.core.config import get_settings
 from src.core.database import get_db
 from src.models.indexer_cursor import IndexerCursor
 from src.models.git_outbox import GitOutbox
+from src.models.marketing_fee_accrual_event import MarketingFeeAccrualEvent
 from src.models.project import Project, ProjectStatus
 from src.models.project_capital_reconciliation_report import ProjectCapitalReconciliationReport
 from src.models.project_revenue_reconciliation_report import ProjectRevenueReconciliationReport
@@ -47,6 +49,38 @@ def get_alerts(response: Response, db: Session = Depends(get_db)) -> AlertsRespo
                 message="FUNDING_POOL_CONTRACT_ADDRESS is not configured; stakers payouts will route to treasury.",
                 ref=None,
                 data=None,
+                observed_at=now,
+            )
+        )
+
+    if int(settings.marketing_fee_bps or 0) > 0 and not (settings.marketing_treasury_address or "").strip():
+        items.append(
+            AlertItem(
+                alert_type="marketing_treasury_address_missing",
+                severity="warning",
+                message="MARKETING_TREASURY_ADDRESS is not configured; 1% marketing accrual cannot be settled on-chain.",
+                ref=None,
+                data={"marketing_fee_bps": int(settings.marketing_fee_bps or 0)},
+                observed_at=now,
+            )
+        )
+
+    total_marketing_fee = int(
+        db.query(func.coalesce(func.sum(MarketingFeeAccrualEvent.fee_amount_micro_usdc), 0)).scalar() or 0
+    )
+    if total_marketing_fee > 0:
+        items.append(
+            AlertItem(
+                alert_type="marketing_fee_accrued",
+                severity="info",
+                message="Marketing fee accrual has pending balance from inflows.",
+                ref=None,
+                data={
+                    "marketing_fee_bps": int(settings.marketing_fee_bps or 0),
+                    "total_fee_micro_usdc": total_marketing_fee,
+                    "events_count": int(db.query(func.count(MarketingFeeAccrualEvent.id)).scalar() or 0),
+                    "marketing_treasury_address": settings.marketing_treasury_address,
+                },
                 observed_at=now,
             )
         )

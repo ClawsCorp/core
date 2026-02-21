@@ -22,12 +22,12 @@ from src.models.proposal import Proposal
 from src.models.project import Project
 from src.services.project_capital import (
     get_latest_project_capital_reconciliation,
-    get_project_capital_balance_micro_usdc,
+    get_project_capital_spendable_balance_micro_usdc,
     is_reconciliation_fresh,
 )
 from src.services.project_revenue import (
     get_latest_project_revenue_reconciliation,
-    get_project_revenue_balance_micro_usdc,
+    get_project_revenue_spendable_balance_micro_usdc,
     is_reconciliation_fresh as is_revenue_reconciliation_fresh,
 )
 from src.services.project_spend_policy import check_spend_allowed
@@ -760,7 +760,7 @@ def _ensure_bounty_paid_capital_outflow(db: Session, bounty: Bounty, paid_tx_has
         return None
 
     idempotency_key = f"cap:bounty_paid:{bounty.bounty_id}"
-    balance_micro_usdc = get_project_capital_balance_micro_usdc(db, bounty.project_id)
+    balance_micro_usdc = get_project_capital_spendable_balance_micro_usdc(db, bounty.project_id)
     if balance_micro_usdc < bounty.amount_micro_usdc:
         return "insufficient_project_capital"
 
@@ -789,7 +789,7 @@ def _ensure_bounty_paid_revenue_outflow(db: Session, bounty: Bounty) -> str | No
     if bounty.funding_source != BountyFundingSource.project_revenue:
         return None
 
-    balance_micro_usdc = get_project_revenue_balance_micro_usdc(db, bounty.project_id)
+    balance_micro_usdc = get_project_revenue_spendable_balance_micro_usdc(db, bounty.project_id)
     if balance_micro_usdc < bounty.amount_micro_usdc:
         return "insufficient_project_revenue"
     return None
