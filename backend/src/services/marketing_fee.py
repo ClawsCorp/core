@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import secrets
 
 from sqlalchemy import func
@@ -8,6 +9,20 @@ from sqlalchemy.orm import Session
 from src.core.config import get_settings
 from src.core.db_utils import insert_or_get_by_unique
 from src.models.marketing_fee_accrual_event import MarketingFeeAccrualEvent
+
+MAX_MARKETING_IDEMPOTENCY_KEY_LEN = 255
+
+
+def build_marketing_fee_idempotency_key(*, prefix: str, source_idempotency_key: str) -> str:
+    raw = f"{prefix}:{source_idempotency_key}"
+    if len(raw) <= MAX_MARKETING_IDEMPOTENCY_KEY_LEN:
+        return raw
+
+    digest = hashlib.sha256(source_idempotency_key.encode("utf-8")).hexdigest()
+    suffix = f"sha256:{digest}"
+    max_prefix_len = MAX_MARKETING_IDEMPOTENCY_KEY_LEN - len(suffix) - 1
+    safe_prefix = prefix[: max(0, max_prefix_len)]
+    return f"{safe_prefix}:{suffix}"
 
 
 def calculate_marketing_fee_micro_usdc(amount_micro_usdc: int, fee_bps: int | None = None) -> int:

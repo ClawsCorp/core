@@ -25,6 +25,7 @@ from src.main import app
 
 import src.models  # noqa: F401
 from src.models.audit_log import AuditLog
+from src.models.marketing_fee_accrual_event import MarketingFeeAccrualEvent
 from src.models.project import Project, ProjectStatus
 from src.models.project_capital_event import ProjectCapitalEvent
 from src.models.project_capital_reconciliation_report import ProjectCapitalReconciliationReport
@@ -235,3 +236,40 @@ def test_outflow_allows_fresh_ready_reconciliation(_client: TestClient, _db: ses
     with _db() as db:
         assert db.query(ProjectCapitalEvent).count() == 1
 
+
+def test_manual_positive_project_capital_event_accrues_marketing_fee(
+    _client: TestClient, _db: sessionmaker[Session]
+) -> None:
+    with _db() as db:
+        _seed_project(db)
+
+    path = "/api/v1/oracle/project-capital-events"
+    body = json.dumps(
+        {
+            "idempotency_key": "idem-inflow-ok",
+            "profit_month_id": "202602",
+            "project_id": "prj_cap_gate_1",
+            "delta_micro_usdc": 1234,
+            "source": "manual_inflow",
+            "evidence_tx_hash": "0x" + "b" * 64,
+            "evidence_url": "test",
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    resp = _client.post(path, content=body, headers=_oracle_headers(path, body, "req-idem-inflow-ok", idem="idem-inflow-ok"))
+    assert resp.status_code == 200
+    assert resp.json()["success"] is True
+
+    # Idempotent replay should not duplicate either event table.
+    resp2 = _client.post(path, content=body, headers=_oracle_headers(path, body, "req-idem-inflow-ok-2", idem="idem-inflow-ok-2"))
+    assert resp2.status_code == 200
+    assert resp2.json()["success"] is True
+
+    with _db() as db:
+        assert db.query(ProjectCapitalEvent).count() == 1
+        mfee = db.query(MarketingFeeAccrualEvent).first()
+        assert mfee is not None
+        assert mfee.bucket == "project_capital"
+        assert mfee.fee_amount_micro_usdc == 12
+        assert db.query(MarketingFeeAccrualEvent).count() == 1

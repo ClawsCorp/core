@@ -43,7 +43,7 @@ from src.services.blockchain import (
     read_block_timestamp_utc,
 )
 from src.services.project_capital import get_latest_project_capital_reconciliation, is_reconciliation_fresh
-from src.services.marketing_fee import accrue_marketing_fee_event
+from src.services.marketing_fee import accrue_marketing_fee_event, build_marketing_fee_idempotency_key
 
 router = APIRouter(prefix="/api/v1/oracle", tags=["oracle-project-capital"])
 
@@ -115,6 +115,23 @@ async def create_project_capital_event(
         model=ProjectCapitalEvent,
         unique_filter={"idempotency_key": payload.idempotency_key},
     )
+    if int(payload.delta_micro_usdc) > 0:
+        _mfee_row, _mfee_created, _mfee_amount = accrue_marketing_fee_event(
+            db,
+            idempotency_key=build_marketing_fee_idempotency_key(
+                prefix="mfee:project_capital_event",
+                source_idempotency_key=payload.idempotency_key,
+            ),
+            project_id=project.id,
+            profit_month_id=payload.profit_month_id,
+            bucket="project_capital",
+            source=payload.source,
+            gross_amount_micro_usdc=int(payload.delta_micro_usdc),
+            chain_id=None,
+            tx_hash=payload.evidence_tx_hash.lower() if payload.evidence_tx_hash else None,
+            log_index=None,
+            evidence_url=payload.evidence_url or f"project_capital_event:{payload.idempotency_key}",
+        )
     _record_oracle_audit(request, db, body_hash, request_id, payload.idempotency_key, commit=False)
     db.commit()
     db.refresh(event)
