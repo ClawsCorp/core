@@ -24,3 +24,9 @@ This keeps bookkeeping append-only and machine-ingestable while remaining fail-c
 - For every revenue inflow, system accrues 1% marketing fee event (bucket=`project_revenue` or `platform_revenue`).
 - Capital/revenue reconciliation remains based on gross ledger vs on-chain balances.
 - Spend checks use spendable balance (gross minus accrued marketing reserve), so outflows are fail-closed.
+
+## Marketing reserve settlement
+
+- Accrual rows do not move funds by themselves; settlement is a separate money-moving step.
+- Use `POST /api/v1/oracle/marketing/settlement/deposit` (or `oracle_runner marketing-deposit`) to enqueue/submit an on-chain USDC transfer into `MARKETING_TREASURY_ADDRESS`.
+- With `TX_OUTBOX_ENABLED=true`, the endpoint enqueues `deposit_marketing_fee` in `tx_outbox`; `tx-worker` submits the transaction.

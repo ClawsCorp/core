@@ -32,6 +32,12 @@ Server-side only (not used directly by the runner):
 - `ORACLE_SIGNER_PRIVATE_KEY`
 - `CONTRACTS_DIR` (optional)
 
+`tx-worker` processes tx outbox task types:
+- `deposit_profit`
+- `deposit_marketing_fee`
+- `create_distribution`
+- `execute_distribution`
+
 `git-worker` environment variables (runs locally, applies git tasks):
 
 - `DAO_GIT_REPO_DIR` (optional; repo root with `scripts/new_product_surface.mjs`)
@@ -61,6 +67,7 @@ PYTHONPATH=src python -m oracle_runner execute-distribution --month 202601 --pay
 PYTHONPATH=src python -m oracle_runner execute-distribution --month 202601 --payload auto
 PYTHONPATH=src python -m oracle_runner confirm-payout --month 202601 [--tx-hash 0x...]
 PYTHONPATH=src python -m oracle_runner sync-payout --month 202601 [--tx-hash 0x...]
+PYTHONPATH=src python -m oracle_runner marketing-deposit
 PYTHONPATH=src python -m oracle_runner run-month --execute-payload auto
 PYTHONPATH=src python -m oracle_runner run-month --month 202601 --execute-payload /path/execute.json
 PYTHONPATH=src python -m oracle_runner tx-worker --max-tasks 10
@@ -76,6 +83,7 @@ PYTHONPATH=src python -m oracle_runner --json sync-project-capital
 PYTHONPATH=src python -m oracle_runner --json project-capital-event --project-id proj_... --delta-micro-usdc 1000000 --source stake
 PYTHONPATH=src python -m oracle_runner --json evaluate-bounty-eligibility --bounty-id bty_... --payload /path/eligibility.json
 PYTHONPATH=src python -m oracle_runner --json mark-bounty-paid --bounty-id bty_... --paid-tx-hash 0x...
+PYTHONPATH=src python -m oracle_runner --json marketing-deposit
 ```
 
 `run-month` always prints exactly one JSON summary object to stdout (pipeline-friendly).

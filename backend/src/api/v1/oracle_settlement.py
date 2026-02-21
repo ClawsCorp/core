@@ -21,6 +21,7 @@ from src.models.distribution_execution import DistributionExecution
 from src.models.dividend_payout import DividendPayout
 from src.models.expense_event import ExpenseEvent
 from src.models.agent import Agent
+from src.models.marketing_fee_accrual_event import MarketingFeeAccrualEvent
 from src.models.observed_usdc_transfer import ObservedUsdcTransfer
 from src.models.project import Project
 from src.models.reconciliation_report import ReconciliationReport
@@ -41,6 +42,7 @@ from src.schemas.settlement import (
     DistributionExecutePayloadResponse,
     DistributionExecuteRequest,
     DistributionExecuteResponse,
+    MarketingFeeDepositResponse,
     PayoutTriggerRequest,
     PayoutTriggerResponse,
     ProfitDepositResponse,
@@ -388,6 +390,165 @@ def deposit_profit(
             "idempotency_key": idempotency_key,
             "task_id": None,
             "amount_micro_usdc": amount,
+        },
+    )
+
+
+@router.post("/marketing/settlement/deposit", response_model=MarketingFeeDepositResponse)
+def deposit_marketing_fee_reserve(
+    request: Request,
+    _: str = Depends(require_oracle_hmac),
+    db: Session = Depends(get_db),
+) -> MarketingFeeDepositResponse:
+    settings = get_settings()
+
+    accrued_total = int(
+        db.query(func.coalesce(func.sum(MarketingFeeAccrualEvent.fee_amount_micro_usdc), 0)).scalar() or 0
+    )
+    sent_rows = (
+        db.query(TxOutbox.payload_json)
+        .filter(TxOutbox.task_type == "deposit_marketing_fee", TxOutbox.status == "succeeded")
+        .all()
+    )
+    sent_total = 0
+    for (payload_json,) in sent_rows:
+        try:
+            payload = json.loads(payload_json or "{}")
+            sent_total += int(payload.get("amount_micro_usdc") or 0)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+    amount = int(accrued_total - sent_total)
+    idempotency_key = f"deposit_marketing_fee:{accrued_total}:{sent_total}"
+
+    marketing_treasury = (settings.marketing_treasury_address or "").strip()
+    if not marketing_treasury:
+        _record_oracle_audit(request, db, idempotency_key=idempotency_key)
+        return MarketingFeeDepositResponse(
+            success=False,
+            data={
+                "status": "blocked",
+                "tx_hash": None,
+                "blocked_reason": "marketing_treasury_missing",
+                "idempotency_key": idempotency_key,
+                "task_id": None,
+                "amount_micro_usdc": None,
+                "accrued_total_micro_usdc": accrued_total,
+                "sent_total_micro_usdc": sent_total,
+            },
+        )
+
+    if amount <= 0:
+        _record_oracle_audit(request, db, idempotency_key=idempotency_key)
+        return MarketingFeeDepositResponse(
+            success=False,
+            data={
+                "status": "blocked",
+                "tx_hash": None,
+                "blocked_reason": "already_funded",
+                "idempotency_key": idempotency_key,
+                "task_id": None,
+                "amount_micro_usdc": 0,
+                "accrued_total_micro_usdc": accrued_total,
+                "sent_total_micro_usdc": sent_total,
+            },
+        )
+
+    existing_task = (
+        db.query(TxOutbox)
+        .filter(TxOutbox.idempotency_key == idempotency_key)
+        .order_by(TxOutbox.id.desc())
+        .first()
+    )
+    if existing_task is not None:
+        _record_oracle_audit(request, db, idempotency_key=idempotency_key, tx_hash=existing_task.tx_hash)
+        return MarketingFeeDepositResponse(
+            success=True,
+            data={
+                "status": "submitted",
+                "tx_hash": existing_task.tx_hash,
+                "blocked_reason": None,
+                "idempotency_key": idempotency_key,
+                "task_id": existing_task.task_id,
+                "amount_micro_usdc": amount,
+                "accrued_total_micro_usdc": accrued_total,
+                "sent_total_micro_usdc": sent_total,
+            },
+        )
+
+    if settings.tx_outbox_enabled:
+        task = enqueue_tx_outbox_task(
+            db,
+            task_type="deposit_marketing_fee",
+            payload={
+                "amount_micro_usdc": amount,
+                "to_address": marketing_treasury,
+                "idempotency_key": idempotency_key,
+            },
+            idempotency_key=idempotency_key,
+        )
+        _record_oracle_audit(request, db, idempotency_key=idempotency_key, commit=False)
+        db.commit()
+        db.refresh(task)
+        return MarketingFeeDepositResponse(
+            success=True,
+            data={
+                "status": "submitted",
+                "tx_hash": task.tx_hash,
+                "blocked_reason": None,
+                "idempotency_key": idempotency_key,
+                "task_id": task.task_id,
+                "amount_micro_usdc": amount,
+                "accrued_total_micro_usdc": accrued_total,
+                "sent_total_micro_usdc": sent_total,
+            },
+        )
+
+    try:
+        tx_hash = submit_usdc_transfer_tx(to_address=marketing_treasury, amount_micro_usdc=amount)
+    except BlockchainConfigError as exc:
+        blocked_reason = "signer_key_required" if "ORACLE_SIGNER_PRIVATE_KEY" in str(exc) else "rpc_not_configured"
+        _record_oracle_audit(request, db, idempotency_key=idempotency_key)
+        return MarketingFeeDepositResponse(
+            success=False,
+            data={
+                "status": "blocked",
+                "tx_hash": None,
+                "blocked_reason": blocked_reason,
+                "idempotency_key": idempotency_key,
+                "task_id": None,
+                "amount_micro_usdc": amount,
+                "accrued_total_micro_usdc": accrued_total,
+                "sent_total_micro_usdc": sent_total,
+            },
+        )
+    except BlockchainTxError as exc:
+        _record_oracle_audit(request, db, idempotency_key=idempotency_key, error_hint=exc.error_hint)
+        return MarketingFeeDepositResponse(
+            success=False,
+            data={
+                "status": "blocked",
+                "tx_hash": None,
+                "blocked_reason": "tx_error",
+                "idempotency_key": idempotency_key,
+                "task_id": None,
+                "amount_micro_usdc": amount,
+                "accrued_total_micro_usdc": accrued_total,
+                "sent_total_micro_usdc": sent_total,
+            },
+        )
+
+    _record_oracle_audit(request, db, idempotency_key=idempotency_key, tx_hash=tx_hash)
+    return MarketingFeeDepositResponse(
+        success=True,
+        data={
+            "status": "submitted",
+            "tx_hash": tx_hash,
+            "blocked_reason": None,
+            "idempotency_key": idempotency_key,
+            "task_id": None,
+            "amount_micro_usdc": amount,
+            "accrued_total_micro_usdc": accrued_total,
+            "sent_total_micro_usdc": sent_total,
         },
     )
 

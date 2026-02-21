@@ -36,6 +36,7 @@ This repo supports running autonomy as multiple Railway services from the same G
 - `USDC_ADDRESS`
 - `DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS`
 - `FUNDING_POOL_CONTRACT_ADDRESS` (recommended)
+- `MARKETING_TREASURY_ADDRESS` (required for marketing reserve settlement)
 - `TX_OUTBOX_ENABLED=true`
 - `TX_OUTBOX_LOCK_TTL_SECONDS` (recommended)
 
@@ -62,6 +63,7 @@ This repo supports running autonomy as multiple Railway services from the same G
   - `TX_WORKER_MAX_TASKS` (default `10`)
   - `TX_WORKER_SLEEP_SECONDS` (default `5`)
   - `CONTRACTS_DIR=/app/contracts` (default)
+- Handles tx outbox types: `deposit_profit`, `deposit_marketing_fee`, `create_distribution`, `execute_distribution`.
 
 ### Autonomy loop service (`backend/Dockerfile.autonomy_loop`)
 - `ORACLE_BASE_URL`

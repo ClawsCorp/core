@@ -365,6 +365,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     deposit_profit.add_argument("--month", required=True)
     deposit_profit.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
+    marketing_deposit = subparsers.add_parser(
+        "marketing-deposit",
+        help="Enqueue/submit marketing reserve transfer into MARKETING_TREASURY_ADDRESS (oracle HMAC protected).",
+    )
+    marketing_deposit.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
 
     run_month = subparsers.add_parser("run-month")
     run_month.add_argument(
@@ -1026,6 +1031,26 @@ def run(argv: list[str] | None = None) -> int:
                 )
             return 0
 
+        if args.command == "marketing-deposit":
+            data = _post_action(client, "/api/v1/oracle/marketing/settlement/deposit", b"")
+            if json_mode:
+                _print_json(data)
+            else:
+                _print_fields(
+                    data,
+                    [
+                        "status",
+                        "tx_hash",
+                        "blocked_reason",
+                        "idempotency_key",
+                        "task_id",
+                        "amount_micro_usdc",
+                        "accrued_total_micro_usdc",
+                        "sent_total_micro_usdc",
+                    ],
+                )
+            return 0
+
         if args.command == "run-month":
             month = _resolve_month_arg(args.month)
             exit_code, summary = _run_month_flow(
@@ -1328,7 +1353,7 @@ def run(argv: list[str] | None = None) -> int:
                                 _print_progress("tx_worker_task", "ok", detail=f"{task_type} {task_id}")
                             continue
 
-                        if task_type == "deposit_profit":
+                        if task_type in {"deposit_profit", "deposit_marketing_fee"}:
                             profit_month_id = str(payload.get("profit_month_id") or "")
                             amount = int(payload.get("amount_micro_usdc"))
                             to_address = str(payload.get("to_address") or "")

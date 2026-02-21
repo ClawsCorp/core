@@ -101,6 +101,22 @@ class ProfitDepositResponse(BaseModel):
     data: ProfitDepositData
 
 
+class MarketingFeeDepositData(BaseModel):
+    status: str  # submitted|blocked
+    tx_hash: str | None
+    blocked_reason: str | None
+    idempotency_key: str
+    task_id: str | None = None
+    amount_micro_usdc: int | None = None
+    accrued_total_micro_usdc: int | None = None
+    sent_total_micro_usdc: int | None = None
+
+
+class MarketingFeeDepositResponse(BaseModel):
+    success: bool
+    data: MarketingFeeDepositData
+
+
 class DistributionCreateData(BaseModel):
     profit_month_id: str
     status: str
