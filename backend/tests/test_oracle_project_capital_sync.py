@@ -332,3 +332,84 @@ def test_project_capital_sync_does_not_duplicate_marketing_fee_after_manual_infl
         assert db.query(ProjectCapitalEvent).count() == 1
         assert db.query(ProjectFundingDeposit).count() == 1
         assert db.query(MarketingFeeAccrualEvent).count() == 1
+
+
+def test_project_capital_sync_accrues_fee_per_log_index_when_tx_hash_and_amount_match(
+    _client: TestClient, _db: sessionmaker[Session]
+) -> None:
+    treasury = "0x00000000000000000000000000000000000000ac"
+    tx_hash = "0x" + ("44" * 32)
+    project_db_id = 0
+
+    with _db() as db:
+        project = Project(
+            project_id="prj_cap4",
+            slug="cap4",
+            name="Capital 4",
+            description_md=None,
+            status=ProjectStatus.active,
+            proposal_id=None,
+            origin_proposal_id=None,
+            originator_agent_id=None,
+            discussion_thread_id=None,
+            treasury_wallet_address=None,
+            treasury_address=treasury,
+            revenue_wallet_address=None,
+            revenue_address=None,
+            monthly_budget_micro_usdc=None,
+            created_by_agent_id=None,
+            approved_at=None,
+        )
+        db.add(project)
+        db.flush()
+        project_db_id = int(project.id)
+
+        db.add(
+            ObservedUsdcTransfer(
+                chain_id=84532,
+                token_address="0x0000000000000000000000000000000000000bbb",
+                from_address="0x00000000000000000000000000000000000000cc",
+                to_address=treasury,
+                amount_micro_usdc=5000,
+                block_number=103,
+                tx_hash=tx_hash,
+                log_index=1,
+            )
+        )
+        db.add(
+            ObservedUsdcTransfer(
+                chain_id=84532,
+                token_address="0x0000000000000000000000000000000000000bbb",
+                from_address="0x00000000000000000000000000000000000000cd",
+                to_address=treasury,
+                amount_micro_usdc=5000,
+                block_number=103,
+                tx_hash=tx_hash,
+                log_index=2,
+            )
+        )
+        db.commit()
+
+    path = "/api/v1/oracle/project-capital-events/sync"
+    body = b"{}"
+    resp = _client.post(path, content=body, headers=_oracle_headers(path, body, "req-4", idem="idem-4"))
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["success"] is True
+    assert payload["data"]["transfers_seen"] == 2
+    assert payload["data"]["marketing_fee_events_inserted"] == 2
+    assert payload["data"]["marketing_fee_total_micro_usdc"] == 100
+
+    with _db() as db:
+        rows = (
+            db.query(MarketingFeeAccrualEvent)
+            .filter(
+                MarketingFeeAccrualEvent.project_id == int(project_db_id),
+                MarketingFeeAccrualEvent.tx_hash == tx_hash.lower(),
+            )
+            .order_by(MarketingFeeAccrualEvent.log_index.asc())
+            .all()
+        )
+        assert len(rows) == 2
+        assert int(rows[0].log_index or 0) == 1
+        assert int(rows[1].log_index or 0) == 2
