@@ -14,6 +14,7 @@ from src.core.database import get_db
 from src.models.expense_event import ExpenseEvent
 from src.models.project import Project
 from src.services.project_spend_policy import check_spend_allowed
+from src.services.marketing_fee import accrue_marketing_fee_event
 from src.models.revenue_event import RevenueEvent
 from src.schemas.accounting import (
     ExpenseEventCreateRequest,
@@ -55,6 +56,20 @@ async def create_revenue_event(
             evidence_url=payload.evidence_url,
         )
         db.add(event)
+        project_public_id = project.project_id if project is not None else "platform"
+        _mfee_row, _mfee_created, _mfee_amount = accrue_marketing_fee_event(
+            db,
+            idempotency_key=f"mfee:oracle_revenue:{payload.idempotency_key}",
+            project_id=project.id if project is not None else None,
+            profit_month_id=payload.profit_month_id,
+            bucket="project_revenue" if project is not None else "platform_revenue",
+            source=payload.source,
+            gross_amount_micro_usdc=int(payload.amount_micro_usdc),
+            chain_id=None,
+            tx_hash=payload.tx_hash.lower() if payload.tx_hash else None,
+            log_index=None,
+            evidence_url=payload.evidence_url or f"oracle_revenue_event:{payload.idempotency_key};project:{project_public_id}",
+        )
         _record_oracle_audit(request, db, body_hash, request_id, payload.idempotency_key, commit=False)
         db.commit()
         db.refresh(event)

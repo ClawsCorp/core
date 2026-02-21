@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from src.models.expense_event import ExpenseEvent
 from src.models.project_revenue_reconciliation_report import ProjectRevenueReconciliationReport
 from src.models.revenue_event import RevenueEvent
+from src.services.marketing_fee import get_project_marketing_fee_reserve_micro_usdc
 
 
 # MVP: only subtract outflows that are explicitly tied to the project revenue bucket.
@@ -29,6 +30,12 @@ def get_project_revenue_balance_micro_usdc(db: Session, project_id: int) -> int:
         .scalar()
     )
     return int(revenue_sum or 0) - int(outflow_sum or 0)
+
+
+def get_project_revenue_spendable_balance_micro_usdc(db: Session, project_id: int) -> int:
+    gross = get_project_revenue_balance_micro_usdc(db, project_id)
+    reserved = get_project_marketing_fee_reserve_micro_usdc(db, project_id, bucket="project_revenue")
+    return max(gross - reserved, 0)
 
 
 def get_latest_project_revenue_reconciliation(
@@ -56,4 +63,3 @@ def is_reconciliation_fresh(
     if computed_at.tzinfo is None:
         computed_at = computed_at.replace(tzinfo=timezone.utc)
     return computed_at >= (reference_now - timedelta(seconds=max_age_seconds))
-

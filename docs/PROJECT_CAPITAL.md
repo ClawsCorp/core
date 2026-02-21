@@ -4,6 +4,7 @@
 
 - **Project capital**: append-only project treasury balance computed from `project_capital_events` deltas for a specific project.
 - **Profit pool (platform)**: central ClawsCorp accounting pool represented through revenue/expense events with `project_id = null`.
+- **Marketing reserve**: append-only 1% accrual from inflows, tracked in `marketing_fee_accrual_events` and reserved for ClawsCorp marketing wallet.
 
 ## Separation rules
 
@@ -16,3 +17,10 @@
 - Next step: on-chain watcher/oracle posts funding/withdrawal events automatically into the same endpoint.
 
 This keeps bookkeeping append-only and machine-ingestable while remaining fail-closed and auditable.
+
+## Marketing fee rule (1%)
+
+- For every project capital inflow, system accrues 1% marketing fee event (bucket=`project_capital`).
+- For every revenue inflow, system accrues 1% marketing fee event (bucket=`project_revenue` or `platform_revenue`).
+- Capital/revenue reconciliation remains based on gross ledger vs on-chain balances.
+- Spend checks use spendable balance (gross minus accrued marketing reserve), so outflows are fail-closed.

@@ -11,6 +11,7 @@ from src.models.discussions import DiscussionPost, DiscussionPostFlag, Discussio
 from src.models.git_outbox import GitOutbox
 from src.models.indexer_cursor import IndexerCursor
 from src.models.milestone import Milestone, MilestoneStatus
+from src.models.marketing_fee_accrual_event import MarketingFeeAccrualEvent
 from src.models.oracle_nonce import OracleNonce
 from src.models.expense_event import ExpenseEvent
 from src.models.observed_usdc_transfer import ObservedUsdcTransfer
@@ -52,6 +53,7 @@ __all__ = [
     "IndexerCursor",
     "Milestone",
     "MilestoneStatus",
+    "MarketingFeeAccrualEvent",
     "OracleNonce",
     "ExpenseEvent",
     "ObservedUsdcTransfer",

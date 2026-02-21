@@ -30,6 +30,8 @@ class ProjectCapitalReconciliationRunResponse(BaseModel):
 class ProjectCapitalSyncData(BaseModel):
     transfers_seen: int
     capital_events_inserted: int
+    marketing_fee_events_inserted: int
+    marketing_fee_total_micro_usdc: int
     projects_with_treasury_count: int
 
 

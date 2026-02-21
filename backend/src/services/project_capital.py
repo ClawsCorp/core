@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from src.models.project_capital_event import ProjectCapitalEvent
 from src.models.project_capital_reconciliation_report import ProjectCapitalReconciliationReport
+from src.services.marketing_fee import get_project_marketing_fee_reserve_micro_usdc
 
 
 def get_project_capital_balance_micro_usdc(db: Session, project_id: int) -> int:
@@ -16,6 +17,12 @@ def get_project_capital_balance_micro_usdc(db: Session, project_id: int) -> int:
         .scalar()
     )
     return int(balance or 0)
+
+
+def get_project_capital_spendable_balance_micro_usdc(db: Session, project_id: int) -> int:
+    gross = get_project_capital_balance_micro_usdc(db, project_id)
+    reserved = get_project_marketing_fee_reserve_micro_usdc(db, project_id, bucket="project_capital")
+    return max(gross - reserved, 0)
 
 
 def get_latest_project_capital_reconciliation(
