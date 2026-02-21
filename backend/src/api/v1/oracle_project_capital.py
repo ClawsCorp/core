@@ -20,6 +20,7 @@ from src.models.project_capital_event import ProjectCapitalEvent
 from src.models.project_capital_reconciliation_report import ProjectCapitalReconciliationReport
 from src.models.project_funding_deposit import ProjectFundingDeposit
 from src.models.project_funding_round import ProjectFundingRound
+from src.models.marketing_fee_accrual_event import MarketingFeeAccrualEvent
 from src.schemas.oracle_projects import (
     ProjectCapitalReconciliationRunResponse,
     ProjectCapitalSyncData,
@@ -43,7 +44,11 @@ from src.services.blockchain import (
     read_block_timestamp_utc,
 )
 from src.services.project_capital import get_latest_project_capital_reconciliation, is_reconciliation_fresh
-from src.services.marketing_fee import accrue_marketing_fee_event, build_marketing_fee_idempotency_key
+from src.services.marketing_fee import (
+    accrue_marketing_fee_event,
+    build_marketing_fee_idempotency_key,
+    calculate_marketing_fee_micro_usdc,
+)
 
 router = APIRouter(prefix="/api/v1/oracle", tags=["oracle-project-capital"])
 
@@ -282,22 +287,40 @@ async def sync_project_capital_from_observed_usdc_transfers(
             unique_filter={"observed_transfer_id": int(t.id)},
         )
 
-        _mfee_row, mfee_created, mfee_amount = accrue_marketing_fee_event(
-            db,
-            idempotency_key=f"mfee:pcap:{int(t.chain_id)}:{str(t.tx_hash).lower()}:{int(t.log_index)}:to:{project_public_id}",
-            project_id=project_db_id,
-            profit_month_id=profit_month_id,
-            bucket="project_capital",
-            source="treasury_usdc_deposit",
-            gross_amount_micro_usdc=int(t.amount_micro_usdc),
-            chain_id=int(t.chain_id),
-            tx_hash=str(t.tx_hash).lower(),
-            log_index=int(t.log_index),
-            evidence_url=f"usdc_transfer:{t.tx_hash}#log:{int(t.log_index)};to:{project_public_id}",
+        tx_hash_lc = str(t.tx_hash).lower()
+        amount_micro_usdc = int(t.amount_micro_usdc)
+        expected_fee = calculate_marketing_fee_micro_usdc(amount_micro_usdc)
+        existing_mfee = (
+            db.query(MarketingFeeAccrualEvent)
+            .filter(
+                MarketingFeeAccrualEvent.project_id == project_db_id,
+                MarketingFeeAccrualEvent.bucket == "project_capital",
+                MarketingFeeAccrualEvent.tx_hash == tx_hash_lc,
+                MarketingFeeAccrualEvent.gross_amount_micro_usdc == amount_micro_usdc,
+                MarketingFeeAccrualEvent.fee_amount_micro_usdc == expected_fee,
+            )
+            .order_by(MarketingFeeAccrualEvent.id.asc())
+            .first()
         )
-        if mfee_created:
-            marketing_fee_events_inserted += 1
-        marketing_fee_total_micro_usdc += int(mfee_amount)
+        if existing_mfee is not None:
+            marketing_fee_total_micro_usdc += int(existing_mfee.fee_amount_micro_usdc)
+        else:
+            _mfee_row, mfee_created, mfee_amount = accrue_marketing_fee_event(
+                db,
+                idempotency_key=f"mfee:pcap:{int(t.chain_id)}:{tx_hash_lc}:{int(t.log_index)}:to:{project_public_id}",
+                project_id=project_db_id,
+                profit_month_id=profit_month_id,
+                bucket="project_capital",
+                source="treasury_usdc_deposit",
+                gross_amount_micro_usdc=amount_micro_usdc,
+                chain_id=int(t.chain_id),
+                tx_hash=tx_hash_lc,
+                log_index=int(t.log_index),
+                evidence_url=f"usdc_transfer:{t.tx_hash}#log:{int(t.log_index)};to:{project_public_id}",
+            )
+            if mfee_created:
+                marketing_fee_events_inserted += 1
+            marketing_fee_total_micro_usdc += int(mfee_amount)
 
     _record_oracle_audit(request, db, body_hash, request_id, sync_idem, commit=False)
     db.commit()

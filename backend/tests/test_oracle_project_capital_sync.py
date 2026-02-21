@@ -245,3 +245,90 @@ def test_project_capital_sync_skips_transfer_already_accounted_by_evidence_tx_ha
         assert db.query(ProjectCapitalEvent).count() == 1
         assert db.query(ProjectFundingDeposit).count() == 1
         assert db.query(MarketingFeeAccrualEvent).count() == 1
+
+
+def test_project_capital_sync_does_not_duplicate_marketing_fee_after_manual_inflow_with_fee(
+    _client: TestClient, _db: sessionmaker[Session]
+) -> None:
+    treasury = "0x00000000000000000000000000000000000000ab"
+    tx_hash = "0x" + ("33" * 32)
+
+    with _db() as db:
+        project = Project(
+            project_id="prj_cap3",
+            slug="cap3",
+            name="Capital 3",
+            description_md=None,
+            status=ProjectStatus.active,
+            proposal_id=None,
+            origin_proposal_id=None,
+            originator_agent_id=None,
+            discussion_thread_id=None,
+            treasury_wallet_address=None,
+            treasury_address=treasury,
+            revenue_wallet_address=None,
+            revenue_address=None,
+            monthly_budget_micro_usdc=None,
+            created_by_agent_id=None,
+            approved_at=None,
+        )
+        db.add(project)
+        db.flush()
+
+        db.add(
+            ObservedUsdcTransfer(
+                chain_id=84532,
+                token_address="0x0000000000000000000000000000000000000bbb",
+                from_address="0x00000000000000000000000000000000000000cc",
+                to_address=treasury,
+                amount_micro_usdc=5000,
+                block_number=102,
+                tx_hash=tx_hash,
+                log_index=9,
+            )
+        )
+        db.add(
+            ProjectCapitalEvent(
+                event_id="pcap_manual_with_fee",
+                idempotency_key="manual_with_fee",
+                profit_month_id="202602",
+                project_id=int(project.id),
+                delta_micro_usdc=5000,
+                source="manual_oracle_ingestion",
+                evidence_tx_hash=tx_hash.lower(),
+                evidence_url=None,
+            )
+        )
+        db.add(
+            MarketingFeeAccrualEvent(
+                event_id="mfee_manual_with_fee",
+                idempotency_key="mfee:project_capital_event:manual_with_fee",
+                project_id=int(project.id),
+                profit_month_id="202602",
+                bucket="project_capital",
+                source="manual_oracle_ingestion",
+                gross_amount_micro_usdc=5000,
+                fee_amount_micro_usdc=50,
+                chain_id=None,
+                tx_hash=tx_hash.lower(),
+                log_index=None,
+                evidence_url="manual",
+            )
+        )
+        db.commit()
+
+    path = "/api/v1/oracle/project-capital-events/sync"
+    body = b"{}"
+    resp = _client.post(path, content=body, headers=_oracle_headers(path, body, "req-3", idem="idem-3"))
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["success"] is True
+    assert payload["data"]["transfers_seen"] == 1
+    assert payload["data"]["capital_events_inserted"] == 0
+    assert payload["data"]["marketing_fee_events_inserted"] == 0
+    assert payload["data"]["marketing_fee_total_micro_usdc"] == 50
+
+    with _db() as db:
+        assert db.query(ProjectCapitalEvent).count() == 1
+        assert db.query(ProjectFundingDeposit).count() == 1
+        assert db.query(MarketingFeeAccrualEvent).count() == 1
