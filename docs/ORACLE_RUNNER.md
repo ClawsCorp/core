@@ -75,6 +75,7 @@ PYTHONPATH=src python -m oracle_runner tx-worker --loop --max-tasks 10
 PYTHONPATH=src python -m oracle_runner git-worker --max-tasks 5
 PYTHONPATH=src python -m oracle_runner git-worker --loop --max-tasks 5 --repo-dir /path/to/repo
 PYTHONPATH=src python -m oracle_runner autonomy-loop --loop
+PYTHONPATH=src python -m oracle_runner autonomy-loop --loop --marketing-deposit --run-month
 PYTHONPATH=src python -m oracle_runner --json reconcile --month 202601
 PYTHONPATH=src python -m oracle_runner --json reconcile-project-capital --project-id proj_...
 PYTHONPATH=src python -m oracle_runner --json project-reconcile --project-id proj_...

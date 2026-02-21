@@ -438,6 +438,11 @@ def build_parser() -> argparse.ArgumentParser:
     autonomy_loop.add_argument("--billing-sync", action="store_true", help="Call /oracle/billing/sync each loop.")
     autonomy_loop.add_argument("--reconcile-projects", action="store_true", help="Refresh project capital reconciliation for active/fundraising projects.")
     autonomy_loop.add_argument("--reconcile-project-revenue", action="store_true", help="Refresh project revenue reconciliation where configured.")
+    autonomy_loop.add_argument(
+        "--marketing-deposit",
+        action="store_true",
+        help="Call /oracle/marketing/settlement/deposit each loop to settle accrued marketing reserve.",
+    )
     autonomy_loop.add_argument("--run-month", action="store_true", help="Run platform month flow each loop (idempotent).")
     autonomy_loop.add_argument(
         "--deposit-backlog-limit",
@@ -1076,6 +1081,7 @@ def run(argv: list[str] | None = None) -> int:
                     bool(args.billing_sync),
                     bool(args.reconcile_projects),
                     bool(args.reconcile_project_revenue),
+                    bool(args.marketing_deposit),
                     bool(args.run_month),
                 ]
             )
@@ -1084,6 +1090,7 @@ def run(argv: list[str] | None = None) -> int:
                 args.billing_sync = True
                 args.reconcile_projects = True
                 args.reconcile_project_revenue = True
+                args.marketing_deposit = True
                 args.run_month = True
 
             while True:
@@ -1137,6 +1144,16 @@ def run(argv: list[str] | None = None) -> int:
                                 else:
                                     reconciled.append({"project_id": pid, "revenue": rep})
                         cycle["projects_reconciled"] = reconciled
+
+                    if bool(args.marketing_deposit):
+                        _print_progress("marketing_deposit", "start")
+                        mdep = _post_action(client, "/api/v1/oracle/marketing/settlement/deposit", b"{}")
+                        cycle["marketing_deposit"] = mdep
+                        mstatus = str(mdep.get("status") or "")
+                        if mstatus == "blocked":
+                            _print_progress("marketing_deposit", "blocked", detail=str(mdep.get("blocked_reason") or "blocked"))
+                        else:
+                            _print_progress("marketing_deposit", "ok", detail=str(mdep.get("task_id") or mdep.get("tx_hash") or "submitted"))
 
                     if bool(args.run_month):
                         exit_code, rm = _run_month_flow(
