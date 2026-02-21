@@ -290,12 +290,33 @@ async def sync_project_capital_from_observed_usdc_transfers(
         tx_hash_lc = str(t.tx_hash).lower()
         amount_micro_usdc = int(t.amount_micro_usdc)
         expected_fee = calculate_marketing_fee_micro_usdc(amount_micro_usdc)
+        same_tx_same_amount_count = int(
+            db.query(func.count(ObservedUsdcTransfer.id))
+            .filter(
+                ObservedUsdcTransfer.to_address == dest,
+                ObservedUsdcTransfer.tx_hash == tx_hash_lc,
+                ObservedUsdcTransfer.amount_micro_usdc == amount_micro_usdc,
+            )
+            .scalar()
+            or 0
+        )
+        # When multiple logs in the same tx have identical amounts, log_index is required
+        # to avoid collapsing distinct fee accruals into one row.
+        log_match = (
+            MarketingFeeAccrualEvent.log_index == int(t.log_index)
+            if same_tx_same_amount_count > 1
+            else (
+                (MarketingFeeAccrualEvent.log_index == int(t.log_index))
+                | (MarketingFeeAccrualEvent.log_index.is_(None))
+            )
+        )
         existing_mfee = (
             db.query(MarketingFeeAccrualEvent)
             .filter(
                 MarketingFeeAccrualEvent.project_id == project_db_id,
                 MarketingFeeAccrualEvent.bucket == "project_capital",
                 MarketingFeeAccrualEvent.tx_hash == tx_hash_lc,
+                log_match,
                 MarketingFeeAccrualEvent.gross_amount_micro_usdc == amount_micro_usdc,
                 MarketingFeeAccrualEvent.fee_amount_micro_usdc == expected_fee,
             )

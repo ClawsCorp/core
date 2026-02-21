@@ -407,7 +407,10 @@ def deposit_marketing_fee_reserve(
     )
     sent_rows = (
         db.query(TxOutbox.payload_json)
-        .filter(TxOutbox.task_type == "deposit_marketing_fee", TxOutbox.status == "succeeded")
+        .filter(
+            TxOutbox.task_type == "deposit_marketing_fee",
+            TxOutbox.status.in_(["pending", "processing", "succeeded"]),
+        )
         .all()
     )
     sent_total = 0

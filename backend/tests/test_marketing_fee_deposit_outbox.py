@@ -196,3 +196,70 @@ def test_marketing_fee_deposit_blocks_when_already_funded(_client: TestClient, _
     assert payload["status"] == "blocked"
     assert payload["blocked_reason"] == "already_funded"
     assert payload["amount_micro_usdc"] == 0
+
+
+def test_marketing_fee_deposit_counts_inflight_tasks_and_enqueues_only_delta(
+    _client: TestClient, _db: sessionmaker[Session]
+) -> None:
+    db = _db()
+    try:
+        db.add(
+            MarketingFeeAccrualEvent(
+                event_id="mfee_4",
+                idempotency_key="mfee:seed:4",
+                project_id=None,
+                profit_month_id="202602",
+                bucket="platform_revenue",
+                source="seed",
+                gross_amount_micro_usdc=10000,
+                fee_amount_micro_usdc=100,
+                chain_id=None,
+                tx_hash=None,
+                log_index=None,
+                evidence_url=None,
+            )
+        )
+        # Earlier in-flight transfer for 60 micro-USDC should be treated as already committed.
+        db.add(
+            TxOutbox(
+                task_id="txo_seed_pending",
+                idempotency_key="deposit_marketing_fee:60:0",
+                task_type="deposit_marketing_fee",
+                payload_json=json.dumps({"amount_micro_usdc": 60, "to_address": "0x00000000000000000000000000000000000000aa"}),
+                tx_hash=None,
+                result_json=None,
+                status="pending",
+                attempts=0,
+                last_error_hint=None,
+                locked_at=None,
+                locked_by=None,
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    path = "/api/v1/oracle/marketing/settlement/deposit"
+    body = b"{}"
+    resp = _client.post(path, content=body, headers=_oracle_headers(path, body, "req-m3", idem="idem-m3"))
+    assert resp.status_code == 200
+    payload = resp.json()["data"]
+    assert payload["status"] == "submitted"
+    assert payload["blocked_reason"] is None
+    assert payload["amount_micro_usdc"] == 40
+    assert payload["accrued_total_micro_usdc"] == 100
+    assert payload["sent_total_micro_usdc"] == 60
+
+    db = _db()
+    try:
+        pending_rows = (
+            db.query(TxOutbox)
+            .filter(TxOutbox.task_type == "deposit_marketing_fee", TxOutbox.status == "pending")
+            .order_by(TxOutbox.id.asc())
+            .all()
+        )
+        assert len(pending_rows) == 2
+        amounts = [int(json.loads(r.payload_json).get("amount_micro_usdc") or 0) for r in pending_rows]
+        assert amounts == [60, 40]
+    finally:
+        db.close()
