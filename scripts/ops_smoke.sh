@@ -7,17 +7,22 @@ BACKEND_DIR="$ROOT_DIR/backend"
 ENV_FILE=""
 MONTH="auto"
 TX_TASKS="${TX_TASKS:-5}"
+API_BASE_URL=""
 ALLOW_RECON_BLOCKED_REASONS=()
 
-if [[ -n "${OPS_SMOKE_ALLOW_RECON_BLOCKED:-}" ]]; then
-  IFS=',' read -r -a _preset_reasons <<< "${OPS_SMOKE_ALLOW_RECON_BLOCKED}"
-  for _reason in "${_preset_reasons[@]}"; do
+append_reconcile_allowlist_csv() {
+  local _raw_csv="${1:-}"
+  if [[ -z "${_raw_csv}" ]]; then
+    return 0
+  fi
+  IFS=',' read -r -a _parts <<< "${_raw_csv}"
+  for _reason in "${_parts[@]}"; do
     _trimmed="$(echo "${_reason}" | xargs)"
     if [[ -n "${_trimmed}" ]]; then
       ALLOW_RECON_BLOCKED_REASONS+=("${_trimmed}")
     fi
   done
-fi
+}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -33,13 +38,17 @@ while [[ $# -gt 0 ]]; do
       TX_TASKS="${2:-5}"
       shift 2
       ;;
+    --api-base-url)
+      API_BASE_URL="${2:-}"
+      shift 2
+      ;;
     --allow-reconcile-blocked-reason)
       ALLOW_RECON_BLOCKED_REASONS+=("${2:-}")
       shift 2
       ;;
     *)
       echo "Unknown arg: $1" >&2
-      echo "Usage: scripts/ops_smoke.sh [--env-file /path/to/.env] [--month YYYYMM|auto] [--tx-max-tasks N] [--allow-reconcile-blocked-reason REASON]" >&2
+      echo "Usage: scripts/ops_smoke.sh [--api-base-url URL] [--env-file /path/to/.env] [--month YYYYMM|auto] [--tx-max-tasks N] [--allow-reconcile-blocked-reason REASON]" >&2
       exit 2
       ;;
   esac
@@ -52,7 +61,13 @@ if [[ -n "$ENV_FILE" ]]; then
   set +a
 fi
 
-if [[ -z "${ORACLE_BASE_URL:-}" ]]; then
+# Parse allowlist after env-file sourcing, so OPS_SMOKE_ALLOW_RECON_BLOCKED
+# from the env file is applied correctly.
+append_reconcile_allowlist_csv "${OPS_SMOKE_ALLOW_RECON_BLOCKED:-}"
+
+if [[ -n "${API_BASE_URL:-}" ]]; then
+  ORACLE_BASE_URL="${API_BASE_URL}"
+elif [[ -z "${ORACLE_BASE_URL:-}" ]]; then
   ORACLE_BASE_URL="https://core-production-b1a0.up.railway.app"
 fi
 export ORACLE_BASE_URL
