@@ -297,6 +297,32 @@ def get_alerts(response: Response, db: Session = Depends(get_db)) -> AlertsRespo
         latest_platform_by_month.setdefault(r.profit_month_id, r)
     for month, rep in sorted(latest_platform_by_month.items(), reverse=True)[:12]:
         if not rep.ready or (rep.delta_micro_usdc or 0) != 0:
+            try:
+                delta = int(rep.delta_micro_usdc or 0)
+            except Exception:
+                delta = 0
+
+            # Zero-profit months can legitimately observe positive carryover balance
+            # from previously funded months. Keep visibility as info, not warning.
+            if rep.blocked_reason == "balance_mismatch" and delta > 0 and int(rep.profit_sum_micro_usdc or 0) <= 0:
+                items.append(
+                    AlertItem(
+                        alert_type="platform_settlement_carryover_balance",
+                        severity="info",
+                        message="Platform distributor has positive carryover balance in a zero-profit month.",
+                        ref=month,
+                        observed_at=now,
+                        data={
+                            "ready": rep.ready,
+                            "delta_micro_usdc": rep.delta_micro_usdc,
+                            "blocked_reason": rep.blocked_reason,
+                            "profit_sum_micro_usdc": rep.profit_sum_micro_usdc,
+                            "computed_at": rep.computed_at.isoformat(),
+                        },
+                    )
+                )
+                continue
+
             items.append(
                 AlertItem(
                     alert_type="platform_settlement_not_ready",
@@ -315,10 +341,6 @@ def get_alerts(response: Response, db: Session = Depends(get_db)) -> AlertsRespo
 
             # If we are under-funded, surface whether an autonomous profit deposit task exists.
             # This helps operators distinguish "waiting for tx-worker" vs "nothing is progressing".
-            try:
-                delta = int(rep.delta_micro_usdc or 0)
-            except Exception:
-                delta = 0
             if rep.blocked_reason == "balance_mismatch" and delta < 0:
                 amount = -delta
                 idem = f"deposit_profit:{month}:{amount}"
