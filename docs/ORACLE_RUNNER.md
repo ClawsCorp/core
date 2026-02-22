@@ -105,6 +105,16 @@ If `--idempotency-key` is omitted for execute actions, runner derives determinis
 
 - `execute_distribution:{month}:{sha256(canonical_json)}`
 
+## One-command ops smoke
+
+For a single operational check of indexer ingestion + tx-worker + reconciliation + alerts:
+
+```bash
+scripts/ops_smoke.sh --env-file /Users/alex/.oracle.env --month auto --tx-max-tasks 5
+```
+
+See `docs/OPS_SMOKE_RUNBOOK.md` for details.
+
 ## `run-month` exit codes
 
 - `0`: complete (or payout already finalized)

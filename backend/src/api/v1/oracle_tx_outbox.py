@@ -266,15 +266,23 @@ async def complete_task(
     if row.status not in {"processing", "pending"}:
         raise HTTPException(status_code=409, detail="Task is already finalized")
 
-    if payload.status not in {"succeeded", "failed"}:
-        raise HTTPException(status_code=400, detail="status must be succeeded|failed")
+    if payload.status not in {"succeeded", "failed", "pending"}:
+        raise HTTPException(status_code=400, detail="status must be succeeded|failed|pending")
 
     row.status = payload.status
     row.last_error_hint = payload.error_hint
-    if payload.tx_hash:
-        row.tx_hash = payload.tx_hash
-    if payload.result is not None:
-        row.result_json = json.dumps(payload.result, separators=(",", ":"), sort_keys=True)
+    if payload.status == "pending":
+        # Requeue semantics: make task claimable again and force fresh tx submission.
+        row.locked_at = None
+        row.locked_by = None
+        row.tx_hash = None
+        if payload.result is not None:
+            row.result_json = json.dumps(payload.result, separators=(",", ":"), sort_keys=True)
+    else:
+        if payload.tx_hash:
+            row.tx_hash = payload.tx_hash
+        if payload.result is not None:
+            row.result_json = json.dumps(payload.result, separators=(",", ":"), sort_keys=True)
 
     record_audit(
         db,

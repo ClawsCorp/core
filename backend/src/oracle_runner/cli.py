@@ -1090,7 +1090,9 @@ def run(argv: list[str] | None = None) -> int:
                 args.billing_sync = True
                 args.reconcile_projects = True
                 args.reconcile_project_revenue = True
-                args.marketing_deposit = True
+                # Do not auto-enable marketing_deposit here:
+                # when tx_outbox is disabled, direct-submit mode can retry each loop
+                # and over-send funds under repeated transient failures.
                 args.run_month = True
 
             while True:
@@ -1233,6 +1235,8 @@ def run(argv: list[str] | None = None) -> int:
             worker_id = str(args.worker_id).strip() or "oracle_runner"
             max_tasks = max(1, min(int(args.max_tasks), 50))
             sleep_seconds = max(1, int(args.sleep_seconds))
+            retryable_max_attempts = max(1, int(os.getenv("TX_WORKER_RETRYABLE_MAX_ATTEMPTS", "3")))
+            retryable_hints = {"rpc_error", "nonce_too_low", "timeout", "unknown_subprocess_error"}
 
             processed: list[dict[str, Any]] = []
             while True:
@@ -1268,6 +1272,7 @@ def run(argv: list[str] | None = None) -> int:
                     payload = task.get("payload") if isinstance(task.get("payload"), dict) else {}
                     idem = str(task.get("idempotency_key") or payload.get("idempotency_key") or "")
                     existing_tx_hash = str(task.get("tx_hash") or "")
+                    attempts = int(task.get("attempts") or 0)
 
                     def _update(tx_hash: str | None, result: dict[str, Any] | None) -> None:
                         update_path = f"/api/v1/oracle/tx-outbox/{task_id}/update"
@@ -1412,6 +1417,33 @@ def run(argv: list[str] | None = None) -> int:
                             _print_progress("tx_worker_task", "error", detail=f"{task_type} {task_id} unknown_task_type")
                     except (BlockchainConfigError, BlockchainTxError) as exc:
                         hint = getattr(exc, "error_hint", None) or "tx_error"
+                        if hint in retryable_hints and attempts < retryable_max_attempts:
+                            _update(
+                                None,
+                                {
+                                    "stage": "retry_pending",
+                                    "error_hint": hint,
+                                    "attempt": attempts,
+                                    "max_attempts": retryable_max_attempts,
+                                },
+                            )
+                            _complete("pending", hint)
+                            processed.append(
+                                {
+                                    "task_id": task_id,
+                                    "task_type": task_type,
+                                    "status": "retry_pending",
+                                    "error_hint": hint,
+                                    "attempt": attempts,
+                                    "max_attempts": retryable_max_attempts,
+                                }
+                            )
+                            processed_this_loop += 1
+                            if bool(args.loop):
+                                _print_progress("tx_worker_task", "pending", detail=f"{task_type} {task_id} retry:{hint}")
+                                time.sleep(sleep_seconds)
+                            # Defer retried tasks to the next worker cycle.
+                            break
                         _update(existing_tx_hash or None, {"stage": "failed", "error_hint": hint})
                         _complete("failed", hint)
                         processed.append(
