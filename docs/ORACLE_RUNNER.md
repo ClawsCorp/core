@@ -116,6 +116,7 @@ scripts/ops_smoke.sh --env-file /Users/alex/.oracle.env --month auto --tx-max-ta
 See `docs/OPS_SMOKE_RUNBOOK.md` for details.
 GitHub manual run is available via workflow `ops-smoke` (`.github/workflows/ops-smoke.yml`).
 By default, `ops_smoke` fails when reconciliation is not strict-ready; temporary allowlist is supported via `--allow-reconcile-blocked-reason` or `OPS_SMOKE_ALLOW_RECON_BLOCKED`.
+When `--month auto` is used, `ops_smoke` resolves month from `/api/v1/settlement/months` preferring latest strict-ready month (`ready=true`, `delta=0`), then falls back to latest row.
 
 ## `run-month` exit codes
 

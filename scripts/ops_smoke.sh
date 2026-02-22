@@ -82,7 +82,44 @@ else
   PY_BIN="python3"
 fi
 
-echo "[ops-smoke] api=${ORACLE_BASE_URL} month=${MONTH} tx_max_tasks=${TX_TASKS}" >&2
+RESOLVED_MONTH="$MONTH"
+if [[ "$MONTH" == "auto" ]]; then
+  RESOLVED_MONTH="$(
+    ORACLE_BASE_URL="$ORACLE_BASE_URL" "$PY_BIN" - <<'PY'
+import json
+import os
+import urllib.request
+
+base = (os.environ.get("ORACLE_BASE_URL") or "").rstrip("/")
+fallback = "auto"
+
+try:
+    with urllib.request.urlopen(f"{base}/api/v1/settlement/months?limit=12&offset=0", timeout=10) as resp:
+        payload = json.loads(resp.read().decode("utf-8", errors="replace"))
+    items = (((payload or {}).get("data") or {}).get("items")) or []
+    chosen = None
+    for row in items:
+        if not isinstance(row, dict):
+            continue
+        month = str(row.get("profit_month_id") or "").strip()
+        if not month:
+            continue
+        if bool(row.get("ready")) and int(row.get("delta_micro_usdc") or 0) == 0:
+            chosen = month
+            break
+        if chosen is None:
+            chosen = month
+    if chosen:
+        print(chosen)
+    else:
+        print(fallback)
+except Exception:
+    print(fallback)
+PY
+  )"
+fi
+
+echo "[ops-smoke] api=${ORACLE_BASE_URL} month=${MONTH} resolved_month=${RESOLVED_MONTH} tx_max_tasks=${TX_TASKS}" >&2
 if [[ ${#ALLOW_RECON_BLOCKED_REASONS[@]} -gt 0 ]]; then
   echo "[ops-smoke] allowed reconcile blocked reasons: ${ALLOW_RECON_BLOCKED_REASONS[*]}" >&2
 fi
@@ -98,8 +135,8 @@ echo "[ops-smoke] sync-project-capital" >&2
 echo "[ops-smoke] tx-worker" >&2
 "$PY_BIN" -m src.oracle_runner tx-worker --max-tasks "$TX_TASKS" --json
 
-echo "[ops-smoke] reconcile month=${MONTH}" >&2
-RECON_JSON="$("$PY_BIN" -m src.oracle_runner reconcile --month "$MONTH" --json)"
+echo "[ops-smoke] reconcile month=${RESOLVED_MONTH}" >&2
+RECON_JSON="$("$PY_BIN" -m src.oracle_runner reconcile --month "$RESOLVED_MONTH" --json)"
 echo "$RECON_JSON"
 ALLOW_REASONS_CSV="$(IFS=,; echo "${ALLOW_RECON_BLOCKED_REASONS[*]-}")"
 RECON_JSON="$RECON_JSON" ALLOW_REASONS_CSV="$ALLOW_REASONS_CSV" "$PY_BIN" - <<'PY'
