@@ -15,6 +15,7 @@ scripts/ops_smoke.sh --env-file /Users/alex/.oracle.env --month auto --tx-max-ta
 Default behavior is fail-closed:
 - if `reconcile` returns `ready=false`, smoke exits non-zero.
 - if any runner step fails, smoke exits non-zero.
+- if `--month auto` is used, smoke resolves it from `/api/v1/settlement/months` preferring the latest strict-ready month (`ready=true`, `delta=0`), fallback to the latest month, then to literal `auto`.
 
 ## Required env
 
