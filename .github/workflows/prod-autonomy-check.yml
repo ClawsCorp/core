@@ -60,15 +60,27 @@ jobs:
           fi
 
       - name: Validate required secret
+        id: secret
         env:
           ORACLE_HMAC_SECRET: ${{ secrets.ORACLE_HMAC_SECRET }}
         run: |
           if [ -z "${ORACLE_HMAC_SECRET}" ]; then
-            echo "Missing required repository secret: ORACLE_HMAC_SECRET" >&2
-            exit 1
+            echo "missing=true" >> "$GITHUB_OUTPUT"
+            cat > prod_preflight_report.json <<'JSON'
+            {
+              "success": false,
+              "meta": {
+                "reason": "missing_oracle_hmac_secret"
+              },
+              "checks": []
+            }
+            JSON
+          else
+            echo "missing=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Run production preflight + ops smoke
+        if: steps.secret.outputs.missing != 'true'
         env:
           ORACLE_HMAC_SECRET: ${{ secrets.ORACLE_HMAC_SECRET }}
         run: |
@@ -81,6 +93,12 @@ jobs:
             --ops-smoke-tx-max-tasks "${{ steps.vars.outputs.tx_max_tasks }}" \
             > prod_preflight_report.json
           cat prod_preflight_report.json
+
+      - name: Fail when required secret is missing
+        if: steps.secret.outputs.missing == 'true'
+        run: |
+          echo "Missing required repository secret: ORACLE_HMAC_SECRET" >&2
+          exit 1
 
       - name: Upload preflight artifact
         uses: actions/upload-artifact@v4
