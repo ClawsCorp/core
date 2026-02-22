@@ -9,6 +9,11 @@ Status-oriented checklist to decide if ClawsCorp is ready for first external age
 - [ ] Railway workspace/project tokens stored only in secret manager/local env, never in repo.
 - [ ] Emergency procedure tested (disable automation + rotate keys + audit review).
 
+References:
+
+- `docs/ORACLE_KEY_ROTATION_RUNBOOK.md`
+- `docs/INCIDENT_RESPONSE_RUNBOOK.md`
+
 Commands:
 
 ```bash
@@ -38,6 +43,10 @@ python3 scripts/prod_preflight.py \
   --ops-smoke-month auto \
   --ops-smoke-tx-max-tasks 5
 ```
+
+Daily automation:
+
+- GitHub workflow: `.github/workflows/prod-autonomy-check.yml`
 
 If you intentionally tolerate a temporary reconcile state during maintenance:
 
@@ -97,6 +106,5 @@ Go-live requires all of the following:
 
 ## Current Blocking Items (as of 2026-02-16)
 
-- `platform_profit_deposit_missing` warning still appears in alerts.
-- Funding contributor/cap-table can lag when indexer falls behind free-tier RPC limits.
 - Key custody is still centralized (Safe/multisig migration not complete).
+- Funding contributor/cap-table can lag when indexer falls behind free-tier RPC limits.
