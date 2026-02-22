@@ -22,12 +22,13 @@ You can export them directly, or pass `--env-file`.
 ## Exit code
 
 - `0`: smoke run finished and no `critical` alerts remain.
-- `1`: at least one `critical` alert exists after the run.
+- `1`: a runner step failed or at least one `critical` alert exists after the run.
 - `2`: invalid arguments or missing required env.
 
 ## Notes
 
 - The script is idempotent-friendly (runner endpoints are designed for repeat calls).
+- Runner step failures are fail-closed: the script exits immediately and does not mask errors.
 - It does not call `marketing-deposit` automatically.
 - If you need marketing settlement too, run it explicitly:
 
@@ -35,3 +36,9 @@ You can export them directly, or pass `--env-file`.
 cd backend
 python3 -m src.oracle_runner marketing-deposit --json
 ```
+
+## GitHub Actions
+
+Use workflow **`ops-smoke`** (`.github/workflows/ops-smoke.yml`) for one-click smoke runs in GitHub:
+- inputs: `oracle_base_url`, `month`, `tx_max_tasks`
+- required repository secret: `ORACLE_HMAC_SECRET`
