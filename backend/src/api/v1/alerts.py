@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Response
@@ -68,7 +69,24 @@ def get_alerts(response: Response, db: Session = Depends(get_db)) -> AlertsRespo
     total_marketing_fee = int(
         db.query(func.coalesce(func.sum(MarketingFeeAccrualEvent.fee_amount_micro_usdc), 0)).scalar() or 0
     )
-    if total_marketing_fee > 0:
+    sent_rows = (
+        db.query(TxOutbox.payload_json)
+        .filter(
+            TxOutbox.task_type == "deposit_marketing_fee",
+            TxOutbox.status.in_(["pending", "processing", "succeeded"]),
+        )
+        .all()
+    )
+    sent_marketing_fee = 0
+    for (payload_json,) in sent_rows:
+        try:
+            payload = json.loads(payload_json or "{}")
+            sent_marketing_fee += int(payload.get("amount_micro_usdc") or 0)
+        except (ValueError, TypeError):
+            continue
+    pending_marketing_fee = max(0, int(total_marketing_fee) - int(sent_marketing_fee))
+
+    if pending_marketing_fee > 0:
         items.append(
             AlertItem(
                 alert_type="marketing_fee_accrued",
@@ -78,6 +96,8 @@ def get_alerts(response: Response, db: Session = Depends(get_db)) -> AlertsRespo
                 data={
                     "marketing_fee_bps": int(settings.marketing_fee_bps or 0),
                     "total_fee_micro_usdc": total_marketing_fee,
+                    "sent_fee_micro_usdc": sent_marketing_fee,
+                    "pending_fee_micro_usdc": pending_marketing_fee,
                     "events_count": int(db.query(func.count(MarketingFeeAccrualEvent.id)).scalar() or 0),
                     "marketing_treasury_address": settings.marketing_treasury_address,
                 },
