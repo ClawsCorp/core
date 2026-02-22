@@ -39,6 +39,15 @@ python3 scripts/prod_preflight.py \
   --ops-smoke-tx-max-tasks 5
 ```
 
+If you intentionally tolerate a temporary reconcile state during maintenance:
+
+```bash
+python3 scripts/prod_preflight.py \
+  --run-ops-smoke \
+  --ops-smoke-env-file /Users/alex/.oracle.env \
+  --ops-smoke-allow-reconcile-blocked-reason balance_mismatch
+```
+
 ## 3) Money Safety Invariants (Fail-Closed)
 
 - [ ] Project-capital outflow is blocked on reconciliation `missing/not_ready/stale`.

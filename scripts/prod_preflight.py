@@ -80,6 +80,7 @@ def _run_ops_smoke(
     month: str,
     tx_max_tasks: int,
     env_file: str | None,
+    allow_reconcile_blocked_reasons: list[str],
     timeout_seconds: int,
 ) -> CheckResult:
     repo_root = Path(__file__).resolve().parents[1]
@@ -94,6 +95,10 @@ def _run_ops_smoke(
     cmd = ["bash", str(script_path), "--month", month, "--tx-max-tasks", str(max(1, int(tx_max_tasks)))]
     if env_file:
         cmd.extend(["--env-file", env_file])
+    for reason in allow_reconcile_blocked_reasons:
+        r = str(reason).strip()
+        if r:
+            cmd.extend(["--allow-reconcile-blocked-reason", r])
 
     timeout = max(30, int(timeout_seconds)) * 3
     try:
@@ -137,6 +142,7 @@ def run_preflight(
     ops_smoke_month: str,
     ops_smoke_tx_max_tasks: int,
     ops_smoke_env_file: str | None,
+    ops_smoke_allow_reconcile_blocked_reasons: list[str],
 ) -> tuple[bool, list[CheckResult], dict[str, Any]]:
     checks: list[CheckResult] = []
     meta: dict[str, Any] = {
@@ -242,6 +248,7 @@ def run_preflight(
                 month=ops_smoke_month,
                 tx_max_tasks=ops_smoke_tx_max_tasks,
                 env_file=ops_smoke_env_file,
+                allow_reconcile_blocked_reasons=ops_smoke_allow_reconcile_blocked_reasons,
                 timeout_seconds=timeout_seconds,
             )
         )
@@ -286,6 +293,12 @@ def main() -> int:
         help="Optional env file for ops smoke script",
     )
     parser.add_argument(
+        "--ops-smoke-allow-reconcile-blocked-reason",
+        action="append",
+        default=[],
+        help="Allowed reconcile blocked_reason for ops smoke (repeatable)",
+    )
+    parser.add_argument(
         "--allow-warning-type",
         action="append",
         default=[],
@@ -306,6 +319,11 @@ def main() -> int:
         ops_smoke_month=(args.ops_smoke_month or "auto").strip() or "auto",
         ops_smoke_tx_max_tasks=max(1, int(args.ops_smoke_tx_max_tasks)),
         ops_smoke_env_file=(args.ops_smoke_env_file or "").strip() or None,
+        ops_smoke_allow_reconcile_blocked_reasons=[
+            x.strip()
+            for x in (args.ops_smoke_allow_reconcile_blocked_reason or [])
+            if x and str(x).strip()
+        ],
     )
 
     out = {

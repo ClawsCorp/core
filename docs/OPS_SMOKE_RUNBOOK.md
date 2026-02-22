@@ -12,6 +12,10 @@ One-command smoke check for the autonomous runtime path:
 scripts/ops_smoke.sh --env-file /Users/alex/.oracle.env --month auto --tx-max-tasks 5
 ```
 
+Default behavior is fail-closed:
+- if `reconcile` returns `ready=false`, smoke exits non-zero.
+- if any runner step fails, smoke exits non-zero.
+
 ## Required env
 
 - `ORACLE_BASE_URL`
@@ -29,6 +33,19 @@ You can export them directly, or pass `--env-file`.
 
 - The script is idempotent-friendly (runner endpoints are designed for repeat calls).
 - Runner step failures are fail-closed: the script exits immediately and does not mask errors.
+- Reconcile must be strict-ready by default. For a temporary maintenance window, allow specific reasons:
+
+```bash
+scripts/ops_smoke.sh \
+  --env-file /Users/alex/.oracle.env \
+  --allow-reconcile-blocked-reason balance_mismatch
+```
+
+or via env:
+
+```bash
+export OPS_SMOKE_ALLOW_RECON_BLOCKED=balance_mismatch
+```
 - It does not call `marketing-deposit` automatically.
 - If you need marketing settlement too, run it explicitly:
 

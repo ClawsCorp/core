@@ -7,6 +7,17 @@ BACKEND_DIR="$ROOT_DIR/backend"
 ENV_FILE=""
 MONTH="auto"
 TX_TASKS="${TX_TASKS:-5}"
+ALLOW_RECON_BLOCKED_REASONS=()
+
+if [[ -n "${OPS_SMOKE_ALLOW_RECON_BLOCKED:-}" ]]; then
+  IFS=',' read -r -a _preset_reasons <<< "${OPS_SMOKE_ALLOW_RECON_BLOCKED}"
+  for _reason in "${_preset_reasons[@]}"; do
+    _trimmed="$(echo "${_reason}" | xargs)"
+    if [[ -n "${_trimmed}" ]]; then
+      ALLOW_RECON_BLOCKED_REASONS+=("${_trimmed}")
+    fi
+  done
+fi
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -22,9 +33,13 @@ while [[ $# -gt 0 ]]; do
       TX_TASKS="${2:-5}"
       shift 2
       ;;
+    --allow-reconcile-blocked-reason)
+      ALLOW_RECON_BLOCKED_REASONS+=("${2:-}")
+      shift 2
+      ;;
     *)
       echo "Unknown arg: $1" >&2
-      echo "Usage: scripts/ops_smoke.sh [--env-file /path/to/.env] [--month YYYYMM|auto] [--tx-max-tasks N]" >&2
+      echo "Usage: scripts/ops_smoke.sh [--env-file /path/to/.env] [--month YYYYMM|auto] [--tx-max-tasks N] [--allow-reconcile-blocked-reason REASON]" >&2
       exit 2
       ;;
   esac
@@ -53,6 +68,9 @@ else
 fi
 
 echo "[ops-smoke] api=${ORACLE_BASE_URL} month=${MONTH} tx_max_tasks=${TX_TASKS}" >&2
+if [[ ${#ALLOW_RECON_BLOCKED_REASONS[@]} -gt 0 ]]; then
+  echo "[ops-smoke] allowed reconcile blocked reasons: ${ALLOW_RECON_BLOCKED_REASONS[*]}" >&2
+fi
 
 cd "$BACKEND_DIR"
 
@@ -66,7 +84,28 @@ echo "[ops-smoke] tx-worker" >&2
 "$PY_BIN" -m src.oracle_runner tx-worker --max-tasks "$TX_TASKS" --json
 
 echo "[ops-smoke] reconcile month=${MONTH}" >&2
-"$PY_BIN" -m src.oracle_runner reconcile --month "$MONTH" --json
+RECON_JSON="$("$PY_BIN" -m src.oracle_runner reconcile --month "$MONTH" --json)"
+echo "$RECON_JSON"
+ALLOW_REASONS_CSV="$(IFS=,; echo "${ALLOW_RECON_BLOCKED_REASONS[*]-}")"
+RECON_JSON="$RECON_JSON" ALLOW_REASONS_CSV="$ALLOW_REASONS_CSV" "$PY_BIN" - <<'PY'
+import json
+import os
+import sys
+
+payload = json.loads(os.environ["RECON_JSON"])
+blocked = str(payload.get("blocked_reason") or "").strip()
+ready = bool(payload.get("ready"))
+
+allowed = {x.strip() for x in (os.environ.get("ALLOW_REASONS_CSV") or "").split(",") if x.strip()}
+
+if not ready:
+    if blocked and blocked in allowed:
+        print(f"[ops-smoke] reconcile blocked_reason={blocked} allowed by policy", file=sys.stderr)
+        raise SystemExit(0)
+    detail = blocked or "unknown_not_ready"
+    print(f"[ops-smoke] reconcile not ready (blocked_reason={detail})", file=sys.stderr)
+    raise SystemExit(1)
+PY
 
 echo "[ops-smoke] alerts" >&2
 ALERTS_JSON="$(curl -fsS "${ORACLE_BASE_URL%/}/api/v1/alerts")"

@@ -18,6 +18,11 @@ on:
         required: true
         default: "5"
         type: string
+      allow_reconcile_blocked_reasons:
+        description: "Comma-separated reconcile blocked_reason values allowed temporarily (optional)"
+        required: false
+        default: ""
+        type: string
 
 jobs:
   smoke:
@@ -51,5 +56,6 @@ jobs:
           ORACLE_BASE_URL: ${{ inputs.oracle_base_url }}
           ORACLE_HMAC_SECRET: ${{ secrets.ORACLE_HMAC_SECRET }}
           TX_TASKS: ${{ inputs.tx_max_tasks }}
+          OPS_SMOKE_ALLOW_RECON_BLOCKED: ${{ inputs.allow_reconcile_blocked_reasons }}
         run: |
           bash scripts/ops_smoke.sh --month "${{ inputs.month }}" --tx-max-tasks "${{ inputs.tx_max_tasks }}"
