@@ -268,3 +268,59 @@ def test_tx_outbox_claim_next_reclaims_stale_processing_task(_client: TestClient
     assert resp.json()["success"] is True
     assert resp.json()["data"]["task"]["task_id"] == task_id
     assert resp.json()["data"]["task"]["locked_by"] == "w-new"
+
+
+def test_tx_outbox_complete_pending_requeues_and_clears_tx_state(_client: TestClient, _db: sessionmaker[Session]) -> None:
+    enqueue_path = "/api/v1/oracle/tx-outbox"
+    enqueue_body = json.dumps(
+        {"task_type": "noop", "payload": {"x": 1}, "idempotency_key": "idem-requeue-1"},
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    resp = _client.post(
+        enqueue_path,
+        content=enqueue_body,
+        headers=_oracle_headers(enqueue_path, enqueue_body, "req-enq-requeue", idem="idem-enq-requeue"),
+    )
+    assert resp.status_code == 200
+    task_id = resp.json()["data"]["task_id"]
+
+    claim_path = f"/api/v1/oracle/tx-outbox/{task_id}/claim"
+    claim_body = json.dumps({"worker_id": "w-requeue"}, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    resp = _client.post(
+        claim_path,
+        content=claim_body,
+        headers=_oracle_headers(claim_path, claim_body, "req-claim-requeue", idem="idem-claim-requeue"),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["data"]["task"]["status"] == "processing"
+
+    complete_path = f"/api/v1/oracle/tx-outbox/{task_id}/complete"
+    complete_body = json.dumps(
+        {
+            "status": "pending",
+            "error_hint": "rpc_error",
+            "tx_hash": "0x" + "a" * 64,
+            "result": {"stage": "retry_pending"},
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    resp = _client.post(
+        complete_path,
+        content=complete_body,
+        headers=_oracle_headers(complete_path, complete_body, "req-comp-requeue", idem="idem-comp-requeue"),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["data"]["status"] == "pending"
+    assert resp.json()["data"]["tx_hash"] is None
+    assert resp.json()["data"]["locked_by"] is None
+    assert resp.json()["data"]["last_error_hint"] == "rpc_error"
+
+    with _db() as db:
+        row = db.query(TxOutbox).filter(TxOutbox.task_id == task_id).first()
+        assert row is not None
+        assert row.status == "pending"
+        assert row.tx_hash is None
+        assert row.locked_at is None
+        assert row.locked_by is None

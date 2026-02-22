@@ -47,7 +47,7 @@ class TxOutboxClaimResponse(BaseModel):
 
 
 class TxOutboxCompleteRequest(BaseModel):
-    status: str = Field(..., min_length=1, max_length=16)  # succeeded|failed
+    status: str = Field(..., min_length=1, max_length=16)  # succeeded|failed|pending
     error_hint: str | None = Field(default=None, max_length=2000)
     tx_hash: str | None = Field(default=None, max_length=80)
     result: dict | None = None
