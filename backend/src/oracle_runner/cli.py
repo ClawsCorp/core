@@ -1090,7 +1090,9 @@ def run(argv: list[str] | None = None) -> int:
                 args.billing_sync = True
                 args.reconcile_projects = True
                 args.reconcile_project_revenue = True
-                args.marketing_deposit = True
+                # Do not auto-enable marketing_deposit here:
+                # when tx_outbox is disabled, direct-submit mode can retry each loop
+                # and over-send funds under repeated transient failures.
                 args.run_month = True
 
             while True:
@@ -1439,20 +1441,24 @@ def run(argv: list[str] | None = None) -> int:
                             processed_this_loop += 1
                             if bool(args.loop):
                                 _print_progress("tx_worker_task", "pending", detail=f"{task_type} {task_id} retry:{hint}")
-                        else:
-                            _update(existing_tx_hash or None, {"stage": "failed", "error_hint": hint})
-                            _complete("failed", hint)
-                            processed.append(
-                                {
-                                    "task_id": task_id,
-                                    "task_type": task_type,
-                                    "status": "failed",
-                                    "error_hint": hint,
-                                }
-                            )
-                            processed_this_loop += 1
-                            if bool(args.loop):
-                                _print_progress("tx_worker_task", "error", detail=f"{task_type} {task_id} {hint}")
+                                time.sleep(sleep_seconds)
+                            # Defer retried tasks to the next worker cycle.
+                            break
+                            # Defer retried tasks to the next worker cycle.
+                            break
+                        _update(existing_tx_hash or None, {"stage": "failed", "error_hint": hint})
+                        _complete("failed", hint)
+                        processed.append(
+                            {
+                                "task_id": task_id,
+                                "task_type": task_type,
+                                "status": "failed",
+                                "error_hint": hint,
+                            }
+                        )
+                        processed_this_loop += 1
+                        if bool(args.loop):
+                            _print_progress("tx_worker_task", "error", detail=f"{task_type} {task_id} {hint}")
 
                 if not bool(args.loop):
                     if json_mode:

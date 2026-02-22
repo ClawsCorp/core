@@ -142,3 +142,17 @@ def test_autonomy_loop_once_prints_single_json(monkeypatch, capsys) -> None:
     assert payload["run_month"]["success"] is True
     assert "deposit_backlog" in payload
     assert payload["deposit_backlog"][0]["month"] == "202502"
+
+
+def test_autonomy_loop_defaults_do_not_call_marketing_deposit(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(cli, "load_config_from_env", lambda: object())
+    monkeypatch.setattr(cli, "OracleClient", _FakeClientAutonomy)
+    monkeypatch.setenv("ORACLE_AUTO_MONTH", "202501")
+
+    exit_code = cli.run(["autonomy-loop"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = json.loads([line for line in captured.out.splitlines() if line.strip()][0])
+    assert payload["command"] == "autonomy-loop"
+    assert "marketing_deposit" not in payload

@@ -254,3 +254,65 @@ def test_run_month_blocked_reconcile_still_prints_single_json(monkeypatch, capsy
     summary = json.loads(stdout_lines[0])
     assert summary["success"] is False
     assert summary["failed_step"] == "deposit_profit"
+
+
+class _FakeClientTxWorkerRetry:
+    def __init__(self, _config: object):
+        self.claim_calls = 0
+        self.complete_payloads: list[dict] = []
+
+    def post(self, path: str, *, body_bytes: bytes, idempotency_key: str | None = None):
+        if path == "/api/v1/oracle/tx-outbox/claim-next":
+            self.claim_calls += 1
+            if self.claim_calls == 1:
+                task = {
+                    "task_id": "txo_1",
+                    "idempotency_key": "deposit_profit:202501:123",
+                    "task_type": "deposit_profit",
+                    "payload": {
+                        "profit_month_id": "202501",
+                        "amount_micro_usdc": 123,
+                        "to_address": "0x00000000000000000000000000000000000000aa",
+                        "idempotency_key": "deposit_profit:202501:123",
+                    },
+                    "tx_hash": None,
+                    "status": "processing",
+                    "attempts": 1,
+                }
+                return type("Resp", (), {"data": {"data": {"task": task, "blocked_reason": None}}})()
+            return type("Resp", (), {"data": {"data": {"task": None, "blocked_reason": "no_tasks"}}})()
+
+        if path.endswith("/update"):
+            return type("Resp", (), {"data": {"data": {"ok": True}}})()
+
+        if path.endswith("/complete"):
+            payload = json.loads(body_bytes.decode("utf-8"))
+            self.complete_payloads.append(payload)
+            return type("Resp", (), {"data": {"data": {"ok": True}}})()
+
+        raise AssertionError(f"unexpected POST path {path}")
+
+
+def test_tx_worker_retryable_error_requeues_once(monkeypatch, capsys) -> None:
+    from src.services import blockchain as blockchain_mod
+
+    fake_client = _FakeClientTxWorkerRetry(object())
+    monkeypatch.setattr(cli, "load_config_from_env", lambda: object())
+    monkeypatch.setattr(cli, "OracleClient", lambda _config: fake_client)
+
+    def _raise_retryable(*args, **kwargs):
+        raise blockchain_mod.BlockchainTxError("rpc failed", error_hint="rpc_error")
+
+    monkeypatch.setattr(blockchain_mod, "submit_usdc_transfer_tx", _raise_retryable)
+
+    exit_code = cli.run(["tx-worker", "--max-tasks", "5", "--json"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = json.loads(captured.out.strip())
+    assert payload["status"] == "ok"
+    assert len(payload["processed"]) == 1
+    assert payload["processed"][0]["status"] == "retry_pending"
+    assert fake_client.claim_calls == 1
+    assert len(fake_client.complete_payloads) == 1
+    assert fake_client.complete_payloads[0]["status"] == "pending"
