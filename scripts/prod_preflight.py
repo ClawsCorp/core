@@ -12,9 +12,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 from urllib import error, request
 
@@ -73,6 +75,57 @@ def _http_status(url: str, timeout_seconds: int) -> int:
         raise RuntimeError(f"Network error for {url}: {exc.reason}") from exc
 
 
+def _run_ops_smoke(
+    *,
+    month: str,
+    tx_max_tasks: int,
+    env_file: str | None,
+    timeout_seconds: int,
+) -> CheckResult:
+    repo_root = Path(__file__).resolve().parents[1]
+    script_path = repo_root / "scripts" / "ops_smoke.sh"
+    if not script_path.exists():
+        return CheckResult(
+            name="ops_smoke",
+            ok=False,
+            detail=f"missing script: {script_path}",
+        )
+
+    cmd = ["bash", str(script_path), "--month", month, "--tx-max-tasks", str(max(1, int(tx_max_tasks)))]
+    if env_file:
+        cmd.extend(["--env-file", env_file])
+
+    timeout = max(30, int(timeout_seconds)) * 3
+    try:
+        completed = subprocess.run(
+            cmd,
+            cwd=str(repo_root),
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=os.environ.copy(),
+        )
+    except subprocess.TimeoutExpired:
+        return CheckResult(name="ops_smoke", ok=False, detail=f"ops smoke timed out after {timeout}s")
+    except Exception as exc:
+        return CheckResult(name="ops_smoke", ok=False, detail=f"ops smoke execution error: {exc}")
+
+    stderr_tail = (completed.stderr or "").strip().splitlines()[-12:]
+    stdout_tail = (completed.stdout or "").strip().splitlines()[-8:]
+    ok = completed.returncode == 0
+    return CheckResult(
+        name="ops_smoke",
+        ok=ok,
+        detail="ops smoke passed" if ok else f"ops smoke failed with code={completed.returncode}",
+        data={
+            "return_code": completed.returncode,
+            "stderr_tail": stderr_tail,
+            "stdout_tail": stdout_tail,
+        },
+    )
+
+
 def run_preflight(
     *,
     api_base_url: str,
@@ -80,12 +133,17 @@ def run_preflight(
     timeout_seconds: int,
     fail_on_warning: bool,
     allowed_warning_types: set[str],
+    run_ops_smoke: bool,
+    ops_smoke_month: str,
+    ops_smoke_tx_max_tasks: int,
+    ops_smoke_env_file: str | None,
 ) -> tuple[bool, list[CheckResult], dict[str, Any]]:
     checks: list[CheckResult] = []
     meta: dict[str, Any] = {
         "api_base_url": api_base_url,
         "portal_base_url": portal_base_url,
         "timestamp": _utc_now_iso(),
+        "run_ops_smoke": bool(run_ops_smoke),
     }
 
     # health
@@ -178,6 +236,16 @@ def run_preflight(
         except Exception as exc:
             checks.append(CheckResult(name="portal", ok=False, detail=str(exc)))
 
+    if run_ops_smoke:
+        checks.append(
+            _run_ops_smoke(
+                month=ops_smoke_month,
+                tx_max_tasks=ops_smoke_tx_max_tasks,
+                env_file=ops_smoke_env_file,
+                timeout_seconds=timeout_seconds,
+            )
+        )
+
     overall_ok = all(c.ok for c in checks)
     return overall_ok, checks, meta
 
@@ -197,6 +265,27 @@ def main() -> int:
     parser.add_argument("--timeout-seconds", type=int, default=20)
     parser.add_argument("--fail-on-warning", action="store_true")
     parser.add_argument(
+        "--run-ops-smoke",
+        action="store_true",
+        help="Run scripts/ops_smoke.sh as part of preflight (requires ORACLE_HMAC_SECRET or --ops-smoke-env-file)",
+    )
+    parser.add_argument(
+        "--ops-smoke-month",
+        default="auto",
+        help="Month for ops smoke reconciliation step (YYYYMM or auto)",
+    )
+    parser.add_argument(
+        "--ops-smoke-tx-max-tasks",
+        type=int,
+        default=5,
+        help="Max tx outbox tasks for ops smoke tx-worker",
+    )
+    parser.add_argument(
+        "--ops-smoke-env-file",
+        default="",
+        help="Optional env file for ops smoke script",
+    )
+    parser.add_argument(
         "--allow-warning-type",
         action="append",
         default=[],
@@ -213,6 +302,10 @@ def main() -> int:
         timeout_seconds=max(3, int(args.timeout_seconds)),
         fail_on_warning=bool(args.fail_on_warning),
         allowed_warning_types={x.strip() for x in args.allow_warning_type if x and x.strip()},
+        run_ops_smoke=bool(args.run_ops_smoke),
+        ops_smoke_month=(args.ops_smoke_month or "auto").strip() or "auto",
+        ops_smoke_tx_max_tasks=max(1, int(args.ops_smoke_tx_max_tasks)),
+        ops_smoke_env_file=(args.ops_smoke_env_file or "").strip() or None,
     )
 
     out = {

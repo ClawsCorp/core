@@ -29,6 +29,16 @@ python3 scripts/prod_preflight.py \
   --allow-warning-type platform_settlement_not_ready
 ```
 
+Optional write-path preflight (includes `ops_smoke`):
+
+```bash
+python3 scripts/prod_preflight.py \
+  --run-ops-smoke \
+  --ops-smoke-env-file /Users/alex/.oracle.env \
+  --ops-smoke-month auto \
+  --ops-smoke-tx-max-tasks 5
+```
+
 ## 3) Money Safety Invariants (Fail-Closed)
 
 - [ ] Project-capital outflow is blocked on reconciliation `missing/not_ready/stale`.
