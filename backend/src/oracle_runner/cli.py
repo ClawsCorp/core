@@ -1444,6 +1444,8 @@ def run(argv: list[str] | None = None) -> int:
                                 time.sleep(sleep_seconds)
                             # Defer retried tasks to the next worker cycle.
                             break
+                            # Defer retried tasks to the next worker cycle.
+                            break
                         _update(existing_tx_hash or None, {"stage": "failed", "error_hint": hint})
                         _complete("failed", hint)
                         processed.append(

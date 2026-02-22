@@ -272,7 +272,7 @@ async def complete_task(
     row.status = payload.status
     row.last_error_hint = payload.error_hint
     if payload.status == "pending":
-        # Requeue semantics: make task claimable again and force fresh tx submission.
+        # Requeue semantics: clear lock and tx hash so worker will submit a fresh tx.
         row.locked_at = None
         row.locked_by = None
         row.tx_hash = None
