@@ -1,0 +1,55 @@
+name: ops-smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      oracle_base_url:
+        description: "Backend base URL (e.g. https://core-production-b1a0.up.railway.app)"
+        required: true
+        default: "https://core-production-b1a0.up.railway.app"
+        type: string
+      month:
+        description: "Settlement month (YYYYMM) or auto"
+        required: true
+        default: "auto"
+        type: string
+      tx_max_tasks:
+        description: "Max tx outbox tasks for smoke worker"
+        required: true
+        default: "5"
+        type: string
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Validate required secret
+        env:
+          ORACLE_HMAC_SECRET: ${{ secrets.ORACLE_HMAC_SECRET }}
+        run: |
+          if [ -z "${ORACLE_HMAC_SECRET}" ]; then
+            echo "Missing required repository secret: ORACLE_HMAC_SECRET" >&2
+            exit 1
+          fi
+
+      - name: Run ops smoke
+        env:
+          ORACLE_BASE_URL: ${{ inputs.oracle_base_url }}
+          ORACLE_HMAC_SECRET: ${{ secrets.ORACLE_HMAC_SECRET }}
+          TX_TASKS: ${{ inputs.tx_max_tasks }}
+        run: |
+          bash scripts/ops_smoke.sh --month "${{ inputs.month }}" --tx-max-tasks "${{ inputs.tx_max_tasks }}"

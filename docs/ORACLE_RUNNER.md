@@ -114,6 +114,7 @@ scripts/ops_smoke.sh --env-file /Users/alex/.oracle.env --month auto --tx-max-ta
 ```
 
 See `docs/OPS_SMOKE_RUNBOOK.md` for details.
+GitHub manual run is available via workflow `ops-smoke` (`.github/workflows/ops-smoke.yml`).
 
 ## `run-month` exit codes
 

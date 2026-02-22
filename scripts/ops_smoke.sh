@@ -57,16 +57,16 @@ echo "[ops-smoke] api=${ORACLE_BASE_URL} month=${MONTH} tx_max_tasks=${TX_TASKS}
 cd "$BACKEND_DIR"
 
 echo "[ops-smoke] billing-sync" >&2
-"$PY_BIN" -m src.oracle_runner billing-sync --json || true
+"$PY_BIN" -m src.oracle_runner billing-sync --json
 
 echo "[ops-smoke] sync-project-capital" >&2
-"$PY_BIN" -m src.oracle_runner sync-project-capital --json || true
+"$PY_BIN" -m src.oracle_runner sync-project-capital --json
 
 echo "[ops-smoke] tx-worker" >&2
-"$PY_BIN" -m src.oracle_runner tx-worker --max-tasks "$TX_TASKS" --json || true
+"$PY_BIN" -m src.oracle_runner tx-worker --max-tasks "$TX_TASKS" --json
 
 echo "[ops-smoke] reconcile month=${MONTH}" >&2
-"$PY_BIN" -m src.oracle_runner reconcile --month "$MONTH" --json || true
+"$PY_BIN" -m src.oracle_runner reconcile --month "$MONTH" --json
 
 echo "[ops-smoke] alerts" >&2
 ALERTS_JSON="$(curl -fsS "${ORACLE_BASE_URL%/}/api/v1/alerts")"
