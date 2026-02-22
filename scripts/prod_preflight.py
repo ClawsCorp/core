@@ -77,6 +77,7 @@ def _http_status(url: str, timeout_seconds: int) -> int:
 
 def _run_ops_smoke(
     *,
+    api_base_url: str,
     month: str,
     tx_max_tasks: int,
     env_file: str | None,
@@ -92,7 +93,16 @@ def _run_ops_smoke(
             detail=f"missing script: {script_path}",
         )
 
-    cmd = ["bash", str(script_path), "--month", month, "--tx-max-tasks", str(max(1, int(tx_max_tasks)))]
+    cmd = [
+        "bash",
+        str(script_path),
+        "--api-base-url",
+        api_base_url.rstrip("/"),
+        "--month",
+        month,
+        "--tx-max-tasks",
+        str(max(1, int(tx_max_tasks))),
+    ]
     if env_file:
         cmd.extend(["--env-file", env_file])
     for reason in allow_reconcile_blocked_reasons:
@@ -102,6 +112,8 @@ def _run_ops_smoke(
 
     timeout = max(30, int(timeout_seconds)) * 3
     try:
+        env = os.environ.copy()
+        env["ORACLE_BASE_URL"] = api_base_url.rstrip("/")
         completed = subprocess.run(
             cmd,
             cwd=str(repo_root),
@@ -109,7 +121,7 @@ def _run_ops_smoke(
             capture_output=True,
             text=True,
             timeout=timeout,
-            env=os.environ.copy(),
+            env=env,
         )
     except subprocess.TimeoutExpired:
         return CheckResult(name="ops_smoke", ok=False, detail=f"ops smoke timed out after {timeout}s")
@@ -245,6 +257,7 @@ def run_preflight(
     if run_ops_smoke:
         checks.append(
             _run_ops_smoke(
+                api_base_url=api_base_url,
                 month=ops_smoke_month,
                 tx_max_tasks=ops_smoke_tx_max_tasks,
                 env_file=ops_smoke_env_file,
