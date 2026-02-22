@@ -170,6 +170,53 @@ def test_alerts_do_not_report_missing_when_month_task_pending_with_amount_drift(
         get_settings.cache_clear()
 
 
+def test_alerts_treat_zero_profit_positive_delta_as_carryover_info() -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+
+    with session_local() as db:
+        db.add(
+            ReconciliationReport(
+                profit_month_id="202603",
+                revenue_sum_micro_usdc=0,
+                expense_sum_micro_usdc=0,
+                profit_sum_micro_usdc=0,
+                distributor_balance_micro_usdc=20_000_000,
+                delta_micro_usdc=20_000_000,
+                ready=False,
+                blocked_reason="balance_mismatch",
+                rpc_chain_id=84532,
+                rpc_url_name="base_sepolia",
+            )
+        )
+        db.commit()
+
+    def _override_get_db():
+        db: Session = session_local()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = _override_get_db
+    client = TestClient(app, raise_server_exceptions=False)
+    try:
+        resp = client.get("/api/v1/alerts")
+        assert resp.status_code == 200
+        items = resp.json()["data"]["items"]
+        alert_types = [str(x.get("alert_type")) for x in items if isinstance(x, dict)]
+        assert "platform_settlement_not_ready" not in alert_types
+        assert "platform_settlement_carryover_balance" in alert_types
+    finally:
+        app.dependency_overrides.clear()
+        get_settings.cache_clear()
+
+
 def test_alerts_include_git_outbox_stale_and_failed(monkeypatch) -> None:
     monkeypatch.setenv("GIT_OUTBOX_PENDING_MAX_AGE_SECONDS", "1")
     monkeypatch.setenv("GIT_OUTBOX_PROCESSING_MAX_AGE_SECONDS", "1")
