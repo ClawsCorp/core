@@ -46,6 +46,9 @@ Postgres (Railway):
 Runbook TODO:
 
 - See `docs/RAILWAY_BACKUPS_RUNBOOK.md`.
+- Test emergency mode and key rotation using:
+  - `docs/INCIDENT_RESPONSE_RUNBOOK.md`
+  - `docs/ORACLE_KEY_ROTATION_RUNBOOK.md`
 
 ## Alerting
 
@@ -60,3 +63,6 @@ Implementation options:
 
 1) Simple: a cron/automation job that calls public endpoints and posts to a channel.
 2) Better: ship structured logs + metrics to a hosted observability stack.
+
+Current baseline automation:
+- `.github/workflows/prod-autonomy-check.yml` (daily + manual)
