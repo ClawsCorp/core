@@ -42,3 +42,15 @@ python3 -m src.oracle_runner marketing-deposit --json
 Use workflow **`ops-smoke`** (`.github/workflows/ops-smoke.yml`) for one-click smoke runs in GitHub:
 - inputs: `oracle_base_url`, `month`, `tx_max_tasks`
 - required repository secret: `ORACLE_HMAC_SECRET`
+
+## Combined with prod preflight
+
+`scripts/prod_preflight.py` can run the same smoke in one report:
+
+```bash
+python3 scripts/prod_preflight.py \
+  --run-ops-smoke \
+  --ops-smoke-env-file /Users/alex/.oracle.env \
+  --ops-smoke-month auto \
+  --ops-smoke-tx-max-tasks 5
+```
