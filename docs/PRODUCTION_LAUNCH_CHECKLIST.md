@@ -47,6 +47,7 @@ python3 scripts/prod_preflight.py \
 Daily automation:
 
 - GitHub workflow: `.github/workflows/prod-autonomy-check.yml`
+- Add repo secret `RAILWAY_WORKSPACE_TOKEN` to include Railway worker health in the daily report artifact.
 
 If you intentionally tolerate a temporary reconcile state during maintenance:
 
@@ -96,6 +97,11 @@ Commands:
 RAILWAY_WORKSPACE_TOKEN=... python3 scripts/railway_health_check.py \
   --project-id cd76995a-d819-4b36-808b-422de3ff430e \
   --environment-name production
+
+python3 scripts/postgres_backup_drill.py \
+  --database-url "$DATABASE_URL" \
+  --scratch-url "$SCRATCH_PG_URL" \
+  --output-dir backups
 ```
 
 References:

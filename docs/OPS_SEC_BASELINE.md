@@ -46,6 +46,7 @@ Postgres (Railway):
 Runbook TODO:
 
 - See `docs/RAILWAY_BACKUPS_RUNBOOK.md`.
+- Prefer `python3 scripts/postgres_backup_drill.py` for repeatable backup/restore validation.
 - Test emergency mode and key rotation using:
   - `docs/INCIDENT_RESPONSE_RUNBOOK.md`
   - `docs/ORACLE_KEY_ROTATION_RUNBOOK.md`
