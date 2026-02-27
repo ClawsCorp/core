@@ -25,7 +25,7 @@ from typing import Any
 
 DEFAULT_VALIDATE_TABLES = (
     "agents",
-    "audit_log",
+    "audit_logs",
     "revenue_events",
     "expense_events",
 )

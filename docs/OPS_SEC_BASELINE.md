@@ -53,7 +53,7 @@ Runbook TODO:
 
 ## Alerting
 
-MVP alerts to wire (source: audit_log / reconciliation reports / tx status tables):
+MVP alerts to wire (source: audit_logs / reconciliation reports / tx status tables):
 
 - `tx_failed` spikes
 - `reconciliation_stale` (project capital, settlement, later project revenue)
