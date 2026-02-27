@@ -12,6 +12,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import delete
+
 from .client import OracleClient, OracleRunnerError, load_config_from_env, to_json_bytes
 
 _MONTH_RE = re.compile(r"^\d{6}$")
@@ -331,6 +333,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     billing_sync.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
 
+    prune_operational = subparsers.add_parser(
+        "prune-operational-tables",
+        help="Delete old non-ledger operational rows (audit, nonces, reconciliation snapshots).",
+    )
+    prune_operational.add_argument("--audit-log-retention-days", type=int, default=7)
+    prune_operational.add_argument("--nonce-retention-days", type=int, default=1)
+    prune_operational.add_argument("--reconciliation-retention-days", type=int, default=3)
+    prune_operational.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
+
     create = subparsers.add_parser("create-distribution")
     create.add_argument("--month", required=True)
     create.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
@@ -439,6 +450,20 @@ def build_parser() -> argparse.ArgumentParser:
     autonomy_loop.add_argument("--reconcile-projects", action="store_true", help="Refresh project capital reconciliation for active/fundraising projects.")
     autonomy_loop.add_argument("--reconcile-project-revenue", action="store_true", help="Refresh project revenue reconciliation where configured.")
     autonomy_loop.add_argument(
+        "--prune-operational-tables",
+        action="store_true",
+        help="Periodically delete old audit/nonces/reconciliation snapshots to keep DB size bounded.",
+    )
+    autonomy_loop.add_argument(
+        "--prune-interval-seconds",
+        type=int,
+        default=21600,
+        help="How often to run operational table pruning while looping (default: 6h).",
+    )
+    autonomy_loop.add_argument("--audit-log-retention-days", type=int, default=7)
+    autonomy_loop.add_argument("--nonce-retention-days", type=int, default=1)
+    autonomy_loop.add_argument("--reconciliation-retention-days", type=int, default=3)
+    autonomy_loop.add_argument(
         "--marketing-deposit",
         action="store_true",
         help="Call /oracle/marketing/settlement/deposit each loop to settle accrued marketing reserve.",
@@ -468,6 +493,62 @@ def _post_action(client: OracleClient, path: str, body_bytes: bytes, idempotency
 def _get_action(client: OracleClient, path: str) -> dict[str, Any]:
     response = client.get(path)
     return _extract_data(response.data)
+
+
+def _prune_operational_rows(
+    *,
+    audit_log_retention_days: int,
+    nonce_retention_days: int,
+    reconciliation_retention_days: int,
+) -> dict[str, Any]:
+    from src.core.database import SessionLocal
+    from src.models import AuditLog, OracleNonce, ProjectCapitalReconciliationReport, ProjectRevenueReconciliationReport
+
+    if SessionLocal is None:
+        raise OracleRunnerError("Database is not configured.")
+
+    now = datetime.now(timezone.utc)
+    audit_cutoff = now - timedelta(days=max(0, int(audit_log_retention_days)))
+    nonce_cutoff = now - timedelta(days=max(0, int(nonce_retention_days)))
+    reconciliation_cutoff = now - timedelta(days=max(0, int(reconciliation_retention_days)))
+
+    db = SessionLocal()
+    try:
+        audit_deleted = db.execute(delete(AuditLog).where(AuditLog.created_at < audit_cutoff)).rowcount or 0
+        nonce_deleted = db.execute(delete(OracleNonce).where(OracleNonce.seen_at < nonce_cutoff)).rowcount or 0
+        capital_deleted = (
+            db.execute(
+                delete(ProjectCapitalReconciliationReport).where(
+                    ProjectCapitalReconciliationReport.computed_at < reconciliation_cutoff
+                )
+            ).rowcount
+            or 0
+        )
+        revenue_deleted = (
+            db.execute(
+                delete(ProjectRevenueReconciliationReport).where(
+                    ProjectRevenueReconciliationReport.computed_at < reconciliation_cutoff
+                )
+            ).rowcount
+            or 0
+        )
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise OracleRunnerError("Failed to prune operational tables.") from exc
+    finally:
+        db.close()
+
+    return {
+        "status": "ok",
+        "audit_logs_deleted": int(audit_deleted),
+        "oracle_nonces_deleted": int(nonce_deleted),
+        "project_capital_reconciliation_reports_deleted": int(capital_deleted),
+        "project_revenue_reconciliation_reports_deleted": int(revenue_deleted),
+        "audit_log_cutoff": audit_cutoff.isoformat(),
+        "nonce_cutoff": nonce_cutoff.isoformat(),
+        "reconciliation_cutoff": reconciliation_cutoff.isoformat(),
+    }
 
 
 def _list_underfunded_months_for_deposit(
@@ -693,6 +774,27 @@ def run(argv: list[str] | None = None) -> int:
         _print_json({"success": False, "command": command, "error": str(exc)})
 
     try:
+        if args.command == "prune-operational-tables":
+            data = _prune_operational_rows(
+                audit_log_retention_days=int(args.audit_log_retention_days),
+                nonce_retention_days=int(args.nonce_retention_days),
+                reconciliation_retention_days=int(args.reconciliation_retention_days),
+            )
+            if json_mode:
+                _print_json(data)
+            else:
+                _print_fields(
+                    data,
+                    [
+                        "status",
+                        "audit_logs_deleted",
+                        "oracle_nonces_deleted",
+                        "project_capital_reconciliation_reports_deleted",
+                        "project_revenue_reconciliation_reports_deleted",
+                    ],
+                )
+            return 0
+
         config = load_config_from_env()
         client = OracleClient(config)
 
@@ -1073,6 +1175,8 @@ def run(argv: list[str] | None = None) -> int:
                 raise OracleRunnerError("--loop is not compatible with --json (streaming mode).")
 
             sleep_seconds = max(1, int(args.sleep_seconds))
+            prune_interval_seconds = max(1, int(args.prune_interval_seconds))
+            next_prune_at = 0.0
 
             # Default to "do everything" if user didn't specify any actions.
             wants_any = any(
@@ -1081,6 +1185,7 @@ def run(argv: list[str] | None = None) -> int:
                     bool(args.billing_sync),
                     bool(args.reconcile_projects),
                     bool(args.reconcile_project_revenue),
+                    bool(args.prune_operational_tables),
                     bool(args.marketing_deposit),
                     bool(args.run_month),
                 ]
@@ -1106,6 +1211,29 @@ def run(argv: list[str] | None = None) -> int:
                 }
 
                 try:
+                    if bool(args.prune_operational_tables):
+                        now_monotonic = time.monotonic()
+                        if now_monotonic >= next_prune_at:
+                            _print_progress("prune_operational_tables", "start")
+                            pruned = _prune_operational_rows(
+                                audit_log_retention_days=int(args.audit_log_retention_days),
+                                nonce_retention_days=int(args.nonce_retention_days),
+                                reconciliation_retention_days=int(args.reconciliation_retention_days),
+                            )
+                            cycle["prune_operational_tables"] = pruned
+                            next_prune_at = now_monotonic + prune_interval_seconds
+                            _print_progress(
+                                "prune_operational_tables",
+                                "ok",
+                                detail=(
+                                    "audit="
+                                    f"{pruned['audit_logs_deleted']},"
+                                    f"nonce={pruned['oracle_nonces_deleted']},"
+                                    f"capital={pruned['project_capital_reconciliation_reports_deleted']},"
+                                    f"revenue={pruned['project_revenue_reconciliation_reports_deleted']}"
+                                ),
+                            )
+
                     if bool(args.sync_project_capital):
                         _print_progress("sync_project_capital", "start")
                         cycle["sync_project_capital"] = _post_action(client, "/api/v1/oracle/project-capital-events/sync", b"{}")

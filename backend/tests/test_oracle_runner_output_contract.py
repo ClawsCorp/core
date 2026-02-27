@@ -212,6 +212,33 @@ def test_deposit_profit_json_flag(monkeypatch, capsys) -> None:
     assert captured.err.strip() == ""
 
 
+def test_prune_operational_tables_json_flag(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(
+        cli,
+        "_prune_operational_rows",
+        lambda **_: {
+            "status": "ok",
+            "audit_logs_deleted": 10,
+            "oracle_nonces_deleted": 11,
+            "project_capital_reconciliation_reports_deleted": 12,
+            "project_revenue_reconciliation_reports_deleted": 13,
+            "audit_log_cutoff": "2026-02-20T00:00:00+00:00",
+            "nonce_cutoff": "2026-02-26T00:00:00+00:00",
+            "reconciliation_cutoff": "2026-02-24T00:00:00+00:00",
+        },
+    )
+
+    exit_code = cli.run(["prune-operational-tables", "--json"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    data = json.loads(captured.out.strip())
+    assert data["status"] == "ok"
+    assert data["audit_logs_deleted"] == 10
+    assert data["project_revenue_reconciliation_reports_deleted"] == 13
+    assert captured.err.strip() == ""
+
+
 def test_run_project_month_stdout_json_and_stderr_progress(monkeypatch, capsys) -> None:
     _setup_fake_runner(monkeypatch)
 
