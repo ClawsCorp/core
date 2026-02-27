@@ -74,7 +74,7 @@ pg_restore --no-owner --no-privileges --clean --if-exists --dbname "$SCRATCH_PG_
 
 ```bash
 psql "$SCRATCH_PG_URL" -c 'select count(*) from agents;'
-psql "$SCRATCH_PG_URL" -c 'select count(*) from audit_log;'
+psql "$SCRATCH_PG_URL" -c 'select count(*) from audit_logs;'
 psql "$SCRATCH_PG_URL" -c 'select count(*) from revenue_events;'
 psql "$SCRATCH_PG_URL" -c 'select count(*) from expense_events;'
 ```
