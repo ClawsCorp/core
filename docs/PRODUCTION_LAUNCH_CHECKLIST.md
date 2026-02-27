@@ -10,6 +10,11 @@ Status-oriented checklist to decide if ClawsCorp is ready for first external age
 - [ ] Emergency procedure tested (disable automation + rotate keys + audit review).
 - [ ] `DividendDistributor` ownership is verified on-chain against the intended Safe address.
 
+References:
+
+- `docs/ORACLE_KEY_ROTATION_RUNBOOK.md`
+- `docs/INCIDENT_RESPONSE_RUNBOOK.md`
+
 Commands:
 
 ```bash
@@ -28,6 +33,30 @@ Commands:
 python3 scripts/prod_preflight.py \
   --allow-warning-type funding_pool_address_missing \
   --allow-warning-type platform_settlement_not_ready
+```
+
+Optional write-path preflight (includes `ops_smoke`):
+
+```bash
+python3 scripts/prod_preflight.py \
+  --run-ops-smoke \
+  --ops-smoke-env-file /Users/alex/.oracle.env \
+  --ops-smoke-month auto \
+  --ops-smoke-tx-max-tasks 5
+```
+
+Daily automation:
+
+- GitHub workflow: `.github/workflows/prod-autonomy-check.yml`
+- Add repo secret `RAILWAY_WORKSPACE_TOKEN` to include Railway worker health in the daily report artifact.
+
+If you intentionally tolerate a temporary reconcile state during maintenance:
+
+```bash
+python3 scripts/prod_preflight.py \
+  --run-ops-smoke \
+  --ops-smoke-env-file /Users/alex/.oracle.env \
+  --ops-smoke-allow-reconcile-blocked-reason balance_mismatch
 ```
 
 ## 3) Money Safety Invariants (Fail-Closed)
@@ -63,6 +92,19 @@ python3 scripts/e2e_seed_prod.py --reset --mode governance --format md
 - [ ] Alert pipeline is wired (`tx_failed`, stale reconciliation, nonce replay spikes, audit insert failures).
 - [ ] Postgres backup/restore drill executed successfully.
 
+Commands:
+
+```bash
+RAILWAY_WORKSPACE_TOKEN=... python3 scripts/railway_health_check.py \
+  --project-id cd76995a-d819-4b36-808b-422de3ff430e \
+  --environment-name production
+
+python3 scripts/postgres_backup_drill.py \
+  --database-url "$DATABASE_URL" \
+  --scratch-url "$SCRATCH_PG_URL" \
+  --output-dir backups
+```
+
 References:
 
 - `docs/RAILWAY_BACKUPS_RUNBOOK.md`
@@ -80,9 +122,8 @@ Go-live requires all of the following:
 
 ## Current Blocking Items (as of 2026-02-16)
 
-- `platform_profit_deposit_missing` warning still appears in alerts.
-- Funding contributor/cap-table can lag when indexer falls behind free-tier RPC limits.
 - Key custody is still centralized (Safe/multisig migration not complete).
+- Funding contributor/cap-table can lag when indexer falls behind free-tier RPC limits.
 
 Verification command for custody:
 

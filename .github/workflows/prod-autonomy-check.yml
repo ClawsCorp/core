@@ -1,0 +1,147 @@
+name: prod-autonomy-check
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: "Backend base URL"
+        required: true
+        default: "https://core-production-b1a0.up.railway.app"
+        type: string
+      portal_base_url:
+        description: "Frontend base URL"
+        required: true
+        default: "https://core-bice-mu.vercel.app"
+        type: string
+      month:
+        description: "Ops smoke month (YYYYMM|auto)"
+        required: true
+        default: "auto"
+        type: string
+      tx_max_tasks:
+        description: "Ops smoke tx-worker max tasks"
+        required: true
+        default: "3"
+        type: string
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Resolve inputs
+        id: vars
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "api_base_url=https://core-production-b1a0.up.railway.app" >> "$GITHUB_OUTPUT"
+            echo "portal_base_url=https://core-bice-mu.vercel.app" >> "$GITHUB_OUTPUT"
+            echo "month=auto" >> "$GITHUB_OUTPUT"
+            echo "tx_max_tasks=3" >> "$GITHUB_OUTPUT"
+          else
+            echo "api_base_url=${{ inputs.api_base_url }}" >> "$GITHUB_OUTPUT"
+            echo "portal_base_url=${{ inputs.portal_base_url }}" >> "$GITHUB_OUTPUT"
+            echo "month=${{ inputs.month }}" >> "$GITHUB_OUTPUT"
+            echo "tx_max_tasks=${{ inputs.tx_max_tasks }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Validate required secret
+        id: secret
+        env:
+          ORACLE_HMAC_SECRET: ${{ secrets.ORACLE_HMAC_SECRET }}
+        run: |
+          if [ -z "${ORACLE_HMAC_SECRET}" ]; then
+            echo "missing=true" >> "$GITHUB_OUTPUT"
+            printf '%s\n' \
+              '{' \
+              '  "success": false,' \
+              '  "meta": {' \
+              '    "reason": "missing_oracle_hmac_secret"' \
+              '  },' \
+              '  "checks": []' \
+              '}' > prod_preflight_report.json
+          else
+            echo "missing=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run production preflight + ops smoke
+        if: steps.secret.outputs.missing != 'true'
+        env:
+          ORACLE_HMAC_SECRET: ${{ secrets.ORACLE_HMAC_SECRET }}
+        run: |
+          python3 scripts/prod_preflight.py \
+            --api-base-url "${{ steps.vars.outputs.api_base_url }}" \
+            --portal-base-url "${{ steps.vars.outputs.portal_base_url }}" \
+            --fail-on-warning \
+            --run-ops-smoke \
+            --ops-smoke-month "${{ steps.vars.outputs.month }}" \
+            --ops-smoke-tx-max-tasks "${{ steps.vars.outputs.tx_max_tasks }}" \
+            > prod_preflight_report.json
+          cat prod_preflight_report.json
+
+      - name: Fail when required secret is missing
+        if: steps.secret.outputs.missing == 'true'
+        run: |
+          echo "Missing required repository secret: ORACLE_HMAC_SECRET" >&2
+          exit 1
+
+      - name: Resolve optional Railway secret
+        if: steps.secret.outputs.missing != 'true'
+        id: railway_secret
+        env:
+          RAILWAY_WORKSPACE_TOKEN: ${{ secrets.RAILWAY_WORKSPACE_TOKEN }}
+        run: |
+          if [ -z "${RAILWAY_WORKSPACE_TOKEN}" ]; then
+            echo "missing=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "missing=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run Railway service health check
+        if: steps.secret.outputs.missing != 'true' && steps.railway_secret.outputs.missing != 'true'
+        env:
+          RAILWAY_WORKSPACE_TOKEN: ${{ secrets.RAILWAY_WORKSPACE_TOKEN }}
+        run: |
+          python3 scripts/railway_health_check.py \
+            --project-id cd76995a-d819-4b36-808b-422de3ff430e \
+            --environment-name production \
+            > railway_health_report.json
+          cat railway_health_report.json
+
+      - name: Mark Railway health as skipped when secret is absent
+        if: steps.secret.outputs.missing != 'true' && steps.railway_secret.outputs.missing == 'true'
+        run: |
+          printf '%s\n' \
+            '{' \
+            '  "success": true,' \
+            '  "skipped": true,' \
+            '  "reason": "missing_railway_workspace_token_secret"' \
+            '}' > railway_health_report.json
+
+      - name: Upload preflight artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: prod-preflight-report
+          path: prod_preflight_report.json
+
+      - name: Upload Railway health artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: railway-health-report
+          path: railway_health_report.json

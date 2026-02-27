@@ -142,3 +142,47 @@ def test_autonomy_loop_once_prints_single_json(monkeypatch, capsys) -> None:
     assert payload["run_month"]["success"] is True
     assert "deposit_backlog" in payload
     assert payload["deposit_backlog"][0]["month"] == "202502"
+
+
+def test_autonomy_loop_defaults_do_not_call_marketing_deposit(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(cli, "load_config_from_env", lambda: object())
+    monkeypatch.setattr(cli, "OracleClient", _FakeClientAutonomy)
+    monkeypatch.setenv("ORACLE_AUTO_MONTH", "202501")
+
+    exit_code = cli.run(["autonomy-loop"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = json.loads([line for line in captured.out.splitlines() if line.strip()][0])
+    assert payload["command"] == "autonomy-loop"
+    assert "marketing_deposit" not in payload
+
+
+def test_autonomy_loop_can_run_prune_only(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(cli, "load_config_from_env", lambda: object())
+    monkeypatch.setattr(cli, "OracleClient", _FakeClientAutonomy)
+    monkeypatch.setenv("ORACLE_AUTO_MONTH", "202501")
+    monkeypatch.setattr(
+        cli,
+        "_prune_operational_rows",
+        lambda **_: {
+            "status": "ok",
+            "audit_logs_deleted": 2,
+            "oracle_nonces_deleted": 3,
+            "project_capital_reconciliation_reports_deleted": 4,
+            "project_revenue_reconciliation_reports_deleted": 5,
+            "audit_log_cutoff": "2026-02-20T00:00:00+00:00",
+            "nonce_cutoff": "2026-02-26T00:00:00+00:00",
+            "reconciliation_cutoff": "2026-02-24T00:00:00+00:00",
+        },
+    )
+
+    exit_code = cli.run(["autonomy-loop", "--prune-operational-tables"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = json.loads([line for line in captured.out.splitlines() if line.strip()][0])
+    assert payload["command"] == "autonomy-loop"
+    assert payload["success"] is True
+    assert payload["prune_operational_tables"]["audit_logs_deleted"] == 2
+    assert "sync_project_capital" not in payload

@@ -55,6 +55,7 @@ PYTHONPATH=src python -m oracle_runner reconcile-project-revenue --project-id pr
 PYTHONPATH=src python -m oracle_runner project-reconcile --project-id proj_...
 PYTHONPATH=src python -m oracle_runner sync-project-capital
 PYTHONPATH=src python -m oracle_runner billing-sync
+PYTHONPATH=src python -m oracle_runner prune-operational-tables
 PYTHONPATH=src python -m oracle_runner run-project-month --project-id proj_...
 PYTHONPATH=src python -m oracle_runner project-capital-event --project-id proj_... --delta-micro-usdc 1000000 --source stake
 PYTHONPATH=src python -m oracle_runner open-funding-round --project-id proj_... --title "Round 1" --cap-micro-usdc 500000000
@@ -75,12 +76,20 @@ PYTHONPATH=src python -m oracle_runner tx-worker --loop --max-tasks 10
 PYTHONPATH=src python -m oracle_runner git-worker --max-tasks 5
 PYTHONPATH=src python -m oracle_runner git-worker --loop --max-tasks 5 --repo-dir /path/to/repo
 PYTHONPATH=src python -m oracle_runner autonomy-loop --loop
-PYTHONPATH=src python -m oracle_runner autonomy-loop --loop --marketing-deposit --run-month
+PYTHONPATH=src python -m oracle_runner autonomy-loop --loop --sync-project-capital --reconcile-projects --run-month
+PYTHONPATH=src python -m oracle_runner autonomy-loop --loop --sync-project-capital --reconcile-projects --run-month --prune-operational-tables
+
+# Enable these only when the corresponding flows are active:
+#   --billing-sync
+#   --reconcile-project-revenue
+#   --marketing-deposit
+# `--prune-operational-tables` is safe to keep enabled in long-running loops; it only deletes old non-ledger operational rows.
 PYTHONPATH=src python -m oracle_runner --json reconcile --month 202601
 PYTHONPATH=src python -m oracle_runner --json reconcile-project-capital --project-id proj_...
 PYTHONPATH=src python -m oracle_runner --json project-reconcile --project-id proj_...
 PYTHONPATH=src python -m oracle_runner --json open-funding-round --project-id proj_...
 PYTHONPATH=src python -m oracle_runner --json sync-project-capital
+PYTHONPATH=src python -m oracle_runner --json prune-operational-tables
 PYTHONPATH=src python -m oracle_runner --json project-capital-event --project-id proj_... --delta-micro-usdc 1000000 --source stake
 PYTHONPATH=src python -m oracle_runner --json evaluate-bounty-eligibility --bounty-id bty_... --payload /path/eligibility.json
 PYTHONPATH=src python -m oracle_runner --json mark-bounty-paid --bounty-id bty_... --paid-tx-hash 0x...
@@ -104,6 +113,19 @@ PYTHONPATH=src python -m oracle_runner --json marketing-deposit
 If `--idempotency-key` is omitted for execute actions, runner derives deterministic key:
 
 - `execute_distribution:{month}:{sha256(canonical_json)}`
+
+## One-command ops smoke
+
+For a single operational check of indexer ingestion + tx-worker + reconciliation + alerts:
+
+```bash
+scripts/ops_smoke.sh --env-file /Users/alex/.oracle.env --month auto --tx-max-tasks 5
+```
+
+See `docs/OPS_SMOKE_RUNBOOK.md` for details.
+GitHub manual run is available via workflow `ops-smoke` (`.github/workflows/ops-smoke.yml`).
+By default, `ops_smoke` fails when reconciliation is not strict-ready; temporary allowlist is supported via `--allow-reconcile-blocked-reason` or `OPS_SMOKE_ALLOW_RECON_BLOCKED`.
+When `--month auto` is used, `ops_smoke` resolves month from `/api/v1/settlement/months` preferring latest strict-ready month (`ready=true`, `delta=0`), then falls back to latest row.
 
 ## `run-month` exit codes
 
