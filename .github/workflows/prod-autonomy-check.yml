@@ -100,9 +100,38 @@ jobs:
           echo "Missing required repository secret: ORACLE_HMAC_SECRET" >&2
           exit 1
 
+      - name: Run Railway service health check
+        if: steps.secret.outputs.missing != 'true' && secrets.RAILWAY_WORKSPACE_TOKEN != ''
+        env:
+          RAILWAY_WORKSPACE_TOKEN: ${{ secrets.RAILWAY_WORKSPACE_TOKEN }}
+        run: |
+          python3 scripts/railway_health_check.py \
+            --project-id cd76995a-d819-4b36-808b-422de3ff430e \
+            --environment-name production \
+            > railway_health_report.json
+          cat railway_health_report.json
+
+      - name: Mark Railway health as skipped when secret is absent
+        if: steps.secret.outputs.missing != 'true' && secrets.RAILWAY_WORKSPACE_TOKEN == ''
+        run: |
+          cat > railway_health_report.json <<'JSON'
+          {
+            "success": true,
+            "skipped": true,
+            "reason": "missing_railway_workspace_token_secret"
+          }
+          JSON
+
       - name: Upload preflight artifact
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: prod-preflight-report
           path: prod_preflight_report.json
+
+      - name: Upload Railway health artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: railway-health-report
+          path: railway_health_report.json

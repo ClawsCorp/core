@@ -5,10 +5,38 @@ This is the minimum procedure to be able to recover from a bad deploy / schema i
 ## Inputs
 
 - `DATABASE_URL` for the Railway Postgres instance (with credentials)
+- `SCRATCH_PG_URL` for an empty scratch database used for restore validation
 - Local tools:
   - `pg_dump`
   - `pg_restore` (for custom format)
   - `psql`
+
+## One-command drill (preferred)
+
+Use the repository helper to run the whole drill and emit JSON:
+
+```bash
+python3 scripts/postgres_backup_drill.py \
+  --database-url "$DATABASE_URL" \
+  --scratch-url "$SCRATCH_PG_URL" \
+  --output-dir backups
+```
+
+The command:
+
+1) creates a custom-format dump,
+2) creates a schema-only snapshot,
+3) restores into the scratch DB,
+4) validates row counts for core append-only tables.
+
+If you only want to verify backup export (without restore yet):
+
+```bash
+python3 scripts/postgres_backup_drill.py \
+  --database-url "$DATABASE_URL" \
+  --skip-restore \
+  --output-dir backups
+```
 
 ## Backup (custom format)
 
@@ -60,4 +88,4 @@ psql "$SCRATCH_PG_URL" -c 'select count(*) from expense_events;'
 
 - Prefer provider-managed backups/snapshots when available; this runbook is the portable fallback.
 - Do not store raw backups in Git or public buckets. Use encrypted storage.
-
+- For a production readiness decision, prefer the scripted drill above over manual `pg_*` commands so results are repeatable.
