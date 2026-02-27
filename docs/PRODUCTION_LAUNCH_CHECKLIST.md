@@ -90,6 +90,14 @@ python3 scripts/e2e_seed_prod.py --reset --mode governance --format md
 - [ ] Alert pipeline is wired (`tx_failed`, stale reconciliation, nonce replay spikes, audit insert failures).
 - [ ] Postgres backup/restore drill executed successfully.
 
+Commands:
+
+```bash
+RAILWAY_WORKSPACE_TOKEN=... python3 scripts/railway_health_check.py \
+  --project-id cd76995a-d819-4b36-808b-422de3ff430e \
+  --environment-name production
+```
+
 References:
 
 - `docs/RAILWAY_BACKUPS_RUNBOOK.md`
