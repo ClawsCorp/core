@@ -58,6 +58,7 @@ class Settings:
     funding_pool_contract_address: str | None
     marketing_treasury_address: str | None
     safe_owner_address: str | None
+    safe_owner_keys_file: str | None
     oracle_signer_private_key: str | None
     contracts_dir: str
     oracle_request_ttl_seconds: int
@@ -112,6 +113,8 @@ def get_settings() -> Settings:
     marketing_treasury_address = marketing_treasury_address_value if marketing_treasury_address_value else None
     safe_owner_address_value = os.getenv("SAFE_OWNER_ADDRESS", "").strip()
     safe_owner_address = safe_owner_address_value if safe_owner_address_value else None
+    safe_owner_keys_file_value = os.getenv("SAFE_OWNER_KEYS_FILE", "").strip()
+    safe_owner_keys_file = safe_owner_keys_file_value if safe_owner_keys_file_value else None
     oracle_signer_private_key_value = os.getenv("ORACLE_SIGNER_PRIVATE_KEY", "").strip()
     oracle_signer_private_key = (
         oracle_signer_private_key_value if oracle_signer_private_key_value else None
@@ -167,6 +170,7 @@ def get_settings() -> Settings:
         funding_pool_contract_address=funding_pool_contract_address,
         marketing_treasury_address=marketing_treasury_address,
         safe_owner_address=safe_owner_address,
+        safe_owner_keys_file=safe_owner_keys_file,
         oracle_signer_private_key=oracle_signer_private_key,
         contracts_dir=contracts_dir,
         oracle_request_ttl_seconds=oracle_request_ttl_seconds,

@@ -7,6 +7,7 @@ import re
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -427,6 +428,170 @@ def _run_safe_payload_node(*, node_script: str, env: dict[str, str]) -> dict[str
         "operation": int(payload.get("operation") or 0),
         "safe_owner_address": safe_owner_address,
     }
+
+
+def submit_safe_transaction(
+    *,
+    to_address: str,
+    data: str,
+    value_wei: str = "0",
+    operation: int = 0,
+    safe_address: str | None = None,
+) -> str:
+    settings = get_settings()
+    rpc_url = settings.base_sepolia_rpc_url
+    executor_private_key = settings.oracle_signer_private_key
+    configured_safe_address = str(safe_address or settings.safe_owner_address or "").strip()
+    keys_file = str(settings.safe_owner_keys_file or "").strip()
+
+    if not rpc_url or _is_placeholder(rpc_url):
+        raise BlockchainConfigError("Missing BASE_SEPOLIA_RPC_URL")
+    if not executor_private_key or _is_placeholder(executor_private_key):
+        raise BlockchainConfigError("Missing ORACLE_SIGNER_PRIVATE_KEY")
+    if not configured_safe_address or _is_placeholder(configured_safe_address):
+        raise BlockchainConfigError("Missing SAFE_OWNER_ADDRESS")
+    if not keys_file:
+        raise BlockchainConfigError("Missing SAFE_OWNER_KEYS_FILE")
+    if not to_address or not str(to_address).startswith("0x"):
+        raise BlockchainTxError("Safe tx requires to_address", error_hint="invalid_safe_payload")
+    if not data or not str(data).startswith("0x"):
+        raise BlockchainTxError("Safe tx requires calldata", error_hint="invalid_safe_payload")
+
+    threshold, owner_private_keys = _load_safe_owner_keys(keys_file)
+    if len(owner_private_keys) < threshold:
+        raise BlockchainConfigError("SAFE_OWNER_KEYS_FILE has fewer private keys than threshold")
+
+    node_script = """
+const { JsonRpcProvider, Wallet, Contract } = require('ethers');
+(async () => {
+  const provider = new JsonRpcProvider(process.env.RPC_URL);
+  const executor = new Wallet(process.env.EXECUTOR_PRIVATE_KEY, provider);
+  const safeAddress = process.env.SAFE_ADDRESS;
+  const to = process.env.TO_ADDRESS;
+  const data = process.env.CALLDATA;
+  const value = BigInt(process.env.VALUE_WEI || '0');
+  const operation = Number(process.env.OPERATION || '0');
+  const threshold = Number(process.env.THRESHOLD || '2');
+  const ownerKeys = JSON.parse(process.env.OWNER_KEYS_JSON || '[]');
+
+  const abi = [
+    'function nonce() view returns (uint256)',
+    'function getTransactionHash(address to,uint256 value,bytes data,uint8 operation,uint256 safeTxGas,uint256 baseGas,uint256 gasPrice,address gasToken,address refundReceiver,uint256 _nonce) view returns (bytes32)',
+    'function execTransaction(address to,uint256 value,bytes data,uint8 operation,uint256 safeTxGas,uint256 baseGas,uint256 gasPrice,address gasToken,address refundReceiver,bytes signatures) external payable returns (bool success)'
+  ];
+  const safe = new Contract(safeAddress, abi, executor);
+  const nonce = await safe.nonce();
+  const safeTxGas = 0n;
+  const baseGas = 0n;
+  const gasPrice = 0n;
+  const gasToken = '0x0000000000000000000000000000000000000000';
+  const refundReceiver = '0x0000000000000000000000000000000000000000';
+  const txHash = await safe.getTransactionHash(
+    to,
+    value,
+    data,
+    operation,
+    safeTxGas,
+    baseGas,
+    gasPrice,
+    gasToken,
+    refundReceiver,
+    nonce
+  );
+
+  const signerEntries = ownerKeys.map((pk) => {
+    const wallet = new Wallet(pk);
+    const sig = wallet.signingKey.sign(txHash).serialized;
+    return { address: wallet.address.toLowerCase(), signature: sig };
+  });
+  signerEntries.sort((a, b) => a.address.localeCompare(b.address));
+  const selected = signerEntries.slice(0, threshold);
+  if (selected.length < threshold) {
+    throw new Error('Not enough Safe signatures');
+  }
+  const signatures = '0x' + selected.map((item) => item.signature.slice(2)).join('');
+  const tx = await safe.execTransaction(
+    to,
+    value,
+    data,
+    operation,
+    safeTxGas,
+    baseGas,
+    gasPrice,
+    gasToken,
+    refundReceiver,
+    signatures
+  );
+  process.stdout.write(JSON.stringify({ tx_hash: tx.hash }));
+})().catch((err) => {
+  const message = err && err.message ? err.message : String(err);
+  process.stderr.write(message);
+  process.exit(1);
+});
+"""
+
+    env = os.environ.copy()
+    env.update(
+        {
+            "RPC_URL": rpc_url,
+            "EXECUTOR_PRIVATE_KEY": executor_private_key,
+            "SAFE_ADDRESS": configured_safe_address,
+            "TO_ADDRESS": str(to_address),
+            "CALLDATA": str(data),
+            "VALUE_WEI": str(value_wei or "0"),
+            "OPERATION": str(int(operation)),
+            "THRESHOLD": str(int(threshold)),
+            "OWNER_KEYS_JSON": json.dumps(owner_private_keys),
+        }
+    )
+
+    contracts_dir = settings.contracts_dir
+    try:
+        proc = subprocess.run(
+            ["node", "-e", node_script],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=contracts_dir,
+            timeout=60,
+        )
+    except subprocess.CalledProcessError as exc:
+        error_hint = _sanitize_subprocess_error(stdout=exc.stdout, stderr=exc.stderr)
+        raise BlockchainTxError("Failed to submit Safe transaction", error_hint=error_hint) from exc
+    except (subprocess.SubprocessError, FileNotFoundError) as exc:
+        error_hint = _sanitize_subprocess_error(stderr=str(exc))
+        raise BlockchainTxError("Failed to submit Safe transaction", error_hint=error_hint) from exc
+
+    try:
+        payload = json.loads(proc.stdout or "{}")
+    except ValueError as exc:
+        raise BlockchainTxError("Invalid Safe transaction output", error_hint="invalid_output") from exc
+    tx_hash = payload.get("tx_hash")
+    if not isinstance(tx_hash, str) or not tx_hash.startswith("0x"):
+        raise BlockchainTxError("Safe transaction did not return tx_hash", error_hint="invalid_output")
+    return tx_hash
+
+
+def _load_safe_owner_keys(path: str) -> tuple[int, list[str]]:
+    file_path = Path(path).expanduser()
+    if not file_path.exists():
+        raise BlockchainConfigError("SAFE_OWNER_KEYS_FILE does not exist")
+    try:
+        payload = json.loads(file_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise BlockchainConfigError("SAFE_OWNER_KEYS_FILE is unreadable") from exc
+
+    threshold = int(payload.get("threshold") or 2)
+    owners = list(payload.get("owners") or [])
+    private_keys: list[str] = []
+    for item in owners:
+        if not isinstance(item, dict):
+            continue
+        key = str(item.get("private_key") or "").strip()
+        if key.startswith("0x") and len(key) >= 66:
+            private_keys.append(key)
+    return max(1, threshold), private_keys
 
 
 def submit_usdc_transfer_tx(*, to_address: str, amount_micro_usdc: int) -> str:
