@@ -8,6 +8,7 @@ Status-oriented checklist to decide if ClawsCorp is ready for first external age
 - [ ] Oracle signer key rotation policy documented and tested.
 - [ ] Railway workspace/project tokens stored only in secret manager/local env, never in repo.
 - [ ] Emergency procedure tested (disable automation + rotate keys + audit review).
+- [ ] `DividendDistributor` ownership is verified on-chain against the intended Safe address.
 
 References:
 
@@ -108,6 +109,7 @@ References:
 
 - `docs/RAILWAY_BACKUPS_RUNBOOK.md`
 - `docs/OPS_SEC_BASELINE.md`
+- `docs/SAFE_MIGRATION_PLAN.md`
 
 ## 6) Final Go/No-Go Rules
 
@@ -122,3 +124,13 @@ Go-live requires all of the following:
 
 - Key custody is still centralized (Safe/multisig migration not complete).
 - Funding contributor/cap-table can lag when indexer falls behind free-tier RPC limits.
+
+Verification command for custody:
+
+```bash
+cd contracts
+export BASE_SEPOLIA_RPC_URL=...
+export DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS=0x...
+export SAFE_OWNER_ADDRESS=0x...
+npx hardhat run scripts/check-dividend-distributor-owner.js --network baseSepolia
+```
