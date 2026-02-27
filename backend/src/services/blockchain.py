@@ -53,6 +53,94 @@ class TransactionReceiptResult:
     block_number: int | None
 
 
+def build_create_distribution_safe_tx(profit_month_value: int, total_profit_micro_usdc: int) -> dict[str, str | int]:
+    settings = get_settings()
+    distributor_address = settings.dividend_distributor_contract_address
+    safe_owner_address = settings.safe_owner_address
+    if not distributor_address or _is_placeholder(distributor_address):
+        raise BlockchainConfigError("Missing DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS")
+    if not safe_owner_address or _is_placeholder(safe_owner_address):
+        raise BlockchainConfigError("Missing SAFE_OWNER_ADDRESS")
+
+    node_script = """
+const { Interface } = require('ethers');
+const iface = new Interface([
+  'function createDistribution(uint256 profitMonthId, uint256 totalProfit) external'
+]);
+const data = iface.encodeFunctionData('createDistribution', [
+  BigInt(process.env.PROFIT_MONTH_ID),
+  BigInt(process.env.TOTAL_PROFIT)
+]);
+process.stdout.write(JSON.stringify({
+  to_address: process.env.CONTRACT_ADDRESS,
+  data,
+  value_wei: '0',
+  operation: 0,
+  safe_owner_address: process.env.SAFE_OWNER_ADDRESS
+}));
+"""
+    env = os.environ.copy()
+    env.update(
+        {
+            "CONTRACT_ADDRESS": distributor_address,
+            "SAFE_OWNER_ADDRESS": safe_owner_address,
+            "PROFIT_MONTH_ID": str(profit_month_value),
+            "TOTAL_PROFIT": str(total_profit_micro_usdc),
+        }
+    )
+    return _run_safe_payload_node(node_script=node_script, env=env)
+
+
+def build_execute_distribution_safe_tx(
+    profit_month_value: int,
+    stakers: list[str],
+    staker_shares: list[int],
+    authors: list[str],
+    author_shares: list[int],
+) -> dict[str, str | int]:
+    settings = get_settings()
+    distributor_address = settings.dividend_distributor_contract_address
+    safe_owner_address = settings.safe_owner_address
+    if not distributor_address or _is_placeholder(distributor_address):
+        raise BlockchainConfigError("Missing DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS")
+    if not safe_owner_address or _is_placeholder(safe_owner_address):
+        raise BlockchainConfigError("Missing SAFE_OWNER_ADDRESS")
+
+    node_script = """
+const { Interface } = require('ethers');
+const iface = new Interface([
+  'function executeDistribution(uint256 profitMonthId, address[] stakers, uint256[] stakerShares, address[] authors, uint256[] authorShares) external'
+]);
+const data = iface.encodeFunctionData('executeDistribution', [
+  BigInt(process.env.PROFIT_MONTH_ID),
+  JSON.parse(process.env.STAKERS_JSON || '[]'),
+  JSON.parse(process.env.STAKER_SHARES_JSON || '[]').map((v) => BigInt(v)),
+  JSON.parse(process.env.AUTHORS_JSON || '[]'),
+  JSON.parse(process.env.AUTHOR_SHARES_JSON || '[]').map((v) => BigInt(v))
+]);
+process.stdout.write(JSON.stringify({
+  to_address: process.env.CONTRACT_ADDRESS,
+  data,
+  value_wei: '0',
+  operation: 0,
+  safe_owner_address: process.env.SAFE_OWNER_ADDRESS
+}));
+"""
+    env = os.environ.copy()
+    env.update(
+        {
+            "CONTRACT_ADDRESS": distributor_address,
+            "SAFE_OWNER_ADDRESS": safe_owner_address,
+            "PROFIT_MONTH_ID": str(profit_month_value),
+            "STAKERS_JSON": json.dumps(stakers),
+            "STAKER_SHARES_JSON": json.dumps(staker_shares),
+            "AUTHORS_JSON": json.dumps(authors),
+            "AUTHOR_SHARES_JSON": json.dumps(author_shares),
+        }
+    )
+    return _run_safe_payload_node(node_script=node_script, env=env)
+
+
 def read_block_timestamp_utc(block_number: int) -> datetime:
     settings = get_settings()
     rpc_url = settings.base_sepolia_rpc_url
@@ -300,6 +388,45 @@ const { JsonRpcProvider, Wallet, Contract } = require('ethers');
     if not isinstance(tx_hash, str) or not tx_hash.startswith("0x"):
         raise BlockchainTxError("Missing transaction hash")
     return tx_hash
+
+
+def _run_safe_payload_node(*, node_script: str, env: dict[str, str]) -> dict[str, str | int]:
+    contracts_dir = get_settings().contracts_dir
+    try:
+        proc = subprocess.run(
+            ["node", "-e", node_script],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=contracts_dir,
+            timeout=30,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise BlockchainTxError("Failed to build Safe payload", error_hint=_sanitize_subprocess_error(stdout=exc.stdout, stderr=exc.stderr)) from exc
+    except (subprocess.SubprocessError, FileNotFoundError) as exc:
+        raise BlockchainTxError("Failed to build Safe payload", error_hint=_sanitize_subprocess_error(stderr=str(exc))) from exc
+
+    try:
+        payload = json.loads(proc.stdout or "{}")
+    except ValueError as exc:
+        raise BlockchainTxError("Invalid Safe payload output", error_hint="invalid_output") from exc
+    to_address = payload.get("to_address")
+    data = payload.get("data")
+    safe_owner_address = payload.get("safe_owner_address")
+    if not isinstance(to_address, str) or not to_address.startswith("0x"):
+        raise BlockchainTxError("Safe payload missing to_address", error_hint="invalid_output")
+    if not isinstance(data, str) or not data.startswith("0x"):
+        raise BlockchainTxError("Safe payload missing data", error_hint="invalid_output")
+    if not isinstance(safe_owner_address, str) or not safe_owner_address.startswith("0x"):
+        raise BlockchainTxError("Safe payload missing safe_owner_address", error_hint="invalid_output")
+    return {
+        "to_address": to_address,
+        "data": data,
+        "value_wei": "0",
+        "operation": int(payload.get("operation") or 0),
+        "safe_owner_address": safe_owner_address,
+    }
 
 
 def submit_usdc_transfer_tx(*, to_address: str, amount_micro_usdc: int) -> str:

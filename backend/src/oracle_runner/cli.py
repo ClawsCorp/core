@@ -682,6 +682,10 @@ def _run_month_flow(
         prog("create_distribution", "blocked")
         summary["failed_step"] = "create_distribution"
         return 6, summary
+    if create.get("status") == "queued":
+        prog("create_distribution", "pending", str(create.get("task_id") or "queued"))
+        summary["failed_step"] = "create_distribution"
+        return 10, summary
     prog("create_distribution", "ok")
 
     try:
@@ -726,6 +730,10 @@ def _run_month_flow(
         prog("execute_distribution", "blocked")
         summary["failed_step"] = "execute_distribution"
         return 9, summary
+    if summary["execute_distribution"].get("status") == "queued":
+        prog("execute_distribution", "pending", str(summary["execute_distribution"].get("task_id") or "queued"))
+        summary["failed_step"] = "execute_distribution"
+        return 10, summary
     prog("execute_distribution", "ok")
 
     try:
@@ -1352,10 +1360,13 @@ def run(argv: list[str] | None = None) -> int:
             from src.services.blockchain import (
                 BlockchainConfigError,
                 BlockchainTxError,
+                build_create_distribution_safe_tx,
+                build_execute_distribution_safe_tx,
                 submit_usdc_transfer_tx,
                 submit_create_distribution_tx,
                 submit_execute_distribution_tx,
             )
+            from src.core.config import get_settings
 
             if bool(args.loop) and json_mode:
                 raise OracleRunnerError("--loop is not compatible with --json (streaming mode).")
@@ -1365,6 +1376,7 @@ def run(argv: list[str] | None = None) -> int:
             sleep_seconds = max(1, int(args.sleep_seconds))
             retryable_max_attempts = max(1, int(os.getenv("TX_WORKER_RETRYABLE_MAX_ATTEMPTS", "3")))
             retryable_hints = {"rpc_error", "nonce_too_low", "timeout", "unknown_subprocess_error"}
+            safe_owner_address = str(get_settings().safe_owner_address or "").strip()
 
             processed: list[dict[str, Any]] = []
             while True:
@@ -1426,6 +1438,33 @@ def run(argv: list[str] | None = None) -> int:
                             profit_month_id = str(payload.get("profit_month_id") or "")
                             profit_month_value = int(payload.get("profit_month_value"))
                             profit_sum = int(payload.get("profit_sum_micro_usdc"))
+                            if safe_owner_address:
+                                safe_tx = build_create_distribution_safe_tx(
+                                    profit_month_value=profit_month_value,
+                                    total_profit_micro_usdc=profit_sum,
+                                )
+                                _update(
+                                    None,
+                                    {
+                                        "stage": "safe_execution_required",
+                                        "safe_tx": safe_tx,
+                                        "task_type": task_type,
+                                    },
+                                )
+                                _complete("blocked", "safe_execution_required")
+                                processed.append(
+                                    {
+                                        "task_id": task_id,
+                                        "task_type": task_type,
+                                        "status": "blocked",
+                                        "blocked_reason": "safe_execution_required",
+                                        "safe_owner_address": safe_owner_address,
+                                    }
+                                )
+                                processed_this_loop += 1
+                                if bool(args.loop):
+                                    _print_progress("tx_worker_task", "blocked", detail=f"{task_type} {task_id} safe_execution_required")
+                                continue
                             tx_hash = existing_tx_hash or submit_create_distribution_tx(
                                 profit_month_value=profit_month_value,
                                 total_profit_micro_usdc=profit_sum,
@@ -1467,6 +1506,39 @@ def run(argv: list[str] | None = None) -> int:
                             total_profit = int(payload.get("total_profit_micro_usdc"))
                             stakers_count = int(payload.get("stakers_count"))
                             authors_count = int(payload.get("authors_count"))
+                            if safe_owner_address:
+                                safe_tx = build_execute_distribution_safe_tx(
+                                    profit_month_value=profit_month_value,
+                                    stakers=stakers,
+                                    staker_shares=staker_shares,
+                                    authors=authors,
+                                    author_shares=author_shares,
+                                )
+                                _update(
+                                    None,
+                                    {
+                                        "stage": "safe_execution_required",
+                                        "safe_tx": safe_tx,
+                                        "task_type": task_type,
+                                        "total_profit_micro_usdc": total_profit,
+                                        "stakers_count": stakers_count,
+                                        "authors_count": authors_count,
+                                    },
+                                )
+                                _complete("blocked", "safe_execution_required")
+                                processed.append(
+                                    {
+                                        "task_id": task_id,
+                                        "task_type": task_type,
+                                        "status": "blocked",
+                                        "blocked_reason": "safe_execution_required",
+                                        "safe_owner_address": safe_owner_address,
+                                    }
+                                )
+                                processed_this_loop += 1
+                                if bool(args.loop):
+                                    _print_progress("tx_worker_task", "blocked", detail=f"{task_type} {task_id} safe_execution_required")
+                                continue
 
                             tx_hash = existing_tx_hash or submit_execute_distribution_tx(
                                 profit_month_value=profit_month_value,

@@ -21,7 +21,7 @@ class TxOutbox(Base):
     # Optional. Additional worker result payload (JSON string) for diagnostics/observability.
     result_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    status: Mapped[str] = mapped_column(String(16), nullable=False, index=True)  # pending|processing|succeeded|failed
+    status: Mapped[str] = mapped_column(String(16), nullable=False, index=True)  # pending|processing|succeeded|failed|blocked
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     last_error_hint: Mapped[str | None] = mapped_column(Text, nullable=True)
 

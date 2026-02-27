@@ -19,6 +19,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from src.api.v1.oracle_settlement import router as oracle_router
+from src.api.v1 import oracle_settlement as oracle_mod
 from src.core.config import get_settings
 from src.core.database import Base, get_db
 from src.core.security import build_oracle_hmac_v2_payload
@@ -26,7 +27,9 @@ from src.core.security import build_oracle_hmac_v2_payload
 # Ensure tables are registered on Base.metadata
 from src.models.audit_log import AuditLog  # noqa: F401
 from src.models.oracle_nonce import OracleNonce  # noqa: F401
+from src.models.tx_outbox import TxOutbox  # noqa: F401
 from src.models.reconciliation_report import ReconciliationReport  # noqa: F401
+from src.services.blockchain import DistributionState
 
 
 def _sign(secret: str, payload: str) -> str:
@@ -134,3 +137,90 @@ def test_distribution_create_blocked_not_ready_has_audit_idempotency_key(
         )
         assert audit is not None
         assert audit.idempotency_key == f"create_distribution:{profit_month_id}:{profit_sum}"
+
+
+def test_distribution_create_returns_blocked_when_existing_task_is_safe_blocked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+
+    secret = "test-secret"
+    monkeypatch.setenv("ORACLE_HMAC_SECRET", secret)
+    monkeypatch.setenv("ORACLE_REQUEST_TTL_SECONDS", "300")
+    monkeypatch.setenv("ORACLE_CLOCK_SKEW_SECONDS", "5")
+    monkeypatch.setenv("ORACLE_ACCEPT_LEGACY_SIGNATURES", "false")
+    monkeypatch.setenv("TX_OUTBOX_ENABLED", "true")
+
+    profit_month_id = "202602"
+    profit_sum = 123
+    idem = f"create_distribution:{profit_month_id}:{profit_sum}"
+
+    with session_local() as db:
+        db.add(
+            ReconciliationReport(
+                profit_month_id=profit_month_id,
+                revenue_sum_micro_usdc=profit_sum,
+                expense_sum_micro_usdc=0,
+                profit_sum_micro_usdc=profit_sum,
+                distributor_balance_micro_usdc=profit_sum,
+                delta_micro_usdc=0,
+                ready=True,
+                blocked_reason=None,
+                rpc_chain_id=None,
+                rpc_url_name=None,
+            )
+        )
+        db.add(
+            TxOutbox(
+                task_id="txo_safe_blocked",
+                idempotency_key=idem,
+                task_type="create_distribution",
+                payload_json='{"profit_month_id":"202602"}',
+                tx_hash=None,
+                result_json='{"stage":"safe_execution_required"}',
+                status="blocked",
+                attempts=1,
+                last_error_hint="safe_execution_required",
+                locked_at=None,
+                locked_by=None,
+            )
+        )
+        db.commit()
+
+    monkeypatch.setattr(
+        oracle_mod,
+        "read_distribution_state",
+        lambda _: DistributionState(exists=False, total_profit_micro_usdc=0, distributed=False),
+    )
+
+    app = _make_test_app(session_local)
+    client = TestClient(app)
+
+    path = f"/api/v1/oracle/distributions/{profit_month_id}/create"
+    body = b""
+    body_hash = hashlib.sha256(body).hexdigest()
+    timestamp = str(int(time.time()))
+    request_id = "req-safe-blocked-1"
+    payload = build_oracle_hmac_v2_payload(timestamp, request_id, "POST", path, body_hash)
+    signature = _sign(secret, payload)
+
+    resp = client.post(
+        path,
+        content=body,
+        headers={
+            "X-Request-Timestamp": timestamp,
+            "X-Request-Id": request_id,
+            "X-Signature": signature,
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["success"] is False
+    assert data["data"]["blocked_reason"] == "safe_execution_required"
+    assert data["data"]["task_id"] == "txo_safe_blocked"

@@ -360,6 +360,54 @@ def test_alerts_include_git_outbox_stale_and_failed(monkeypatch) -> None:
         get_settings.cache_clear()
 
 
+def test_alerts_include_tx_outbox_blocked() -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+
+    with session_local() as db:
+        db.add(
+            TxOutbox(
+                task_id="txo_blocked_1",
+                idempotency_key="create_distribution:202602:1",
+                task_type="create_distribution",
+                payload_json='{"profit_month_id":"202602"}',
+                result_json='{"stage":"safe_execution_required"}',
+                tx_hash=None,
+                status="blocked",
+                attempts=1,
+                last_error_hint="safe_execution_required",
+                locked_at=None,
+                locked_by=None,
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc),
+            )
+        )
+        db.commit()
+
+    def _override_get_db():
+        db: Session = session_local()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = _override_get_db
+    client = TestClient(app, raise_server_exceptions=False)
+    try:
+        resp = client.get("/api/v1/alerts")
+        assert resp.status_code == 200
+        alert_types = [str(x.get("alert_type")) for x in resp.json()["data"]["items"] if isinstance(x, dict)]
+        assert "tx_outbox_blocked" in alert_types
+    finally:
+        app.dependency_overrides.clear()
+        get_settings.cache_clear()
+
+
 def test_alerts_include_marketing_fee_accrued_when_pending_exists(monkeypatch) -> None:
     monkeypatch.setenv("MARKETING_FEE_BPS", "100")
     monkeypatch.setenv("MARKETING_TREASURY_ADDRESS", "0x00000000000000000000000000000000000000aa")
