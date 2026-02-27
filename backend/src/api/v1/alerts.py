@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from urllib import error as urlerror
+from urllib import request as urlrequest
 
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy import func
@@ -28,6 +30,47 @@ def _as_aware_utc(dt: datetime | None) -> datetime | None:
     if dt is None:
         return None
     return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+
+
+def _fetch_dividend_distributor_owner(settings) -> tuple[str | None, str | None]:
+    rpc_url = str(settings.base_sepolia_rpc_url or "").strip()
+    contract_address = str(settings.dividend_distributor_contract_address or "").strip()
+    if not rpc_url or not contract_address:
+        return None, "config_missing"
+
+    body = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "eth_call",
+            "params": [
+                {
+                    "to": contract_address,
+                    "data": "0x8da5cb5b",  # owner()
+                },
+                "latest",
+            ],
+        },
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("utf-8")
+    req = urlrequest.Request(
+        rpc_url,
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urlrequest.urlopen(req, timeout=10) as resp:
+            payload = json.loads(resp.read().decode("utf-8", errors="replace"))
+    except (urlerror.URLError, TimeoutError, ValueError):
+        return None, "rpc_error"
+
+    result = str((payload or {}).get("result") or "").strip()
+    if not result.startswith("0x") or len(result) < 66:
+        return None, "invalid_result"
+    owner = "0x" + result[-40:]
+    return owner, None
 
 
 @router.get(
@@ -65,6 +108,56 @@ def get_alerts(response: Response, db: Session = Depends(get_db)) -> AlertsRespo
                 observed_at=now,
             )
         )
+
+    if not (settings.safe_owner_address or "").strip():
+        items.append(
+            AlertItem(
+                alert_type="safe_owner_address_missing",
+                severity="warning",
+                message="SAFE_OWNER_ADDRESS is not configured; on-chain ownership is still not pinned to Safe.",
+                ref=None,
+                data=None,
+                observed_at=now,
+            )
+        )
+    else:
+        current_owner, owner_error = _fetch_dividend_distributor_owner(settings)
+        if owner_error == "config_missing":
+            items.append(
+                AlertItem(
+                    alert_type="dividend_distributor_owner_check_unavailable",
+                    severity="warning",
+                    message="Cannot verify DividendDistributor owner because RPC or contract address is not configured.",
+                    ref=None,
+                    data=None,
+                    observed_at=now,
+                )
+            )
+        elif owner_error is not None:
+            items.append(
+                AlertItem(
+                    alert_type="dividend_distributor_owner_check_failed",
+                    severity="warning",
+                    message="DividendDistributor owner check failed; Safe custody cannot be verified.",
+                    ref=None,
+                    data={"error": owner_error},
+                    observed_at=now,
+                )
+            )
+        elif str(current_owner or "").lower() != str(settings.safe_owner_address or "").lower():
+            items.append(
+                AlertItem(
+                    alert_type="dividend_distributor_safe_owner_mismatch",
+                    severity="warning",
+                    message="DividendDistributor owner does not match SAFE_OWNER_ADDRESS yet.",
+                    ref=None,
+                    data={
+                        "current_owner": current_owner,
+                        "expected_safe_owner": settings.safe_owner_address,
+                    },
+                    observed_at=now,
+                )
+            )
 
     total_marketing_fee = int(
         db.query(func.coalesce(func.sum(MarketingFeeAccrualEvent.fee_amount_micro_usdc), 0)).scalar() or 0
