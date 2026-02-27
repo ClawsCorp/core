@@ -8,6 +8,12 @@ Scope (MVP):
 - Keep backend/oracle runner as proposer/relayer only where needed; ideally backend becomes read-only for money-moving.
 - Define an emergency policy (pause/stop) that is Safe-controlled.
 
+Current production reality:
+
+- `DividendDistributor` is still controlled by a single EOA path (`ORACLE_SIGNER_PRIVATE_KEY`).
+- This is acceptable for pilot-stage guarded operation, but it is still a launch blocker for full production autonomy.
+- The immediate goal is not just "have a plan", but make owner state observable and migration reproducible.
+
 ## Prereqs
 
 - A Safe deployed on Base Sepolia (chainId `84532`).
@@ -17,6 +23,23 @@ Scope (MVP):
   - `USDC_ADDRESS`
 
 ## Migration Steps
+
+0) Read-only preflight (before changing anything)
+
+- Verify the current owner on-chain:
+
+```bash
+cd contracts
+export BASE_SEPOLIA_RPC_URL=...
+export DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS=0x...
+export SAFE_OWNER_ADDRESS=0x... # optional but recommended
+npx hardhat run scripts/check-dividend-distributor-owner.js --network baseSepolia
+```
+
+- Expected output:
+  - `owner=0x...`
+  - `matches_expected_owner=true` only after migration is complete.
+- If `matches_expected_owner=false`, production still depends on the old owner EOA.
 
 1) Deploy / choose Safe
 
@@ -60,3 +83,6 @@ npx hardhat run scripts/transfer-dividend-distributor-ownership.js --network bas
 - Once tx-outbox worker exists, Safe can be integrated as:
   - direct Safe tx submission (propose), or
   - backend becomes pure observer + payload generator, Safe executes.
+- The repo now includes two contract scripts for this flow:
+  - `contracts/scripts/check-dividend-distributor-owner.js` (read-only verification)
+  - `contracts/scripts/transfer-dividend-distributor-ownership.js` (state-changing transfer)
