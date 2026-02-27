@@ -1365,6 +1365,7 @@ def run(argv: list[str] | None = None) -> int:
                 submit_usdc_transfer_tx,
                 submit_create_distribution_tx,
                 submit_execute_distribution_tx,
+                submit_safe_transaction,
             )
             from src.core.config import get_settings
 
@@ -1376,7 +1377,9 @@ def run(argv: list[str] | None = None) -> int:
             sleep_seconds = max(1, int(args.sleep_seconds))
             retryable_max_attempts = max(1, int(os.getenv("TX_WORKER_RETRYABLE_MAX_ATTEMPTS", "3")))
             retryable_hints = {"rpc_error", "nonce_too_low", "timeout", "unknown_subprocess_error"}
-            safe_owner_address = str(get_settings().safe_owner_address or "").strip()
+            runtime_settings = get_settings()
+            safe_owner_address = str(runtime_settings.safe_owner_address or "").strip()
+            safe_owner_keys_file = str(runtime_settings.safe_owner_keys_file or "").strip()
 
             processed: list[dict[str, Any]] = []
             while True:
@@ -1443,6 +1446,40 @@ def run(argv: list[str] | None = None) -> int:
                                     profit_month_value=profit_month_value,
                                     total_profit_micro_usdc=profit_sum,
                                 )
+                                if safe_owner_keys_file:
+                                    tx_hash = existing_tx_hash or submit_safe_transaction(
+                                        safe_address=str(safe_tx["safe_owner_address"]),
+                                        to_address=str(safe_tx["to_address"]),
+                                        data=str(safe_tx["data"]),
+                                        value_wei=str(safe_tx["value_wei"]),
+                                        operation=int(safe_tx["operation"]),
+                                    )
+                                    _update(tx_hash, {"stage": "safe_submitted", "safe_tx": safe_tx, "task_type": task_type})
+                                    client.post(
+                                        f"/api/v1/oracle/distributions/{profit_month_id}/create/record",
+                                        body_bytes=to_json_bytes(
+                                            {
+                                                "idempotency_key": idem,
+                                                "profit_sum_micro_usdc": profit_sum,
+                                                "tx_hash": tx_hash,
+                                            }
+                                        ),
+                                    )
+                                    _update(tx_hash, {"stage": "safe_recorded", "safe_tx": safe_tx, "task_type": task_type})
+                                    _complete("succeeded", None)
+                                    processed.append(
+                                        {
+                                            "task_id": task_id,
+                                            "task_type": task_type,
+                                            "status": "succeeded",
+                                            "tx_hash": tx_hash,
+                                            "mode": "safe_exec",
+                                        }
+                                    )
+                                    processed_this_loop += 1
+                                    if bool(args.loop):
+                                        _print_progress("tx_worker_task", "ok", detail=f"{task_type} {task_id} safe_exec")
+                                    continue
                                 _update(
                                     None,
                                     {
@@ -1514,6 +1551,62 @@ def run(argv: list[str] | None = None) -> int:
                                     authors=authors,
                                     author_shares=author_shares,
                                 )
+                                if safe_owner_keys_file:
+                                    tx_hash = existing_tx_hash or submit_safe_transaction(
+                                        safe_address=str(safe_tx["safe_owner_address"]),
+                                        to_address=str(safe_tx["to_address"]),
+                                        data=str(safe_tx["data"]),
+                                        value_wei=str(safe_tx["value_wei"]),
+                                        operation=int(safe_tx["operation"]),
+                                    )
+                                    _update(
+                                        tx_hash,
+                                        {
+                                            "stage": "safe_submitted",
+                                            "safe_tx": safe_tx,
+                                            "task_type": task_type,
+                                            "total_profit_micro_usdc": total_profit,
+                                            "stakers_count": stakers_count,
+                                            "authors_count": authors_count,
+                                        },
+                                    )
+                                    client.post(
+                                        f"/api/v1/oracle/distributions/{profit_month_id}/execute/record",
+                                        body_bytes=to_json_bytes(
+                                            {
+                                                "idempotency_key": idem,
+                                                "tx_hash": tx_hash,
+                                                "total_profit_micro_usdc": total_profit,
+                                                "stakers_count": stakers_count,
+                                                "authors_count": authors_count,
+                                            }
+                                        ),
+                                    )
+                                    _update(
+                                        tx_hash,
+                                        {
+                                            "stage": "safe_recorded",
+                                            "safe_tx": safe_tx,
+                                            "task_type": task_type,
+                                            "total_profit_micro_usdc": total_profit,
+                                            "stakers_count": stakers_count,
+                                            "authors_count": authors_count,
+                                        },
+                                    )
+                                    _complete("succeeded", None)
+                                    processed.append(
+                                        {
+                                            "task_id": task_id,
+                                            "task_type": task_type,
+                                            "status": "succeeded",
+                                            "tx_hash": tx_hash,
+                                            "mode": "safe_exec",
+                                        }
+                                    )
+                                    processed_this_loop += 1
+                                    if bool(args.loop):
+                                        _print_progress("tx_worker_task", "ok", detail=f"{task_type} {task_id} safe_exec")
+                                    continue
                                 _update(
                                     None,
                                     {

@@ -86,6 +86,11 @@ npx hardhat run scripts/transfer-dividend-distributor-ownership.js --network bas
 - Remove any implicit assumption that backend key is the on-chain owner.
 - For any endpoints that currently send tx:
   - Change them to enqueue an outbox task (future) OR return "blocked: requires Safe execution".
+- Local testnet automation mode is allowed:
+  - set `SAFE_OWNER_ADDRESS`
+  - set `SAFE_OWNER_KEYS_FILE` to a local JSON file containing the Safe owner private keys
+  - run `tx-worker` locally so it can sign `execTransaction` with the required threshold and record the resulting tx hash
+- This mode is for testnet/pilot automation only; owner key files must remain local-only and must not be stored in hosted secrets.
 
 4) Emergency policy
 

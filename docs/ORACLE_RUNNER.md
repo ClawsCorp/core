@@ -30,6 +30,8 @@ Server-side only (not used directly by the runner):
 - `DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS`
 - `FUNDING_POOL_CONTRACT_ADDRESS` (optional; enables staker recipient generation from observed transfers)
 - `ORACLE_SIGNER_PRIVATE_KEY`
+- `SAFE_OWNER_ADDRESS` (optional; when set, owner-only distribution txs must route through Safe)
+- `SAFE_OWNER_KEYS_FILE` (optional, local-only; JSON file with Safe owner keys for testnet automation)
 - `CONTRACTS_DIR` (optional)
 
 `tx-worker` processes tx outbox task types:
@@ -37,6 +39,12 @@ Server-side only (not used directly by the runner):
 - `deposit_marketing_fee`
 - `create_distribution`
 - `execute_distribution`
+
+Safe behavior for owner-only distribution tasks:
+
+- If `SAFE_OWNER_ADDRESS` is set and `SAFE_OWNER_KEYS_FILE` is not set, `create_distribution` / `execute_distribution` fail-closed into `blocked` with `safe_execution_required` and include machine-readable Safe calldata in task result.
+- If both `SAFE_OWNER_ADDRESS` and `SAFE_OWNER_KEYS_FILE` are set, local `tx-worker` can execute the Safe transaction directly (testnet automation mode) and then record the resulting on-chain tx hash back into the backend.
+- `SAFE_OWNER_KEYS_FILE` must stay local and must never be committed to the repo or stored in Railway/Vercel secrets.
 
 `git-worker` environment variables (runs locally, applies git tasks):
 

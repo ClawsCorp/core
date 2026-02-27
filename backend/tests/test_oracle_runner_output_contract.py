@@ -343,3 +343,81 @@ def test_tx_worker_retryable_error_requeues_once(monkeypatch, capsys) -> None:
     assert fake_client.claim_calls == 1
     assert len(fake_client.complete_payloads) == 1
     assert fake_client.complete_payloads[0]["status"] == "pending"
+
+
+class _FakeClientTxWorkerSafe:
+    def __init__(self, _config: object):
+        self.claim_calls = 0
+        self.update_payloads: list[dict] = []
+        self.complete_payloads: list[dict] = []
+        self.record_payloads: list[tuple[str, dict]] = []
+
+    def post(self, path: str, *, body_bytes: bytes, idempotency_key: str | None = None):
+        if path == "/api/v1/oracle/tx-outbox/claim-next":
+            self.claim_calls += 1
+            if self.claim_calls == 1:
+                task = {
+                    "task_id": "txo_safe_1",
+                    "idempotency_key": "create_distribution:202501:123",
+                    "task_type": "create_distribution",
+                    "payload": {
+                        "profit_month_id": "202501",
+                        "profit_month_value": 202501,
+                        "profit_sum_micro_usdc": 123,
+                        "idempotency_key": "create_distribution:202501:123",
+                    },
+                    "tx_hash": None,
+                    "status": "processing",
+                    "attempts": 1,
+                }
+                return type("Resp", (), {"data": {"data": {"task": task, "blocked_reason": None}}})()
+            return type("Resp", (), {"data": {"data": {"task": None, "blocked_reason": "no_tasks"}}})()
+        if path.endswith("/update"):
+            self.update_payloads.append(json.loads(body_bytes.decode("utf-8")))
+            return type("Resp", (), {"data": {"data": {"ok": True}}})()
+        if path.endswith("/complete"):
+            self.complete_payloads.append(json.loads(body_bytes.decode("utf-8")))
+            return type("Resp", (), {"data": {"data": {"ok": True}}})()
+        if path.endswith("/create/record"):
+            self.record_payloads.append((path, json.loads(body_bytes.decode("utf-8"))))
+            return type("Resp", (), {"data": {"data": {"ok": True}}})()
+        raise AssertionError(f"unexpected POST path {path}")
+
+
+def test_tx_worker_create_distribution_executes_via_safe_when_keys_available(monkeypatch, capsys) -> None:
+    fake_client = _FakeClientTxWorkerSafe(object())
+    monkeypatch.setattr(cli, "load_config_from_env", lambda: object())
+    monkeypatch.setattr(cli, "OracleClient", lambda _config: fake_client)
+    monkeypatch.setenv("SAFE_OWNER_ADDRESS", "0x00000000000000000000000000000000000000aa")
+    monkeypatch.setenv("SAFE_OWNER_KEYS_FILE", "/tmp/safe-owners.json")
+
+    from src.core.config import get_settings
+
+    from src.services import blockchain as blockchain_mod
+
+    get_settings.cache_clear()
+
+    monkeypatch.setattr(
+        blockchain_mod,
+        "build_create_distribution_safe_tx",
+        lambda **_: {
+            "to_address": "0x00000000000000000000000000000000000000bb",
+            "data": "0x1234",
+            "value_wei": "0",
+            "operation": 0,
+            "safe_owner_address": "0x00000000000000000000000000000000000000aa",
+        },
+    )
+    monkeypatch.setattr(blockchain_mod, "submit_safe_transaction", lambda **_: "0x" + "d" * 64)
+
+    exit_code = cli.run(["tx-worker", "--max-tasks", "5", "--json"])
+    get_settings.cache_clear()
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = json.loads(captured.out.strip())
+    assert payload["status"] == "pending"
+    assert payload["processed"][0]["status"] == "succeeded"
+    assert payload["processed"][0]["mode"] == "safe_exec"
+    assert len(fake_client.record_payloads) == 1
+    assert fake_client.complete_payloads[0]["status"] == "succeeded"
