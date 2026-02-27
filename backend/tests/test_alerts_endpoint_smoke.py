@@ -16,6 +16,7 @@ if str(BACKEND_DIR) not in sys.path:
 from src.core.config import get_settings
 from src.core.database import Base, get_db
 from src.main import app
+from src.api.v1 import alerts as alerts_api
 
 import src.models  # noqa: F401
 from src.models.git_outbox import GitOutbox
@@ -51,6 +52,75 @@ def test_alerts_endpoint_returns_envelope() -> None:
         assert isinstance(payload["data"]["items"], list)
     finally:
         app.dependency_overrides.clear()
+
+
+def test_alerts_warn_when_safe_owner_address_missing(monkeypatch) -> None:
+    monkeypatch.delenv("SAFE_OWNER_ADDRESS", raising=False)
+    get_settings.cache_clear()
+
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+
+    def _override_get_db():
+        db: Session = session_local()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = _override_get_db
+    client = TestClient(app, raise_server_exceptions=False)
+    try:
+        resp = client.get("/api/v1/alerts")
+        assert resp.status_code == 200
+        alert_types = [str(x.get("alert_type")) for x in resp.json()["data"]["items"] if isinstance(x, dict)]
+        assert "safe_owner_address_missing" in alert_types
+    finally:
+        app.dependency_overrides.clear()
+        get_settings.cache_clear()
+
+
+def test_alerts_warn_when_dividend_distributor_owner_mismatches_safe(monkeypatch) -> None:
+    monkeypatch.setenv("SAFE_OWNER_ADDRESS", "0x00000000000000000000000000000000000000aa")
+    get_settings.cache_clear()
+    monkeypatch.setattr(
+        alerts_api,
+        "_fetch_dividend_distributor_owner",
+        lambda _settings: ("0x00000000000000000000000000000000000000bb", None),
+    )
+
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+
+    def _override_get_db():
+        db: Session = session_local()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = _override_get_db
+    client = TestClient(app, raise_server_exceptions=False)
+    try:
+        resp = client.get("/api/v1/alerts")
+        assert resp.status_code == 200
+        items = [x for x in resp.json()["data"]["items"] if isinstance(x, dict)]
+        mismatches = [x for x in items if str(x.get("alert_type")) == "dividend_distributor_safe_owner_mismatch"]
+        assert len(mismatches) == 1
+        assert mismatches[0]["data"]["current_owner"].endswith("00bb")
+    finally:
+        app.dependency_overrides.clear()
+        get_settings.cache_clear()
 
 
 def test_alerts_skip_profit_deposit_missing_when_tx_outbox_disabled(monkeypatch) -> None:
