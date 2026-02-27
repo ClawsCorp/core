@@ -100,8 +100,20 @@ jobs:
           echo "Missing required repository secret: ORACLE_HMAC_SECRET" >&2
           exit 1
 
+      - name: Resolve optional Railway secret
+        if: steps.secret.outputs.missing != 'true'
+        id: railway_secret
+        env:
+          RAILWAY_WORKSPACE_TOKEN: ${{ secrets.RAILWAY_WORKSPACE_TOKEN }}
+        run: |
+          if [ -z "${RAILWAY_WORKSPACE_TOKEN}" ]; then
+            echo "missing=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "missing=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run Railway service health check
-        if: steps.secret.outputs.missing != 'true' && secrets.RAILWAY_WORKSPACE_TOKEN != ''
+        if: steps.secret.outputs.missing != 'true' && steps.railway_secret.outputs.missing != 'true'
         env:
           RAILWAY_WORKSPACE_TOKEN: ${{ secrets.RAILWAY_WORKSPACE_TOKEN }}
         run: |
@@ -112,7 +124,7 @@ jobs:
           cat railway_health_report.json
 
       - name: Mark Railway health as skipped when secret is absent
-        if: steps.secret.outputs.missing != 'true' && secrets.RAILWAY_WORKSPACE_TOKEN == ''
+        if: steps.secret.outputs.missing != 'true' && steps.railway_secret.outputs.missing == 'true'
         run: |
           cat > railway_health_report.json <<'JSON'
           {
