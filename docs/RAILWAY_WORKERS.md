@@ -72,7 +72,12 @@ This repo supports running autonomy as multiple Railway services from the same G
   - `AUTONOMY_LOOP_SLEEP_SECONDS` (default `300`, recommended for Hobby plan / low traffic)
   - `ORACLE_AUTO_MONTH=YYYYMM` (only for deterministic override; normally unset)
 - Recommended low-noise start command:
-  - `--sync-project-capital --reconcile-projects --run-month`
+  - `--sync-project-capital --reconcile-projects --run-month --prune-operational-tables`
+- Pruning defaults:
+  - audit logs: keep 7 days
+  - oracle nonces: keep 1 day
+  - reconciliation snapshots: keep 3 days
+  - prune cadence: every 6 hours
 - Add `--billing-sync`, `--reconcile-project-revenue`, or `--marketing-deposit` only when those flows are actively needed.
 
 ## Recommended Setup Order
