@@ -395,7 +395,7 @@ def build_parser() -> argparse.ArgumentParser:
     tx_worker.add_argument("--worker-id", default="oracle_runner")
     tx_worker.add_argument("--max-tasks", type=int, default=1)
     tx_worker.add_argument("--loop", action="store_true", help="Run continuously until interrupted.")
-    tx_worker.add_argument("--sleep-seconds", type=int, default=5, help="Sleep time between loop iterations when idle.")
+    tx_worker.add_argument("--sleep-seconds", type=int, default=30, help="Sleep time between loop iterations when idle.")
     tx_worker.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
 
     git_worker = subparsers.add_parser(
@@ -423,7 +423,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Continuously run sync + reconciliation + month orchestration (no human operator).",
     )
     autonomy_loop.add_argument("--loop", action="store_true", help="Run continuously until interrupted.")
-    autonomy_loop.add_argument("--sleep-seconds", type=int, default=60, help="Sleep time between loop iterations.")
+    autonomy_loop.add_argument("--sleep-seconds", type=int, default=300, help="Sleep time between loop iterations.")
     autonomy_loop.add_argument(
         "--month",
         default="auto",

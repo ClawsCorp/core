@@ -21,7 +21,6 @@ This repo supports running autonomy as multiple Railway services from the same G
 - Purpose: continuously run automation calls:
   - sync observed transfers into ledgers
   - refresh project reconciliations
-  - settle accrued marketing reserve (`marketing-deposit`)
   - run platform month orchestration (`run-month auto`)
 
 ## Required Environment Variables
@@ -62,7 +61,7 @@ This repo supports running autonomy as multiple Railway services from the same G
 - `ORACLE_SIGNER_PRIVATE_KEY`
 - Optional:
   - `TX_WORKER_MAX_TASKS` (default `10`)
-  - `TX_WORKER_SLEEP_SECONDS` (default `5`)
+  - `TX_WORKER_SLEEP_SECONDS` (default `30`, recommended for idle-safe polling)
   - `CONTRACTS_DIR=/app/contracts` (default)
 - Handles tx outbox types: `deposit_profit`, `deposit_marketing_fee`, `create_distribution`, `execute_distribution`.
 
@@ -70,9 +69,11 @@ This repo supports running autonomy as multiple Railway services from the same G
 - `ORACLE_BASE_URL`
 - `ORACLE_HMAC_SECRET`
 - Optional:
-  - `AUTONOMY_LOOP_SLEEP_SECONDS` (default `60`)
+  - `AUTONOMY_LOOP_SLEEP_SECONDS` (default `300`, recommended for Hobby plan / low traffic)
   - `ORACLE_AUTO_MONTH=YYYYMM` (only for deterministic override; normally unset)
-- Start command should include: `--sync-project-capital --billing-sync --reconcile-projects --reconcile-project-revenue --marketing-deposit --run-month`
+- Recommended low-noise start command:
+  - `--sync-project-capital --reconcile-projects --run-month`
+- Add `--billing-sync`, `--reconcile-project-revenue`, or `--marketing-deposit` only when those flows are actively needed.
 
 ## Recommended Setup Order
 
