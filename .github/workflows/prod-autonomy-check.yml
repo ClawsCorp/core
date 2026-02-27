@@ -66,15 +66,14 @@ jobs:
         run: |
           if [ -z "${ORACLE_HMAC_SECRET}" ]; then
             echo "missing=true" >> "$GITHUB_OUTPUT"
-            cat > prod_preflight_report.json <<'JSON'
-            {
-              "success": false,
-              "meta": {
-                "reason": "missing_oracle_hmac_secret"
-              },
-              "checks": []
-            }
-            JSON
+            printf '%s\n' \
+              '{' \
+              '  "success": false,' \
+              '  "meta": {' \
+              '    "reason": "missing_oracle_hmac_secret"' \
+              '  },' \
+              '  "checks": []' \
+              '}' > prod_preflight_report.json
           else
             echo "missing=false" >> "$GITHUB_OUTPUT"
           fi
@@ -126,13 +125,12 @@ jobs:
       - name: Mark Railway health as skipped when secret is absent
         if: steps.secret.outputs.missing != 'true' && steps.railway_secret.outputs.missing == 'true'
         run: |
-          cat > railway_health_report.json <<'JSON'
-          {
-            "success": true,
-            "skipped": true,
-            "reason": "missing_railway_workspace_token_secret"
-          }
-          JSON
+          printf '%s\n' \
+            '{' \
+            '  "success": true,' \
+            '  "skipped": true,' \
+            '  "reason": "missing_railway_workspace_token_secret"' \
+            '}' > railway_health_report.json
 
       - name: Upload preflight artifact
         uses: actions/upload-artifact@v4
