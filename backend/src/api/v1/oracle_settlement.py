@@ -682,6 +682,45 @@ def create_distribution(
             .first()
         )
         if existing_task is not None:
+            if existing_task.status == "blocked":
+                _record_oracle_audit(request, db, idempotency_key=idempotency_key)
+                return DistributionCreateResponse(
+                    success=False,
+                    data={
+                        "profit_month_id": profit_month_id,
+                        "status": "blocked",
+                        "tx_hash": existing_task.tx_hash,
+                        "blocked_reason": existing_task.last_error_hint or "tx_blocked",
+                        "idempotency_key": idempotency_key,
+                        "task_id": existing_task.task_id,
+                    },
+                )
+            if existing_task.status == "failed":
+                _record_oracle_audit(request, db, idempotency_key=idempotency_key)
+                return DistributionCreateResponse(
+                    success=False,
+                    data={
+                        "profit_month_id": profit_month_id,
+                        "status": "blocked",
+                        "tx_hash": existing_task.tx_hash,
+                        "blocked_reason": existing_task.last_error_hint or "tx_failed",
+                        "idempotency_key": idempotency_key,
+                        "task_id": existing_task.task_id,
+                    },
+                )
+            if existing_task.status == "succeeded":
+                _record_oracle_audit(request, db, idempotency_key=idempotency_key, tx_hash=existing_task.tx_hash)
+                return DistributionCreateResponse(
+                    success=True,
+                    data={
+                        "profit_month_id": profit_month_id,
+                        "status": "submitted",
+                        "tx_hash": existing_task.tx_hash,
+                        "blocked_reason": None,
+                        "idempotency_key": idempotency_key,
+                        "task_id": existing_task.task_id,
+                    },
+                )
             _record_oracle_audit(request, db, idempotency_key=idempotency_key)
             return DistributionCreateResponse(
                 success=True,
@@ -717,6 +756,20 @@ def create_distribution(
                 "blocked_reason": None,
                 "idempotency_key": idempotency_key,
                 "task_id": task.task_id,
+                },
+            )
+
+    if (settings.safe_owner_address or "").strip():
+        _record_oracle_audit(request, db, idempotency_key=idempotency_key)
+        return DistributionCreateResponse(
+            success=False,
+            data={
+                "profit_month_id": profit_month_id,
+                "status": "blocked",
+                "tx_hash": None,
+                "blocked_reason": "safe_execution_required",
+                "idempotency_key": idempotency_key,
+                "task_id": None,
             },
         )
 
@@ -1154,6 +1207,45 @@ def execute_distribution(
             .first()
         )
         if existing_task is not None:
+            if existing_task.status == "blocked":
+                _record_oracle_audit(request, db, idempotency_key=idempotency_key)
+                return DistributionExecuteResponse(
+                    success=False,
+                    data={
+                        "profit_month_id": profit_month_id,
+                        "status": "blocked",
+                        "tx_hash": existing_task.tx_hash,
+                        "blocked_reason": existing_task.last_error_hint or "tx_blocked",
+                        "idempotency_key": idempotency_key,
+                        "task_id": existing_task.task_id,
+                    },
+                )
+            if existing_task.status == "failed":
+                _record_oracle_audit(request, db, idempotency_key=idempotency_key)
+                return DistributionExecuteResponse(
+                    success=False,
+                    data={
+                        "profit_month_id": profit_month_id,
+                        "status": "blocked",
+                        "tx_hash": existing_task.tx_hash,
+                        "blocked_reason": existing_task.last_error_hint or "tx_failed",
+                        "idempotency_key": idempotency_key,
+                        "task_id": existing_task.task_id,
+                    },
+                )
+            if existing_task.status == "succeeded":
+                _record_oracle_audit(request, db, idempotency_key=idempotency_key, tx_hash=existing_task.tx_hash)
+                return DistributionExecuteResponse(
+                    success=True,
+                    data={
+                        "profit_month_id": profit_month_id,
+                        "status": "submitted",
+                        "tx_hash": existing_task.tx_hash,
+                        "blocked_reason": None,
+                        "idempotency_key": idempotency_key,
+                        "task_id": existing_task.task_id,
+                    },
+                )
             _record_oracle_audit(request, db, idempotency_key=idempotency_key)
             return DistributionExecuteResponse(
                 success=True,
@@ -1195,7 +1287,16 @@ def execute_distribution(
                 "blocked_reason": None,
                 "idempotency_key": idempotency_key,
                 "task_id": task.task_id,
-            },
+                },
+            )
+
+    if (settings.safe_owner_address or "").strip():
+        return _record_blocked_execution(
+            request,
+            db,
+            profit_month_id=profit_month_id,
+            idempotency_key=idempotency_key,
+            blocked_reason="safe_execution_required",
         )
 
     try:

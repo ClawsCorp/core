@@ -324,3 +324,52 @@ def test_tx_outbox_complete_pending_requeues_and_clears_tx_state(_client: TestCl
         assert row.tx_hash is None
         assert row.locked_at is None
         assert row.locked_by is None
+
+
+def test_tx_outbox_complete_blocked_finalizes_task(_client: TestClient, _db: sessionmaker[Session]) -> None:
+    enqueue_path = "/api/v1/oracle/tx-outbox"
+    enqueue_body = json.dumps(
+        {"task_type": "create_distribution", "payload": {"x": 1}, "idempotency_key": "idem-blocked-1"},
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    resp = _client.post(
+        enqueue_path,
+        content=enqueue_body,
+        headers=_oracle_headers(enqueue_path, enqueue_body, "req-enq-blocked", idem="idem-enq-blocked"),
+    )
+    assert resp.status_code == 200
+    task_id = resp.json()["data"]["task_id"]
+
+    claim_path = f"/api/v1/oracle/tx-outbox/{task_id}/claim"
+    claim_body = json.dumps({"worker_id": "w-blocked"}, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    resp = _client.post(
+        claim_path,
+        content=claim_body,
+        headers=_oracle_headers(claim_path, claim_body, "req-claim-blocked", idem="idem-claim-blocked"),
+    )
+    assert resp.status_code == 200
+
+    complete_path = f"/api/v1/oracle/tx-outbox/{task_id}/complete"
+    complete_body = json.dumps(
+        {
+            "status": "blocked",
+            "error_hint": "safe_execution_required",
+            "result": {"stage": "safe_execution_required"},
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    resp = _client.post(
+        complete_path,
+        content=complete_body,
+        headers=_oracle_headers(complete_path, complete_body, "req-comp-blocked", idem="idem-comp-blocked"),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["data"]["status"] == "blocked"
+    assert resp.json()["data"]["last_error_hint"] == "safe_execution_required"
+
+    with _db() as db:
+        row = db.query(TxOutbox).filter(TxOutbox.task_id == task_id).first()
+        assert row is not None
+        assert row.status == "blocked"

@@ -266,8 +266,8 @@ async def complete_task(
     if row.status not in {"processing", "pending"}:
         raise HTTPException(status_code=409, detail="Task is already finalized")
 
-    if payload.status not in {"succeeded", "failed", "pending"}:
-        raise HTTPException(status_code=400, detail="status must be succeeded|failed|pending")
+    if payload.status not in {"succeeded", "failed", "pending", "blocked"}:
+        raise HTTPException(status_code=400, detail="status must be succeeded|failed|pending|blocked")
 
     row.status = payload.status
     row.last_error_hint = payload.error_hint

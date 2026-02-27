@@ -580,6 +580,31 @@ def get_alerts(response: Response, db: Session = Depends(get_db)) -> AlertsRespo
             )
         )
 
+    blocked_tasks = (
+        db.query(TxOutbox)
+        .filter(TxOutbox.status == "blocked")
+        .order_by(TxOutbox.updated_at.desc(), TxOutbox.id.desc())
+        .limit(25)
+        .all()
+    )
+    for t in blocked_tasks:
+        task_updated_at = _as_aware_utc(t.updated_at) or now
+        items.append(
+            AlertItem(
+                alert_type="tx_outbox_blocked",
+                severity="warning",
+                message="Tx outbox task is blocked and requires manual/Safe action.",
+                ref=t.task_id,
+                observed_at=now,
+                data={
+                    "task_type": t.task_type,
+                    "tx_hash": t.tx_hash,
+                    "last_error_hint": t.last_error_hint,
+                    "updated_at": task_updated_at.isoformat(),
+                },
+            )
+        )
+
     # Git outbox tasks (repo automation visibility).
     git_pending = (
         db.query(GitOutbox)
