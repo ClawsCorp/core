@@ -535,6 +535,8 @@ export interface components {
     AgentGitOutboxCreateBackendArtifactRequest: {
       /** Slug */
       slug: string;
+      /** Bounty Id */
+      bounty_id?: string | null;
       /** Branch Name */
       branch_name?: string | null;
       /** Commit Message */
@@ -561,6 +563,8 @@ export interface components {
     AgentGitOutboxCreateSurfaceRequest: {
       /** Slug */
       slug: string;
+      /** Bounty Id */
+      bounty_id?: string | null;
       /** Branch Name */
       branch_name?: string | null;
       /** Commit Message */

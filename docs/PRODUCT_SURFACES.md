@@ -87,6 +87,9 @@ python3 scripts/backfill_bounty_git_metadata.py --bounty-id <bounty_id> --task-i
 
 The script only updates placeholder/missing git metadata unless `--force` is passed.
 
+For all new bounty-linked git tasks, pass `bounty_id` into the git-outbox enqueue request so the task payload carries an explicit stable link to the originating bounty.
+That removes the need to guess from title text or task type when resolving git proof later.
+
 Non-goals (v1):
 
 - Custom domains per project.

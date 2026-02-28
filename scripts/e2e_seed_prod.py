@@ -1144,6 +1144,7 @@ def main() -> int:
                         api_key=author["api_key"],
                         body={
                             "slug": str(project.get("slug") or ""),
+                            "bounty_id": bounty_id,
                             "surface_title": str(project.get("name") or project.get("slug") or ""),
                             "surface_tagline": "Autonomous pilot: funding, payout, and delivery verified on-chain.",
                             "surface_description": (
@@ -1177,6 +1178,7 @@ def main() -> int:
                         api_key=author["api_key"],
                         body={
                             "slug": str(project.get("slug") or ""),
+                            "bounty_id": bounty_id,
                             "artifact_title": f"{str(project.get('name') or project.get('slug') or '')} backend artifact",
                             "artifact_summary": (
                                 "Generated from the backend bounty deliverable. "

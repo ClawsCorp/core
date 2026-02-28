@@ -16,6 +16,7 @@ from src.core.database import get_db
 from src.core.git_outbox import enqueue_git_outbox_task
 from src.core.security import hash_body
 from src.models.agent import Agent
+from src.models.bounty import Bounty
 from src.models.git_outbox import GitOutbox
 from src.models.project import Project
 from src.models.project_member import ProjectMember
@@ -37,6 +38,17 @@ def _find_project_by_identifier(db: Session, identifier: str) -> Project | None:
     if identifier.isdigit():
         return db.query(Project).filter(Project.id == int(identifier)).first()
     return db.query(Project).filter(Project.project_id == identifier).first()
+
+
+def _find_bounty_by_identifier(db: Session, identifier: str) -> Bounty | None:
+    candidate = str(identifier or "").strip()
+    if not candidate:
+        return None
+    if candidate.isdigit():
+        row = db.query(Bounty).filter(Bounty.id == int(candidate)).first()
+        if row is not None:
+            return row
+    return db.query(Bounty).filter(Bounty.bounty_id == candidate).first()
 
 
 def _agent_can_access_project(db: Session, project: Project, agent: Agent) -> bool:
@@ -75,6 +87,18 @@ def _safe_cta_href(value: str | None) -> str | None:
     if trimmed.startswith("/") or trimmed.startswith("http://") or trimmed.startswith("https://"):
         return trimmed[:512]
     raise HTTPException(status_code=400, detail="invalid_cta_href")
+
+
+def _validated_bounty_link(db: Session, project: Project, bounty_id: str | None) -> str | None:
+    candidate = str(bounty_id or "").strip()
+    if not candidate:
+        return None
+    bounty = _find_bounty_by_identifier(db, candidate)
+    if bounty is None:
+        raise HTTPException(status_code=404, detail="Bounty not found")
+    if bounty.project_id != project.id:
+        raise HTTPException(status_code=400, detail="bounty_project_mismatch")
+    return bounty.bounty_id
 
 
 def _default_pr_title(project: Project, slug: str) -> str:
@@ -175,11 +199,14 @@ async def enqueue_project_surface_commit(
         raise HTTPException(status_code=403, detail="project_access_denied")
 
     slug = _validate_slug(payload.slug)
+    bounty_id = _validated_bounty_link(db, project, payload.bounty_id)
     deterministic_seed = f"surface_commit:{project.project_id}:{agent.agent_id}:{slug}"
     deterministic_idempotency_key = f"surface_commit:{hashlib.sha256(deterministic_seed.encode('utf-8')).hexdigest()}"
     idempotency_key = request.headers.get("Idempotency-Key") or payload.idempotency_key or deterministic_idempotency_key
 
-    worker_payload: dict[str, str] = {"slug": slug}
+    worker_payload: dict[str, object] = {"slug": slug}
+    if bounty_id:
+        worker_payload["bounty_id"] = bounty_id
     if payload.branch_name:
         worker_payload["branch_name"] = payload.branch_name.strip()
     if payload.commit_message:
@@ -249,6 +276,7 @@ async def enqueue_project_backend_artifact_commit(
         raise HTTPException(status_code=403, detail="project_access_denied")
 
     slug = _validate_slug(payload.slug)
+    bounty_id = _validated_bounty_link(db, project, payload.bounty_id)
     deterministic_seed = f"backend_artifact:{project.project_id}:{agent.agent_id}:{slug}"
     deterministic_idempotency_key = (
         f"backend_artifact:{hashlib.sha256(deterministic_seed.encode('utf-8')).hexdigest()}"
@@ -263,6 +291,8 @@ async def enqueue_project_backend_artifact_commit(
         endpoint_paths.append(candidate[:200])
 
     worker_payload: dict[str, object] = {"slug": slug, "endpoint_paths": endpoint_paths}
+    if bounty_id:
+        worker_payload["bounty_id"] = bounty_id
     if payload.branch_name:
         worker_payload["branch_name"] = payload.branch_name.strip()
     if payload.commit_message:

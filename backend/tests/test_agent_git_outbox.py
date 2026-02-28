@@ -20,6 +20,7 @@ from src.main import app
 
 import src.models  # noqa: F401
 from src.models.agent import Agent
+from src.models.bounty import Bounty, BountyFundingSource, BountyStatus
 from src.models.project import Project, ProjectStatus
 
 
@@ -264,3 +265,138 @@ def test_agent_can_enqueue_backend_artifact_git_task(_client: TestClient, _db: s
     assert task["payload"]["open_pr"] is False
     assert task["payload"]["endpoint_paths"] == ["/api/v1/projects/prj_git_4", "/api/v1/projects/prj_git_4/funding"]
     assert "Checklist" in str(task["payload"]["pr_body"])
+
+
+def test_agent_git_outbox_persists_explicit_bounty_link(_client: TestClient, _db: sessionmaker[Session]) -> None:
+    owner_key = _register_agent(_client, name="Owner Five")
+    with _db() as db:
+        owner = db.query(Agent).filter(Agent.agent_id == owner_key.split(".")[0]).first()
+        assert owner is not None
+        project = Project(
+            project_id="prj_git_5",
+            slug="git-5",
+            name="Orbit Journal",
+            description_md=None,
+            status=ProjectStatus.active,
+            proposal_id=None,
+            origin_proposal_id=None,
+            originator_agent_id=owner.id,
+            discussion_thread_id=None,
+            treasury_wallet_address=None,
+            treasury_address=None,
+            revenue_wallet_address=None,
+            revenue_address=None,
+            monthly_budget_micro_usdc=None,
+            created_by_agent_id=owner.id,
+            approved_at=None,
+        )
+        db.add(project)
+        db.flush()
+        bounty = Bounty(
+            bounty_id="bty_git_5",
+            idempotency_key=None,
+            project_id=project.id,
+            origin_proposal_id=None,
+            origin_milestone_id=None,
+            funding_source=BountyFundingSource.project_capital,
+            title="Frontend surface",
+            description_md=None,
+            amount_micro_usdc=1000,
+            priority=None,
+            deadline_at=None,
+            status=BountyStatus.claimed,
+            claimant_agent_id=owner.id,
+            claimed_at=None,
+            submitted_at=None,
+            pr_url=None,
+            merge_sha=None,
+            paid_tx_hash=None,
+        )
+        db.add(bounty)
+        db.commit()
+
+    enqueue = _client.post(
+        "/api/v1/agent/projects/prj_git_5/git-outbox/surface-commit",
+        headers={"Content-Type": "application/json", "X-API-Key": owner_key},
+        json={"slug": "orbit-journal", "bounty_id": "bty_git_5", "open_pr": False},
+    )
+    assert enqueue.status_code == 200
+    payload = enqueue.json()["data"]["payload"]
+    assert payload["bounty_id"] == "bty_git_5"
+
+
+def test_agent_git_outbox_rejects_bounty_from_other_project(_client: TestClient, _db: sessionmaker[Session]) -> None:
+    owner_key = _register_agent(_client, name="Owner Six")
+    with _db() as db:
+        owner = db.query(Agent).filter(Agent.agent_id == owner_key.split(".")[0]).first()
+        assert owner is not None
+        project_a = Project(
+            project_id="prj_git_6a",
+            slug="git-6a",
+            name="North Desk",
+            description_md=None,
+            status=ProjectStatus.active,
+            proposal_id=None,
+            origin_proposal_id=None,
+            originator_agent_id=owner.id,
+            discussion_thread_id=None,
+            treasury_wallet_address=None,
+            treasury_address=None,
+            revenue_wallet_address=None,
+            revenue_address=None,
+            monthly_budget_micro_usdc=None,
+            created_by_agent_id=owner.id,
+            approved_at=None,
+        )
+        project_b = Project(
+            project_id="prj_git_6b",
+            slug="git-6b",
+            name="South Desk",
+            description_md=None,
+            status=ProjectStatus.active,
+            proposal_id=None,
+            origin_proposal_id=None,
+            originator_agent_id=owner.id,
+            discussion_thread_id=None,
+            treasury_wallet_address=None,
+            treasury_address=None,
+            revenue_wallet_address=None,
+            revenue_address=None,
+            monthly_budget_micro_usdc=None,
+            created_by_agent_id=owner.id,
+            approved_at=None,
+        )
+        db.add(project_a)
+        db.add(project_b)
+        db.flush()
+        db.add(
+            Bounty(
+                bounty_id="bty_git_6",
+                idempotency_key=None,
+                project_id=project_b.id,
+                origin_proposal_id=None,
+                origin_milestone_id=None,
+                funding_source=BountyFundingSource.project_capital,
+                title="Backend artifact",
+                description_md=None,
+                amount_micro_usdc=1000,
+                priority=None,
+                deadline_at=None,
+                status=BountyStatus.claimed,
+                claimant_agent_id=owner.id,
+                claimed_at=None,
+                submitted_at=None,
+                pr_url=None,
+                merge_sha=None,
+                paid_tx_hash=None,
+            )
+        )
+        db.commit()
+
+    enqueue = _client.post(
+        "/api/v1/agent/projects/prj_git_6a/git-outbox/backend-artifact-commit",
+        headers={"Content-Type": "application/json", "X-API-Key": owner_key},
+        json={"slug": "north-desk", "bounty_id": "bty_git_6", "open_pr": False},
+    )
+    assert enqueue.status_code == 400
+    assert "bounty_project_mismatch" in enqueue.text

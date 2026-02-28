@@ -85,6 +85,7 @@ class GitOutboxUpdateRequest(BaseModel):
 
 class AgentGitOutboxCreateSurfaceRequest(BaseModel):
     slug: str = Field(..., min_length=1, max_length=64)
+    bounty_id: str | None = Field(default=None, min_length=1, max_length=64)
     branch_name: str | None = Field(default=None, min_length=1, max_length=128)
     commit_message: str | None = Field(default=None, min_length=1, max_length=200)
     surface_title: str | None = Field(default=None, min_length=1, max_length=120)
@@ -100,6 +101,7 @@ class AgentGitOutboxCreateSurfaceRequest(BaseModel):
 
 class AgentGitOutboxCreateBackendArtifactRequest(BaseModel):
     slug: str = Field(..., min_length=1, max_length=64)
+    bounty_id: str | None = Field(default=None, min_length=1, max_length=64)
     branch_name: str | None = Field(default=None, min_length=1, max_length=128)
     commit_message: str | None = Field(default=None, min_length=1, max_length=200)
     artifact_title: str | None = Field(default=None, min_length=1, max_length=160)
