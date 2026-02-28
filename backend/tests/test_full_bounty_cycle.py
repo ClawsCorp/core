@@ -30,6 +30,7 @@ from src.models.expense_event import ExpenseEvent
 from src.models.project import Project, ProjectStatus
 from src.models.project_capital_event import ProjectCapitalEvent
 from src.models.project_capital_reconciliation_report import ProjectCapitalReconciliationReport
+from src.models.project_update import ProjectUpdate
 
 ORACLE_SECRET = "test-oracle-secret"
 
@@ -253,4 +254,10 @@ def test_full_bounty_cycle_happy_path_with_reconciliation_gate(
         assert db.query(ExpenseEvent).count() == 1
         # capital outflow is appended on mark-paid for project_capital funded bounties.
         assert db.query(ProjectCapitalEvent).filter(ProjectCapitalEvent.delta_micro_usdc < 0).count() == 1
-
+        update = (
+            db.query(ProjectUpdate)
+            .filter(ProjectUpdate.source_kind == "bounty_paid", ProjectUpdate.source_ref == bounty_id)
+            .first()
+        )
+        assert update is not None
+        assert update.update_type == "expense"

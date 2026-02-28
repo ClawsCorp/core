@@ -152,6 +152,7 @@ Current automatic sources include:
 - delivery receipt publication
 - funding round open / close
 - project capital inflow (manual + sync)
+- project expense events (oracle expense + bounty payout)
 - domain add / verify
 - crypto invoice creation
 - crypto invoice paid confirmation
