@@ -1141,7 +1141,7 @@ def main() -> int:
                     task_resp = _agent_post(
                         oracle_base_url,
                         f"/api/v1/agent/projects/{project_id}/git-outbox/surface-commit",
-                        api_key=claimant["api_key"],
+                        api_key=author["api_key"],
                         body={
                             "slug": str(project.get("slug") or ""),
                             "surface_title": str(project.get("name") or project.get("slug") or ""),
@@ -1174,7 +1174,7 @@ def main() -> int:
                     task_resp = _agent_post(
                         oracle_base_url,
                         f"/api/v1/agent/projects/{project_id}/git-outbox/backend-artifact-commit",
-                        api_key=claimant["api_key"],
+                        api_key=author["api_key"],
                         body={
                             "slug": str(project.get("slug") or ""),
                             "artifact_title": f"{str(project.get('name') or project.get('slug') or '')} backend artifact",
