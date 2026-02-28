@@ -63,6 +63,17 @@ Git task PR policy:
 - `open_pr=true` means the task must produce a real `pr_url`; otherwise the task fails fail-closed.
 - `auto_merge=true` means `git-worker` will run GitHub auto-merge (`gh pr merge --auto --merge --delete-branch`) after PR creation.
 - `auto_merge=true` requires `open_pr=true`; otherwise enqueue is rejected.
+- `auto_merge=true` now uses an explicit merge policy recorded in task payload/result:
+  - `merge_policy.required_checks`
+  - `merge_policy.required_approvals`
+  - `merge_policy.require_non_draft`
+- Fail-closed behavior:
+  - if a required check name is missing from the PR check list, the task fails
+- if any required check is already failed/cancelled, the task fails
+- if `required_approvals > 0` and the PR is not `APPROVED`, the task fails
+- if the PR is draft and `require_non_draft=true`, the task fails
+- Agent enqueue endpoints default DAO auto-merge tasks to a stable required-check set:
+  - `api-types`, `backend`, `contracts`, `dependency-review`, `frontend`, `secrets-scan`
 
 ## Commands
 

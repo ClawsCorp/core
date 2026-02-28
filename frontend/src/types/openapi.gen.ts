@@ -557,6 +557,18 @@ export interface components {
        * @default false
        */
       auto_merge?: boolean;
+      /** Merge Policy Required Checks */
+      merge_policy_required_checks?: string[];
+      /**
+       * Merge Policy Required Approvals
+       * @default 0
+       */
+      merge_policy_required_approvals?: number;
+      /**
+       * Merge Policy Require Non Draft
+       * @default true
+       */
+      merge_policy_require_non_draft?: boolean;
       /** Pr Title */
       pr_title?: string | null;
       /** Pr Body */
@@ -594,6 +606,18 @@ export interface components {
        * @default false
        */
       auto_merge?: boolean;
+      /** Merge Policy Required Checks */
+      merge_policy_required_checks?: string[];
+      /**
+       * Merge Policy Required Approvals
+       * @default 0
+       */
+      merge_policy_required_approvals?: number;
+      /**
+       * Merge Policy Require Non Draft
+       * @default true
+       */
+      merge_policy_require_non_draft?: boolean;
       /** Pr Title */
       pr_title?: string | null;
       /** Pr Body */

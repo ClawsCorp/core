@@ -32,6 +32,14 @@ from src.schemas.git_outbox import (
 router = APIRouter(prefix="/api/v1/agent/projects", tags=["agent-projects", "git-outbox"])
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+_DEFAULT_DAO_PR_CHECKS = [
+    "api-types",
+    "backend",
+    "contracts",
+    "dependency-review",
+    "frontend",
+    "secrets-scan",
+]
 
 
 def _find_project_by_identifier(db: Session, identifier: str) -> Project | None:
@@ -99,6 +107,28 @@ def _validated_bounty_link(db: Session, project: Project, bounty_id: str | None)
     if bounty.project_id != project.id:
         raise HTTPException(status_code=400, detail="bounty_project_mismatch")
     return bounty.bounty_id
+
+
+def _build_merge_policy(
+    *,
+    auto_merge: bool,
+    required_checks: list[str],
+    required_approvals: int,
+    require_non_draft: bool,
+) -> dict[str, object]:
+    checks: list[str] = []
+    for item in required_checks:
+        candidate = str(item or "").strip()
+        if not candidate:
+            continue
+        checks.append(candidate[:120])
+    if auto_merge and not checks:
+        checks = list(_DEFAULT_DAO_PR_CHECKS)
+    return {
+        "required_checks": checks,
+        "required_approvals": max(0, int(required_approvals)),
+        "require_non_draft": bool(require_non_draft),
+    }
 
 
 def _default_pr_title(project: Project, slug: str) -> str:
@@ -230,6 +260,12 @@ async def enqueue_project_surface_commit(
     if payload.auto_merge and not payload.open_pr:
         raise HTTPException(status_code=400, detail="auto_merge_requires_open_pr")
     worker_payload["auto_merge"] = bool(payload.auto_merge)
+    worker_payload["merge_policy"] = _build_merge_policy(
+        auto_merge=bool(payload.auto_merge),
+        required_checks=payload.merge_policy_required_checks,
+        required_approvals=payload.merge_policy_required_approvals,
+        require_non_draft=payload.merge_policy_require_non_draft,
+    )
     worker_payload["pr_title"] = (payload.pr_title.strip() if payload.pr_title else _default_pr_title(project, slug))
     worker_payload["pr_body"] = (
         payload.pr_body.strip() if payload.pr_body else _default_pr_body(project, slug, idempotency_key)
@@ -310,6 +346,12 @@ async def enqueue_project_backend_artifact_commit(
     if payload.auto_merge and not payload.open_pr:
         raise HTTPException(status_code=400, detail="auto_merge_requires_open_pr")
     worker_payload["auto_merge"] = bool(payload.auto_merge)
+    worker_payload["merge_policy"] = _build_merge_policy(
+        auto_merge=bool(payload.auto_merge),
+        required_checks=payload.merge_policy_required_checks,
+        required_approvals=payload.merge_policy_required_approvals,
+        require_non_draft=payload.merge_policy_require_non_draft,
+    )
     worker_payload["pr_title"] = (
         payload.pr_title.strip() if payload.pr_title else _default_backend_pr_title(project, slug)
     )
