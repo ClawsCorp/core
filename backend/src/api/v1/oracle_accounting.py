@@ -14,6 +14,7 @@ from src.core.database import get_db
 from src.models.expense_event import ExpenseEvent
 from src.models.project import Project
 from src.services.marketing_fee import accrue_marketing_fee_event, build_marketing_fee_idempotency_key
+from src.services.project_revenue import REVENUE_OUTFLOW_CATEGORIES
 from src.services.project_spend_policy import check_spend_allowed
 from src.services.project_updates import create_project_update_row, build_project_update_idempotency_key
 from src.models.revenue_event import RevenueEvent
@@ -130,6 +131,7 @@ async def create_expense_event(
         )
         db.add(event)
         if project is not None:
+            is_revenue_outflow = payload.category in REVENUE_OUTFLOW_CATEGORIES
             create_project_update_row(
                 db,
                 project=project,
@@ -139,11 +141,11 @@ async def create_expense_event(
                     f"Expense `{payload.category}` was recorded for {int(payload.amount_micro_usdc)} micro-USDC"
                     f" in month `{payload.profit_month_id}`."
                 ),
-                update_type="expense",
-                source_kind="oracle_expense_event",
+                update_type="revenue" if is_revenue_outflow else "expense",
+                source_kind="revenue_outflow" if is_revenue_outflow else "oracle_expense_event",
                 source_ref=payload.idempotency_key,
                 idempotency_key=build_project_update_idempotency_key(
-                    prefix="project_update:oracle_expense",
+                    prefix="project_update:revenue_outflow" if is_revenue_outflow else "project_update:oracle_expense",
                     source_idempotency_key=payload.idempotency_key,
                 ),
             )

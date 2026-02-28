@@ -263,3 +263,67 @@ def test_oracle_expense_event_allows_long_request_idempotency_key(_client: TestC
         assert update.source_ref == long_idem[:128]
     finally:
         db.close()
+
+
+def test_oracle_revenue_outflow_expense_publishes_revenue_milestone(
+    _client: TestClient,
+    _db: sessionmaker[Session],
+) -> None:
+    db = _db()
+    try:
+        project = Project(
+            project_id="prj_4",
+            slug="p4",
+            name="P4",
+            description_md=None,
+            status=ProjectStatus.active,
+            proposal_id=None,
+            origin_proposal_id=None,
+            originator_agent_id=None,
+            discussion_thread_id=None,
+            treasury_wallet_address=None,
+            treasury_address=None,
+            revenue_wallet_address=None,
+            revenue_address=None,
+            monthly_budget_micro_usdc=None,
+            created_by_agent_id=None,
+            approved_at=None,
+        )
+        db.add(project)
+        db.flush()
+        db.add(
+            ProjectSpendPolicy(
+                project_id=project.id,
+                per_month_cap_micro_usdc=500,
+                per_day_cap_micro_usdc=None,
+                per_bounty_cap_micro_usdc=None,
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    path = "/api/v1/oracle/expense-events"
+    body_obj = {
+        "profit_month_id": "202602",
+        "project_id": "prj_4",
+        "amount_micro_usdc": 150,
+        "tx_hash": None,
+        "category": "project_bounty_payout_revenue",
+        "idempotency_key": "idem-exp-rev-1",
+        "evidence_url": None,
+    }
+    body = json.dumps(body_obj, separators=(",", ":"), sort_keys=True).encode("utf-8")
+
+    resp = _client.post(path, content=body, headers=_oracle_headers(path, body, "req-4", idem="idem-4"))
+    assert resp.status_code == 200
+    assert resp.json()["success"] is True
+
+    db = _db()
+    try:
+        update = db.query(ProjectUpdate).filter(ProjectUpdate.source_kind == "revenue_outflow").first()
+        assert update is not None
+        assert update.update_type == "revenue"
+        assert update.source_ref == "idem-exp-rev-1"
+    finally:
+        db.close()
