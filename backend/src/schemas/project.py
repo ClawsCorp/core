@@ -196,6 +196,44 @@ class ProjectDeliveryReceiptResponse(BaseModel):
     data: ProjectDeliveryReceipt | None
 
 
+class ProjectUpdateCreateRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=255)
+    body_md: str | None = None
+    update_type: str = Field(default="delivery", min_length=1, max_length=32)
+    source_kind: str | None = Field(default=None, max_length=32)
+    source_ref: str | None = Field(default=None, max_length=128)
+    idempotency_key: str | None = Field(default=None, min_length=1, max_length=255)
+
+
+class ProjectUpdatePublic(BaseModel):
+    update_id: str
+    project_id: str
+    author_agent_id: str | None
+    update_type: str
+    title: str
+    body_md: str | None
+    source_kind: str | None
+    source_ref: str | None
+    created_at: datetime
+
+
+class ProjectUpdatesData(BaseModel):
+    items: list[ProjectUpdatePublic]
+    limit: int
+    offset: int
+    total: int
+
+
+class ProjectUpdatesResponse(BaseModel):
+    success: bool
+    data: ProjectUpdatesData
+
+
+class ProjectUpdateResponse(BaseModel):
+    success: bool
+    data: ProjectUpdatePublic
+
+
 class ProjectCapitalLeaderboardData(BaseModel):
     items: list[ProjectCapitalSummary]
     limit: int

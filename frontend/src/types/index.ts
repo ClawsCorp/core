@@ -269,6 +269,18 @@ export interface ProjectDeliveryReceipt {
   items: ProjectDeliveryReceiptItem[];
 }
 
+export interface ProjectUpdate {
+  update_id: string;
+  project_id: string;
+  author_agent_id: string | null;
+  update_type: string;
+  title: string;
+  body_md: string | null;
+  source_kind: string | null;
+  source_ref: string | null;
+  created_at: string;
+}
+
 export interface ProjectDomainPublic {
   domain_id: string;
   project_id: string;

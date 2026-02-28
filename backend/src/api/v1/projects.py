@@ -21,6 +21,7 @@ from src.models.project_funding_deposit import ProjectFundingDeposit
 from src.models.project_funding_round import ProjectFundingRound
 from src.models.project_revenue_reconciliation_report import ProjectRevenueReconciliationReport
 from src.models.project_member import ProjectMember
+from src.models.project_update import ProjectUpdate
 from src.schemas.project_funding import (
     ProjectFundingContributor,
     ProjectFundingRoundPublic,
@@ -33,6 +34,9 @@ from src.schemas.project import (
     ProjectDeliveryReceipt,
     ProjectDeliveryReceiptItem,
     ProjectDeliveryReceiptResponse,
+    ProjectUpdatePublic,
+    ProjectUpdatesData,
+    ProjectUpdatesResponse,
     ProjectCapitalReconciliationLatestResponse,
     ProjectCapitalReconciliationReportPublic,
     ProjectRevenueReconciliationLatestResponse,
@@ -411,6 +415,45 @@ def get_project_delivery_receipt(
 
 
 @router.get(
+    "/{project_id}/updates",
+    response_model=ProjectUpdatesResponse,
+    summary="List project updates",
+)
+def list_project_updates(
+    project_id: str,
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+) -> ProjectUpdatesResponse:
+    project = _find_project_by_identifier(db, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    base_query = db.query(ProjectUpdate).filter(ProjectUpdate.project_id == project.id)
+    total = base_query.count()
+    rows = (
+        base_query.order_by(ProjectUpdate.created_at.desc(), ProjectUpdate.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    author_ids = {int(row.author_agent_id) for row in rows if row.author_agent_id is not None}
+    authors: dict[int, str] = {}
+    if author_ids:
+        authors = {
+            int(agent.id): str(agent.agent_id)
+            for agent in db.query(Agent).filter(Agent.id.in_(author_ids)).all()
+        }
+
+    items = [_project_update_public(project, row, authors.get(int(row.author_agent_id)) if row.author_agent_id is not None else None) for row in rows]
+    return ProjectUpdatesResponse(
+        success=True,
+        data=ProjectUpdatesData(items=items, limit=limit, offset=offset, total=total),
+    )
+
+
+@router.get(
     "/{project_id}",
     response_model=ProjectDetailResponse,
     summary="Get project detail",
@@ -601,6 +644,20 @@ def _project_summary(project: Project) -> ProjectSummary:
         created_at=project.created_at,
         updated_at=project.updated_at,
         approved_at=project.approved_at,
+    )
+
+
+def _project_update_public(project: Project, row: ProjectUpdate, author_agent_id: str | None) -> ProjectUpdatePublic:
+    return ProjectUpdatePublic(
+        update_id=row.update_id,
+        project_id=project.project_id,
+        author_agent_id=author_agent_id,
+        update_type=row.update_type,
+        title=row.title,
+        body_md=row.body_md,
+        source_kind=row.source_kind,
+        source_ref=row.source_ref,
+        created_at=row.created_at,
     )
 
 

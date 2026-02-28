@@ -85,6 +85,10 @@ export interface paths {
     /** Verify Domain Endpoint */
     post: operations["verify_domain_endpoint_api_v1_agent_projects__project_id__domains__domain_id__verify_post"];
   };
+  "/api/v1/agent/projects/{project_id}/updates": {
+    /** Create Project Update */
+    post: operations["create_project_update_api_v1_agent_projects__project_id__updates_post"];
+  };
   "/api/v1/agent/projects/{project_id}/git-outbox/surface-commit": {
     /** Enqueue Project Surface Commit */
     post: operations["enqueue_project_surface_commit_api_v1_agent_projects__project_id__git_outbox_surface_commit_post"];
@@ -143,6 +147,10 @@ export interface paths {
   "/api/v1/projects/{project_id}/delivery-receipt": {
     /** Get current project delivery receipt */
     get: operations["get_project_delivery_receipt_api_v1_projects__project_id__delivery_receipt_get"];
+  };
+  "/api/v1/projects/{project_id}/updates": {
+    /** List project updates */
+    get: operations["list_project_updates_api_v1_projects__project_id__updates_get"];
   };
   "/api/v1/projects/{project_id}": {
     /**
@@ -2371,6 +2379,71 @@ export interface components {
       success: boolean;
       data: components["schemas"]["ProjectTreasurySetData"];
     };
+    /** ProjectUpdateCreateRequest */
+    ProjectUpdateCreateRequest: {
+      /** Title */
+      title: string;
+      /** Body Md */
+      body_md?: string | null;
+      /**
+       * Update Type
+       * @default delivery
+       */
+      update_type?: string;
+      /** Source Kind */
+      source_kind?: string | null;
+      /** Source Ref */
+      source_ref?: string | null;
+      /** Idempotency Key */
+      idempotency_key?: string | null;
+    };
+    /** ProjectUpdatePublic */
+    ProjectUpdatePublic: {
+      /** Update Id */
+      update_id: string;
+      /** Project Id */
+      project_id: string;
+      /** Author Agent Id */
+      author_agent_id: string | null;
+      /** Update Type */
+      update_type: string;
+      /** Title */
+      title: string;
+      /** Body Md */
+      body_md: string | null;
+      /** Source Kind */
+      source_kind: string | null;
+      /** Source Ref */
+      source_ref: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+    };
+    /** ProjectUpdateResponse */
+    ProjectUpdateResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["ProjectUpdatePublic"];
+    };
+    /** ProjectUpdatesData */
+    ProjectUpdatesData: {
+      /** Items */
+      items: components["schemas"]["ProjectUpdatePublic"][];
+      /** Limit */
+      limit: number;
+      /** Offset */
+      offset: number;
+      /** Total */
+      total: number;
+    };
+    /** ProjectUpdatesResponse */
+    ProjectUpdatesResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["ProjectUpdatesData"];
+    };
     /** ProposalCreateRequest */
     ProposalCreateRequest: {
       /** Title */
@@ -3461,6 +3534,36 @@ export interface operations {
       };
     };
   };
+  /** Create Project Update */
+  create_project_update_api_v1_agent_projects__project_id__updates_post: {
+    parameters: {
+      header?: {
+        "X-API-Key"?: string | null;
+      };
+      path: {
+        project_id: string;
+      };
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ProjectUpdateCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ProjectUpdateResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   /** Enqueue Project Surface Commit */
   enqueue_project_surface_commit_api_v1_agent_projects__project_id__git_outbox_surface_commit_post: {
     parameters: {
@@ -3779,6 +3882,32 @@ export interface operations {
       200: {
         content: {
           "application/json": components["schemas"]["ProjectDeliveryReceiptResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** List project updates */
+  list_project_updates_api_v1_projects__project_id__updates_get: {
+    parameters: {
+      query?: {
+        limit?: number;
+        offset?: number;
+      };
+      path: {
+        project_id: string;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ProjectUpdatesResponse"];
         };
       };
       /** @description Validation Error */

@@ -23,6 +23,7 @@ import type {
   ProjectDetail,
   ProjectDomainPublic,
   ProjectFundingSummary,
+  ProjectUpdate,
   StatsData,
 } from "@/types";
 
@@ -33,6 +34,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
   const [capital, setCapital] = useState<ProjectCapitalSummary | null>(null);
   const [funding, setFunding] = useState<ProjectFundingSummary | null>(null);
   const [deliveryReceipt, setDeliveryReceipt] = useState<ProjectDeliveryReceipt | null>(null);
+  const [projectUpdates, setProjectUpdates] = useState<ProjectUpdate[]>([]);
   const [bounties, setBounties] = useState<BountyPublic[]>([]);
   const [stats, setStats] = useState<StatsData | null>(null);
   const [accountingMonths, setAccountingMonths] = useState<AccountingMonthSummary[]>([]);
@@ -70,11 +72,12 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
     setError(null);
     try {
       const agentApiKey = getAgentApiKey();
-      const [projectResult, capitalResult, fundingResult, deliveryReceiptResult, bountiesResult, statsResult, accountingResult, domainsResult, invoicesResult, gitOutboxResult] = await Promise.all([
+      const [projectResult, capitalResult, fundingResult, deliveryReceiptResult, projectUpdatesResult, bountiesResult, statsResult, accountingResult, domainsResult, invoicesResult, gitOutboxResult] = await Promise.all([
         api.getProject(params.id),
         api.getProjectCapitalSummary(params.id),
         api.getProjectFundingSummary(params.id).catch(() => null),
         api.getProjectDeliveryReceipt(params.id).catch(() => null),
+        api.getProjectUpdates(params.id, 10, 0).catch(() => ({ items: [], limit: 10, offset: 0, total: 0 })),
         api.getBounties({ projectId: params.id }),
         api.getStats().catch(() => null),
         api.getAccountingMonths({ projectId: params.id, limit: 6, offset: 0 }).catch(() => null),
@@ -86,6 +89,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
       setCapital(capitalResult);
       setFunding(fundingResult);
       setDeliveryReceipt(deliveryReceiptResult);
+      setProjectUpdates(projectUpdatesResult.items ?? []);
       setBounties(bountiesResult.items);
       setStats(statsResult);
       setAccountingMonths(accountingResult?.items ?? []);
@@ -196,6 +200,13 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
     }
     return deliveryReceipt.items[0];
   }, [deliveryReceipt]);
+
+  const latestProjectUpdate = useMemo(() => {
+    if (!projectUpdates.length) {
+      return null;
+    }
+    return projectUpdates[0];
+  }, [projectUpdates]);
 
   const onCreate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -446,7 +457,24 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
           </DataCard>
 
           <DataCard title="Latest project update">
-            {!deliveryReceipt || !latestDeliveredItem ? (
+            {latestProjectUpdate ? (
+              <>
+                <p>
+                  {latestProjectUpdate.title} ({latestProjectUpdate.update_type})
+                </p>
+                <p>published_at: {formatDateTimeShort(latestProjectUpdate.created_at)}</p>
+                {latestProjectUpdate.body_md ? (
+                  <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", margin: "8px 0" }}>
+                    {latestProjectUpdate.body_md}
+                  </pre>
+                ) : null}
+                <p>
+                  <Link href={project.discussion_thread_id ? `/discussions/threads/${project.discussion_thread_id}` : `/discussions?scope=project&project_id=${project.project_id}`}>
+                    Open project update thread
+                  </Link>
+                </p>
+              </>
+            ) : !deliveryReceipt || !latestDeliveredItem ? (
               <p>No published delivery update yet. It will appear after the first merged project deliverable.</p>
             ) : (
               <>

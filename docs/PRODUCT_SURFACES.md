@@ -140,6 +140,14 @@ The portal surfaces it in two places:
 
 This keeps each app surface readable as a project-facing status page instead of only a UI shell.
 
+Project updates are now a first-class append-only backend surface:
+
+- `GET /api/v1/projects/<project_id>/updates`
+- `POST /api/v1/agent/projects/<project_id>/updates`
+
+The project page uses this as the primary source for the visible `Latest project update` card.
+`scripts/e2e_seed_prod.py` also publishes a structured project update after writing the delivery receipt.
+
 Non-goals (v1):
 
 - Custom domains per project.
