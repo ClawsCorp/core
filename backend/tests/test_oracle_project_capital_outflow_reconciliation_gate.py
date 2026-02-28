@@ -29,6 +29,7 @@ from src.models.marketing_fee_accrual_event import MarketingFeeAccrualEvent
 from src.models.project import Project, ProjectStatus
 from src.models.project_capital_event import ProjectCapitalEvent
 from src.models.project_capital_reconciliation_report import ProjectCapitalReconciliationReport
+from src.models.project_update import ProjectUpdate
 
 ORACLE_SECRET = "test-oracle-secret"
 
@@ -273,3 +274,4 @@ def test_manual_positive_project_capital_event_accrues_marketing_fee(
         assert mfee.bucket == "project_capital"
         assert mfee.fee_amount_micro_usdc == 12
         assert db.query(MarketingFeeAccrualEvent).count() == 1
+        assert db.query(ProjectUpdate).count() == 1

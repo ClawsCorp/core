@@ -138,6 +138,19 @@ async def create_project_capital_event(
             log_index=None,
             evidence_url=payload.evidence_url or f"project_capital_event:{payload.idempotency_key}",
         )
+        create_project_update_row(
+            db,
+            project=project,
+            agent=None,
+            title=f"Capital inflow recorded: {int(payload.delta_micro_usdc)} micro-USDC",
+            body_md=(
+                f"Capital inflow `{event.event_id}` recorded for {int(payload.delta_micro_usdc)} micro-USDC."
+            ),
+            update_type="funding",
+            source_kind="project_capital_event",
+            source_ref=event.event_id,
+            idempotency_key=f"project_update:project_capital_event:{event.event_id}",
+        )
     _record_oracle_audit(request, db, body_hash, request_id, payload.idempotency_key, commit=False)
     db.commit()
     db.refresh(event)
@@ -160,17 +173,13 @@ async def sync_project_capital_from_observed_usdc_transfers(
     body_hash = request.state.body_hash
     sync_idem = request.headers.get("Idempotency-Key") or f"project_capital_sync:{request_id}"
 
-    projects = (
-        db.query(Project.id, Project.project_id, Project.treasury_address)
-        .filter(Project.treasury_address.isnot(None))
-        .all()
-    )
-    addr_to_project: dict[str, tuple[int, str]] = {}
+    projects = db.query(Project).filter(Project.treasury_address.isnot(None)).all()
+    addr_to_project: dict[str, Project] = {}
     project_db_ids: list[int] = []
-    for pid, public_id, addr in projects:
-        if addr:
-            addr_to_project[str(addr).lower()] = (int(pid), str(public_id))
-            project_db_ids.append(int(pid))
+    for project in projects:
+        if project.treasury_address:
+            addr_to_project[str(project.treasury_address).lower()] = project
+            project_db_ids.append(int(project.id))
 
     if not addr_to_project:
         _record_oracle_audit(request, db, body_hash, request_id, sync_idem, commit=True)
@@ -217,7 +226,9 @@ async def sync_project_capital_from_observed_usdc_transfers(
         dest = str(t.to_address).lower()
         if dest not in addr_to_project:
             continue
-        project_db_id, project_public_id = addr_to_project[dest]
+        project_row = addr_to_project[dest]
+        project_db_id = int(project_row.id)
+        project_public_id = str(project_row.project_id)
         transfers_seen += 1
 
         bn = int(t.block_number)
@@ -266,6 +277,17 @@ async def sync_project_capital_from_observed_usdc_transfers(
             )
             if created:
                 inserted += 1
+                create_project_update_row(
+                    db,
+                    project=project_row,
+                    agent=None,
+                    title=f"Capital deposit observed: {int(t.amount_micro_usdc)} micro-USDC",
+                    body_md=f"Observed treasury deposit `{t.tx_hash}` for {int(t.amount_micro_usdc)} micro-USDC.",
+                    update_type="funding",
+                    source_kind="project_capital_event",
+                    source_ref=event.event_id,
+                    idempotency_key=f"project_update:project_capital_sync:{event.event_id}",
+                )
 
         dep = ProjectFundingDeposit(
             deposit_id=f"pfdep_{secrets.token_hex(8)}",
