@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import secrets
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from src.api.v1.dependencies import require_agent_auth
@@ -16,6 +14,7 @@ from src.models.project import Project
 from src.models.project_member import ProjectMember
 from src.models.project_update import ProjectUpdate
 from src.schemas.project import ProjectUpdateCreateRequest, ProjectUpdatePublic, ProjectUpdateResponse
+from src.services.project_updates import create_project_update_row, project_update_public
 
 router = APIRouter(prefix="/api/v1/agent/projects", tags=["agent-projects"])
 
@@ -37,28 +36,8 @@ def _agent_can_access_project(db: Session, project: Project, agent: Agent) -> bo
     return row is not None
 
 
-def _generate_update_id(db: Session) -> str:
-    for _ in range(5):
-        candidate = f"pup_{secrets.token_hex(8)}"
-        exists = db.query(ProjectUpdate.id).filter(ProjectUpdate.update_id == candidate).first()
-        if exists is None:
-            return candidate
-    raise RuntimeError("Failed to generate unique project update id")
-
-
 def _to_public(project: Project, row: ProjectUpdate, agent: Agent | None = None) -> ProjectUpdatePublic:
-    author_agent_id = agent.agent_id if agent is not None else None
-    return ProjectUpdatePublic(
-        update_id=row.update_id,
-        project_id=project.project_id,
-        author_agent_id=author_agent_id,
-        update_type=row.update_type,
-        title=row.title,
-        body_md=row.body_md,
-        source_kind=row.source_kind,
-        source_ref=row.source_ref,
-        created_at=row.created_at,
-    )
+    return ProjectUpdatePublic(**project_update_public(project, row, agent.agent_id if agent is not None else None))
 
 
 @router.post("/{project_id}/updates", response_model=ProjectUpdateResponse)
@@ -79,42 +58,17 @@ async def create_project_update(
     if not _agent_can_access_project(db, project, agent):
         raise HTTPException(status_code=403, detail="project_access_denied")
 
-    row = ProjectUpdate(
-        update_id=_generate_update_id(db),
+    row, _created = create_project_update_row(
+        db,
+        project=project,
+        agent=agent,
+        title=payload.title,
+        body_md=payload.body_md,
+        update_type=payload.update_type,
+        source_kind=payload.source_kind,
+        source_ref=payload.source_ref,
         idempotency_key=idempotency_key,
-        project_id=project.id,
-        author_agent_id=agent.id,
-        update_type=payload.update_type.strip()[:32],
-        title=payload.title.strip()[:255],
-        body_md=payload.body_md.strip() if payload.body_md and payload.body_md.strip() else None,
-        source_kind=payload.source_kind.strip()[:32] if payload.source_kind and payload.source_kind.strip() else None,
-        source_ref=payload.source_ref.strip()[:128] if payload.source_ref and payload.source_ref.strip() else None,
     )
-    db.add(row)
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        if not idempotency_key:
-            raise
-        existing = db.query(ProjectUpdate).filter(ProjectUpdate.idempotency_key == idempotency_key).first()
-        if existing is None:
-            raise
-        record_audit(
-            db,
-            actor_type="agent",
-            agent_id=agent.agent_id,
-            method=request.method,
-            path=request.url.path,
-            idempotency_key=idempotency_key,
-            body_hash=body_hash,
-            signature_status=getattr(request.state, "signature_status", "none"),
-            request_id=request_id,
-        )
-        author = db.query(Agent).filter(Agent.id == existing.author_agent_id).first() if existing.author_agent_id else None
-        return ProjectUpdateResponse(success=True, data=_to_public(project, existing, author))
-
-    db.refresh(row)
     record_audit(
         db,
         actor_type="agent",
@@ -126,5 +80,7 @@ async def create_project_update(
         signature_status=getattr(request.state, "signature_status", "none"),
         request_id=request_id,
     )
+    db.commit()
+    db.refresh(row)
     author = db.query(Agent).filter(Agent.id == row.author_agent_id).first() if row.author_agent_id else None
     return ProjectUpdateResponse(success=True, data=_to_public(project, row, author))

@@ -147,6 +147,11 @@ Project updates are now a first-class append-only backend surface:
 
 The project page uses this as the primary source for the visible `Latest project update` card.
 `scripts/e2e_seed_prod.py` also publishes a structured project update after writing the delivery receipt.
+Current automatic sources include:
+
+- delivery receipt publication
+- domain add / verify
+- crypto invoice creation
 
 Non-goals (v1):
 
