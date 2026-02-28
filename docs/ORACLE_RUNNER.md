@@ -48,7 +48,12 @@ Safe behavior for owner-only distribution tasks:
 
 `git-worker` environment variables (runs locally, applies git tasks):
 
-- `DAO_GIT_REPO_DIR` (optional; repo root with `scripts/new_product_surface.mjs`)
+- `DAO_GIT_REPO_DIR` (optional; clean repo root/worktree with `scripts/new_product_surface.mjs`)
+
+`git-worker` currently supports:
+
+- `create_app_surface_commit` -> generates `frontend/src/product_surfaces/<slug>.tsx` + registry update
+- `create_project_backend_artifact_commit` -> generates `backend/src/project_artifacts/<slug>.py`
 
 ## Commands
 

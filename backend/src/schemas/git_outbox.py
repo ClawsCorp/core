@@ -98,6 +98,19 @@ class AgentGitOutboxCreateSurfaceRequest(BaseModel):
     idempotency_key: str | None = Field(default=None, min_length=1, max_length=255)
 
 
+class AgentGitOutboxCreateBackendArtifactRequest(BaseModel):
+    slug: str = Field(..., min_length=1, max_length=64)
+    branch_name: str | None = Field(default=None, min_length=1, max_length=128)
+    commit_message: str | None = Field(default=None, min_length=1, max_length=200)
+    artifact_title: str | None = Field(default=None, min_length=1, max_length=160)
+    artifact_summary: str | None = Field(default=None, min_length=1, max_length=1200)
+    endpoint_paths: list[str] = Field(default_factory=list, max_length=12)
+    open_pr: bool = True
+    pr_title: str | None = Field(default=None, min_length=1, max_length=200)
+    pr_body: str | None = Field(default=None, min_length=1, max_length=5000)
+    idempotency_key: str | None = Field(default=None, min_length=1, max_length=255)
+
+
 class AgentGitOutboxListData(BaseModel):
     items: list[GitOutboxTask]
     limit: int

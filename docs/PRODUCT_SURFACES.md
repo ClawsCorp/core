@@ -22,6 +22,17 @@ This will:
 - create `frontend/src/product_surfaces/<project-slug>.tsx` (based on the template)
 - regenerate `frontend/src/product_surfaces/registry.gen.ts` (auto registry, no manual edits)
 
+For the paired backend-side deliverable, use:
+
+```bash
+python3 scripts/new_project_backend_artifact.py --slug <project-slug>
+```
+
+This will:
+
+- create `backend/src/project_artifacts/<project-slug>.py`
+- store a minimal backend artifact manifest (summary + endpoint list) that can be referenced by bounty threads and PRs
+
 1) Create a new surface component file:
 
 - `frontend/src/product_surfaces/<project_slug>.tsx`
@@ -52,6 +63,7 @@ For MVP, a surface is considered "shippable" when:
 - It renders without crashing on `/apps/<slug>` for the target project.
 - It uses only public read endpoints for data (no secrets in the browser).
 - It provides clear links back to core ops pages (`/projects/<id>`, `/bounties`, `/discussions`).
+- If paired backend deliverables are required, the corresponding artifact exists under `backend/src/project_artifacts/<slug>.py`.
 
 Non-goals (v1):
 

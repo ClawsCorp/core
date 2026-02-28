@@ -1939,6 +1939,108 @@ def run(argv: list[str] | None = None) -> int:
                                 _print_progress("git_worker_task", "ok", detail=f"{task_type} {task_id}")
                             continue
 
+                        if task_type == "create_project_backend_artifact_commit":
+                            slug = _validate_surface_slug(str(payload.get("slug") or ""))
+                            branch_name = str(payload.get("branch_name") or f"codex/dao-backend-{slug}-{task_id[:6]}")
+                            commit_message = str(
+                                payload.get("commit_message") or f"feat(backend-artifact): add {slug} project artifact"
+                            )
+                            open_pr = _coerce_bool(payload.get("open_pr"), default=True)
+                            pr_title = str(
+                                payload.get("pr_title") or f"feat(backend-artifact): add {slug} project artifact"
+                            )
+                            pr_body = str(
+                                payload.get("pr_body")
+                                or f"Autonomous backend artifact generation for `{slug}` via git_outbox task `{task_id}`."
+                            )
+
+                            _run_local_cmd(["git", "checkout", base_branch], cwd=repo_root)
+                            _run_local_cmd(["git", "checkout", "-B", branch_name], cwd=repo_root)
+                            artifact_cmd = [
+                                sys.executable,
+                                "scripts/new_project_backend_artifact.py",
+                                "--slug",
+                                slug,
+                            ]
+                            artifact_title = str(payload.get("artifact_title") or "").strip()
+                            artifact_summary = str(payload.get("artifact_summary") or "").strip()
+                            endpoint_paths = payload.get("endpoint_paths")
+                            if artifact_title:
+                                artifact_cmd.extend(["--title", artifact_title])
+                            if artifact_summary:
+                                artifact_cmd.extend(["--summary", artifact_summary])
+                            if isinstance(endpoint_paths, list):
+                                for item in endpoint_paths:
+                                    endpoint_value = str(item or "").strip()
+                                    if endpoint_value:
+                                        artifact_cmd.extend(["--endpoint", endpoint_value])
+                            _run_local_cmd(artifact_cmd, cwd=repo_root)
+                            artifact_file = f"backend/src/project_artifacts/{slug}.py"
+                            _run_local_cmd(["git", "add", artifact_file], cwd=repo_root)
+                            _run_local_cmd(["git", "commit", "-m", commit_message], cwd=repo_root)
+                            _run_local_cmd(["git", "push", "-u", "origin", branch_name], cwd=repo_root)
+                            commit_sha = _run_local_cmd(["git", "rev-parse", "HEAD"], cwd=repo_root)
+
+                            pr_url: str | None = None
+                            pr_error: str | None = None
+                            if open_pr:
+                                try:
+                                    pr_create = _run_local_cmd(
+                                        [
+                                            "gh",
+                                            "pr",
+                                            "create",
+                                            "--base",
+                                            base_branch,
+                                            "--head",
+                                            branch_name,
+                                            "--title",
+                                            pr_title,
+                                            "--body",
+                                            pr_body,
+                                        ],
+                                        cwd=repo_root,
+                                    )
+                                    if pr_create:
+                                        for line in pr_create.splitlines():
+                                            candidate = line.strip()
+                                            if candidate.startswith("http://") or candidate.startswith("https://"):
+                                                pr_url = candidate
+                                                break
+                                        if pr_url is None:
+                                            pr_url = pr_create.strip()
+                                except OracleRunnerError as exc:
+                                    pr_error = str(exc)
+
+                            result = {
+                                "stage": "committed",
+                                "slug": slug,
+                                "branch_name": branch_name,
+                                "commit_sha": commit_sha,
+                                "open_pr": open_pr,
+                                "pr_url": pr_url,
+                                "pr_error": pr_error,
+                                "files": [artifact_file],
+                            }
+                            _update(result, branch_name, commit_sha)
+                            _complete("succeeded", None, result, branch_name, commit_sha)
+                            processed.append(
+                                {
+                                    "task_id": task_id,
+                                    "task_type": task_type,
+                                    "status": "succeeded",
+                                    "slug": slug,
+                                    "branch_name": branch_name,
+                                    "commit_sha": commit_sha,
+                                    "pr_url": pr_url,
+                                    "pr_error": pr_error,
+                                }
+                            )
+                            processed_this_loop += 1
+                            if bool(args.loop):
+                                _print_progress("git_worker_task", "ok", detail=f"{task_type} {task_id}")
+                            continue
+
                         if task_type == "noop":
                             result = {"stage": "noop"}
                             _update(result, None, None)

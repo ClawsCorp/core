@@ -372,6 +372,33 @@ export const api = {
     );
     return response.data;
   },
+  createProjectBackendArtifactCommitTask: async (
+    apiKey: string,
+    projectId: string,
+    payload: {
+      slug: string;
+      branch_name?: string;
+      commit_message?: string;
+      artifact_title?: string;
+      artifact_summary?: string;
+      endpoint_paths?: string[];
+      open_pr?: boolean;
+      pr_title?: string;
+      pr_body?: string;
+      idempotency_key?: string;
+    },
+  ) => {
+    const response = await requestJSON<Envelope<GitOutboxTask>>(
+      `/api/v1/agent/projects/${projectId}/git-outbox/backend-artifact-commit`,
+      {
+        method: "POST",
+        apiKey,
+        body: payload,
+        idempotencyKey: payload.idempotency_key,
+      },
+    );
+    return response.data;
+  },
   getProjectCapitalReconciliationLatest: async (projectId: string) => {
     const payload = await fetchJSON<Envelope<ProjectCapitalReconciliationReport | null>>(
       `/api/v1/projects/${projectId}/capital/reconciliation/latest`,
