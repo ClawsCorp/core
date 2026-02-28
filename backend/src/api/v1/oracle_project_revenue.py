@@ -19,6 +19,7 @@ from src.schemas.oracle_projects import (
 )
 from src.schemas.project import ProjectRevenueReconciliationReportPublic
 from src.services.blockchain import BlockchainConfigError, BlockchainReadError, get_usdc_balance_micro_usdc
+from src.services.project_updates import create_project_update_row, build_project_update_idempotency_key
 from src.services.project_revenue import get_project_revenue_balance_micro_usdc
 
 router = APIRouter(prefix="/api/v1/oracle", tags=["oracle-project-revenue"])
@@ -136,6 +137,24 @@ async def reconcile_project_revenue(
         )
 
     db.add(report)
+    if report.ready:
+        create_project_update_row(
+            db,
+            project=project,
+            agent=None,
+            title="Revenue reconciliation ready",
+            body_md=(
+                f"Revenue reconciliation is strict-ready with ledger `{int(report.ledger_balance_micro_usdc or 0)}`"
+                f" and on-chain `{int(report.onchain_balance_micro_usdc or 0)}` micro-USDC."
+            ),
+            update_type="revenue",
+            source_kind="revenue_reconciliation_ready",
+            source_ref=idempotency_key,
+            idempotency_key=build_project_update_idempotency_key(
+                prefix="project_update:project_revenue_reconciliation_ready",
+                source_idempotency_key=idempotency_key,
+            ),
+        )
     _record_oracle_audit(request, db, body_hash, request_id, idempotency_key, commit=False)
     db.commit()
     db.refresh(report)
@@ -180,4 +199,3 @@ def _recon_public(
         blocked_reason=report.blocked_reason,
         computed_at=report.computed_at,
     )
-
