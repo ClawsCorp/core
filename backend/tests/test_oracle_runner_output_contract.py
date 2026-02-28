@@ -258,6 +258,68 @@ def test_run_project_month_stdout_json_and_stderr_progress(monkeypatch, capsys) 
     assert "stage=reconcile_project_capital status=ok" in stderr
 
 
+def test_git_worker_fails_when_open_pr_is_required_but_pr_creation_fails(monkeypatch, capsys, tmp_path: Path) -> None:
+    class _FakeGitWorkerClient:
+        def __init__(self, _config: object):
+            self.claimed = False
+            self.completed: list[dict[str, object]] = []
+
+        def post(self, path: str, *, body_bytes: bytes, idempotency_key: str | None = None):
+            if path == "/api/v1/oracle/git-outbox/claim-next":
+                if self.claimed:
+                    return type("Resp", (), {"data": {"data": {"task": None, "blocked_reason": "no_tasks"}}})()
+                self.claimed = True
+                return type(
+                    "Resp",
+                    (),
+                    {
+                        "data": {
+                            "data": {
+                                "task": {
+                                    "task_id": "gto_test_1",
+                                    "task_type": "create_app_surface_commit",
+                                    "payload": {"slug": "demo-surface", "open_pr": True},
+                                },
+                                "blocked_reason": None,
+                            }
+                        }
+                    },
+                )()
+            if path.endswith("/complete"):
+                payload = json.loads(body_bytes.decode("utf-8"))
+                self.completed.append(payload)
+                return type("Resp", (), {"data": {"data": {"task_id": "gto_test_1"}}})()
+            return type("Resp", (), {"data": {"data": {"ok": True}}})()
+
+    fake_client = _FakeGitWorkerClient(object())
+
+    monkeypatch.setattr(cli, "load_config_from_env", lambda: object())
+    monkeypatch.setattr(cli, "OracleClient", lambda _config: fake_client)
+    monkeypatch.setattr(cli, "_discover_repo_root", lambda _explicit: tmp_path)
+
+    def _fake_run_local_cmd(args: list[str], *, cwd: Path) -> str:
+        if args[:3] == ["git", "rev-parse", "HEAD"]:
+            return "a" * 40
+        if args[:3] == ["gh", "pr", "create"]:
+            raise cli.OracleRunnerError("simulated_pr_create_failure")
+        return ""
+
+    monkeypatch.setattr(cli, "_run_local_cmd", _fake_run_local_cmd)
+
+    exit_code = cli.run(["git-worker", "--json", "--worker-id", "test-worker", "--max-tasks", "1", "--repo-dir", str(tmp_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    data = json.loads(captured.out.strip())
+    assert data["status"] == "ok"
+    processed = data["processed"]
+    assert len(processed) == 1
+    assert processed[0]["status"] == "failed"
+    assert processed[0]["error_hint"] == "simulated_pr_create_failure"
+    assert fake_client.completed[-1]["status"] == "failed"
+    assert fake_client.completed[-1]["error_hint"] == "simulated_pr_create_failure"
+
+
 class _FakeClientReconcileBlocked(_FakeClient):
     def __init__(self, _config: object):
         super().__init__(_config)

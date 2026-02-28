@@ -133,6 +133,14 @@ def _coerce_bool(value: Any, *, default: bool = False) -> bool:
     return default
 
 
+def _git_pr_required_error(open_pr: bool, pr_url: str | None, pr_error: str | None) -> str | None:
+    if not open_pr:
+        return None
+    if isinstance(pr_url, str) and pr_url.strip():
+        return None
+    return pr_error or "pr_create_required"
+
+
 def _load_execute_payload(path: str) -> tuple[bytes, dict[str, Any]]:
     if path.strip().lower() == "auto":
         raise OracleRunnerError("Use build-execute-payload or run-month with --execute-payload auto.")
@@ -1921,22 +1929,26 @@ def run(argv: list[str] | None = None) -> int:
                                 ],
                             }
                             _update(result, branch_name, commit_sha)
-                            _complete("succeeded", None, result, branch_name, commit_sha)
+                            pr_required_error = _git_pr_required_error(open_pr, pr_url, pr_error)
+                            final_status = "failed" if pr_required_error else "succeeded"
+                            _complete(final_status, pr_required_error, result, branch_name, commit_sha)
                             processed.append(
                                 {
                                     "task_id": task_id,
                                     "task_type": task_type,
-                                    "status": "succeeded",
+                                    "status": final_status,
                                     "slug": slug,
                                     "branch_name": branch_name,
                                     "commit_sha": commit_sha,
                                     "pr_url": pr_url,
                                     "pr_error": pr_error,
+                                    "error_hint": pr_required_error,
                                 }
                             )
                             processed_this_loop += 1
                             if bool(args.loop):
-                                _print_progress("git_worker_task", "ok", detail=f"{task_type} {task_id}")
+                                progress_status = "error" if pr_required_error else "ok"
+                                _print_progress("git_worker_task", progress_status, detail=f"{task_type} {task_id}")
                             continue
 
                         if task_type == "create_project_backend_artifact_commit":
@@ -2025,22 +2037,26 @@ def run(argv: list[str] | None = None) -> int:
                                 "files": [artifact_file, route_file],
                             }
                             _update(result, branch_name, commit_sha)
-                            _complete("succeeded", None, result, branch_name, commit_sha)
+                            pr_required_error = _git_pr_required_error(open_pr, pr_url, pr_error)
+                            final_status = "failed" if pr_required_error else "succeeded"
+                            _complete(final_status, pr_required_error, result, branch_name, commit_sha)
                             processed.append(
                                 {
                                     "task_id": task_id,
                                     "task_type": task_type,
-                                    "status": "succeeded",
+                                    "status": final_status,
                                     "slug": slug,
                                     "branch_name": branch_name,
                                     "commit_sha": commit_sha,
                                     "pr_url": pr_url,
                                     "pr_error": pr_error,
+                                    "error_hint": pr_required_error,
                                 }
                             )
                             processed_this_loop += 1
                             if bool(args.loop):
-                                _print_progress("git_worker_task", "ok", detail=f"{task_type} {task_id}")
+                                progress_status = "error" if pr_required_error else "ok"
+                                _print_progress("git_worker_task", progress_status, detail=f"{task_type} {task_id}")
                             continue
 
                         if task_type == "noop":
