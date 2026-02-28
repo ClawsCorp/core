@@ -132,7 +132,7 @@ The same proof is now exposed as public project data:
 The portal surfaces it in two places:
 
 - project detail page: `Delivery receipt`
-- `/apps/<slug>` page: compact `Delivery status` summary with the latest deliverables and a link to the full receipt
+- `/apps/<slug>` page: compact `Delivery status` summary with the latest deliverables, `merged` / `paid` markers, and a link to the full receipt
 
 `/apps/<slug>` also shows a compact funding snapshot from:
 
