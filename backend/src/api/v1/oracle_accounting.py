@@ -13,8 +13,9 @@ from src.core.audit import record_audit
 from src.core.database import get_db
 from src.models.expense_event import ExpenseEvent
 from src.models.project import Project
-from src.services.project_spend_policy import check_spend_allowed
 from src.services.marketing_fee import accrue_marketing_fee_event, build_marketing_fee_idempotency_key
+from src.services.project_spend_policy import check_spend_allowed
+from src.services.project_updates import create_project_update_row
 from src.models.revenue_event import RevenueEvent
 from src.schemas.accounting import (
     ExpenseEventCreateRequest,
@@ -128,6 +129,21 @@ async def create_expense_event(
             evidence_url=payload.evidence_url,
         )
         db.add(event)
+        if project is not None:
+            create_project_update_row(
+                db,
+                project=project,
+                agent=None,
+                title=f"Expense recorded: {payload.category}",
+                body_md=(
+                    f"Expense `{payload.category}` was recorded for {int(payload.amount_micro_usdc)} micro-USDC"
+                    f" in month `{payload.profit_month_id}`."
+                ),
+                update_type="expense",
+                source_kind="oracle_expense_event",
+                source_ref=payload.idempotency_key,
+                idempotency_key=f"project_update:oracle_expense:{payload.idempotency_key}",
+            )
         _record_oracle_audit(request, db, body_hash, request_id, payload.idempotency_key, commit=False)
         db.commit()
         db.refresh(event)

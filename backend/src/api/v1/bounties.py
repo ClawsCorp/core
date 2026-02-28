@@ -33,6 +33,7 @@ from src.services.project_revenue import (
 )
 from src.services.bounty_git import extract_git_pr_url, find_exact_git_outbox_for_bounty
 from src.services.project_spend_policy import check_spend_allowed
+from src.services.project_updates import create_project_update_row
 from src.services.reputation_hooks import emit_reputation_event
 
 from src.schemas.bounty import (
@@ -548,6 +549,24 @@ async def mark_paid(
     bounty.paid_tx_hash = payload.paid_tx_hash or bounty.paid_tx_hash
 
     _ensure_bounty_paid_expense(db, bounty)
+    if bounty.project_id is not None:
+        project = db.query(Project).filter(Project.id == bounty.project_id).first()
+        if project is not None:
+            create_project_update_row(
+                db,
+                project=project,
+                agent=None,
+                title=f"Bounty paid: {bounty.title}",
+                body_md=(
+                    f"Bounty `{bounty.bounty_id}` was paid for {int(bounty.amount_micro_usdc)} micro-USDC"
+                    f" via funding source `{bounty.funding_source.value}`."
+                    + (f" Paid tx: `{payload.paid_tx_hash}`." if payload.paid_tx_hash else "")
+                ),
+                update_type="expense",
+                source_kind="bounty_paid",
+                source_ref=bounty.bounty_id,
+                idempotency_key=f"project_update:bounty_paid:{bounty.bounty_id}",
+            )
 
     if row.agent_id:
         note = f"paid_tx_hash:{payload.paid_tx_hash}" if payload.paid_tx_hash else None

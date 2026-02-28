@@ -25,6 +25,7 @@ from src.main import app
 import src.models  # noqa: F401
 from src.models.project import Project, ProjectStatus
 from src.models.project_spend_policy import ProjectSpendPolicy
+from src.models.project_update import ProjectUpdate
 
 ORACLE_SECRET = "test-oracle-secret"
 
@@ -189,3 +190,13 @@ def test_oracle_expense_event_allows_when_under_cap(_client: TestClient, _db: se
     resp = _client.post(path, content=body, headers=_oracle_headers(path, body, "req-2", idem="idem-2"))
     assert resp.status_code == 200
     assert resp.json()["success"] is True
+
+    db = _db()
+    try:
+        update = db.query(ProjectUpdate).first()
+        assert update is not None
+        assert update.update_type == "expense"
+        assert update.source_kind == "oracle_expense_event"
+        assert update.source_ref == "idem-exp-2"
+    finally:
+        db.close()
