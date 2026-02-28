@@ -215,6 +215,24 @@ async def sync_billing(
                     source_idempotency_key=invoice.invoice_id,
                 ),
             )
+            create_project_update_row(
+                db,
+                project=project_row,
+                agent=None,
+                title=f"Billing settled: {invoice.invoice_id}",
+                body_md=(
+                    f"Customer payment for invoice `{invoice.invoice_id}` settled on-chain via `{t.tx_hash}`"
+                    f" for {int(t.amount_micro_usdc)} micro-USDC"
+                    f" to `{dest}`."
+                ),
+                update_type="revenue",
+                source_kind="billing_settlement",
+                source_ref=invoice.invoice_id,
+                idempotency_key=build_project_update_idempotency_key(
+                    prefix="project_update:billing_settlement",
+                    source_idempotency_key=invoice.invoice_id,
+                ),
+            )
             invoices_paid += 1
 
     record_audit(
