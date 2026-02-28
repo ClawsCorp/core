@@ -158,6 +158,7 @@ Current automatic sources include:
 - domain add / verify
 - crypto invoice creation
 - crypto invoice paid confirmation
+- billing settlement confirmation
 
 Non-goals (v1):
 

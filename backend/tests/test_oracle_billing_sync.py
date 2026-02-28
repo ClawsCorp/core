@@ -185,10 +185,14 @@ def test_billing_sync_creates_billing_and_revenue_events(_client: TestClient, _d
         assert inv.paid_tx_hash == "0x" + ("11" * 32)
         assert inv.paid_log_index == 1
         update = db.query(ProjectUpdate).first()
-        assert update is not None
-        assert update.update_type == "revenue"
-        assert update.source_kind == "crypto_invoice_paid"
-        assert update.source_ref == "inv_test_1"
+        updates = db.query(ProjectUpdate).order_by(ProjectUpdate.id.asc()).all()
+        assert len(updates) == 2
+        assert updates[0].update_type == "revenue"
+        assert updates[0].source_kind == "crypto_invoice_paid"
+        assert updates[0].source_ref == "inv_test_1"
+        assert updates[1].update_type == "revenue"
+        assert updates[1].source_kind == "billing_settlement"
+        assert updates[1].source_ref == "inv_test_1"
         mfee = db.query(MarketingFeeAccrualEvent).first()
         assert mfee is not None
         assert mfee.bucket == "project_revenue"
@@ -206,6 +210,6 @@ def test_billing_sync_creates_billing_and_revenue_events(_client: TestClient, _d
     assert resp2.json()["data"]["invoices_paid"] == 0
     db = _db()
     try:
-        assert db.query(ProjectUpdate).count() == 1
+        assert db.query(ProjectUpdate).count() == 2
     finally:
         db.close()
