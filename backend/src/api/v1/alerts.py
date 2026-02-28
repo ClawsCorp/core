@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from src.core.config import get_settings
 from src.core.database import get_db
 from src.models.indexer_cursor import IndexerCursor
+from src.models.bounty import Bounty, BountyStatus
 from src.models.git_outbox import GitOutbox
 from src.models.marketing_fee_accrual_event import MarketingFeeAccrualEvent
 from src.models.project import Project, ProjectStatus
@@ -104,6 +105,44 @@ def _is_failed_tx_outbox_superseded(db: Session, task: TxOutbox) -> bool:
         .first()
     )
     return existing is not None
+
+
+def _is_failed_git_outbox_resolved(db: Session, task: GitOutbox) -> bool:
+    try:
+        payload = json.loads(task.payload_json or "{}")
+    except ValueError:
+        payload = {}
+    try:
+        result = json.loads(task.result_json or "{}")
+    except ValueError:
+        result = {}
+
+    bounty_id = str((payload or {}).get("bounty_id") or "").strip()
+    if not bounty_id:
+        return False
+
+    query = db.query(Bounty).filter(Bounty.bounty_id == bounty_id)
+    if task.project_id is not None:
+        query = query.filter(Bounty.project_id == task.project_id)
+    bounty = query.first()
+    if bounty is None:
+        return False
+    if bounty.status not in {
+        BountyStatus.submitted,
+        BountyStatus.eligible_for_payout,
+        BountyStatus.paid,
+    }:
+        return False
+
+    commit_sha = str(task.commit_sha or "").strip().lower()
+    if commit_sha and str(bounty.merge_sha or "").strip().lower() == commit_sha:
+        return True
+
+    pr_url = str((result or {}).get("pr_url") or "").strip()
+    if pr_url and str(bounty.pr_url or "").strip() == pr_url:
+        return True
+
+    return False
 
 
 @router.get(
@@ -690,6 +729,8 @@ def get_alerts(response: Response, db: Session = Depends(get_db)) -> AlertsRespo
         .all()
     )
     for t in git_failed:
+        if _is_failed_git_outbox_resolved(db, t):
+            continue
         task_updated_at = _as_aware_utc(t.updated_at) or now
         items.append(
             AlertItem(
