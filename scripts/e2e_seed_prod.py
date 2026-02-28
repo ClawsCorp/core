@@ -414,6 +414,76 @@ def _save_state(state: dict[str, Any]) -> None:
     tmp.replace(STATE_PATH)
 
 
+def _dao_git_repo_dir(env: dict[str, str]) -> Path:
+    candidate = str(env.get("DAO_GIT_REPO_DIR", "")).strip()
+    if candidate:
+        return Path(candidate)
+    return REPO_ROOT
+
+
+def _run_text_cmd(args: list[str], *, cwd: Path, env: dict[str, str], timeout: int = 120) -> str:
+    try:
+        proc = subprocess.run(
+            args,
+            cwd=str(cwd),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"command timed out: {' '.join(args[:3])}") from exc
+    if proc.returncode != 0:
+        err = (proc.stderr or proc.stdout or "").strip()
+        raise RuntimeError(err[:240] or "command failed")
+    return (proc.stdout or "").strip()
+
+
+def _gh_json(*, args: list[str], cwd: Path, env: dict[str, str]) -> dict[str, Any]:
+    raw = _run_text_cmd(args, cwd=cwd, env=env, timeout=180)
+    try:
+        parsed = json.loads(raw or "{}")
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("gh returned non-json output") from exc
+    if not isinstance(parsed, dict):
+        raise RuntimeError("gh returned non-object json")
+    return parsed
+
+
+def _wait_for_pr_merged(*, pr_url: str, env: dict[str, str], max_wait_seconds: int) -> dict[str, Any]:
+    if not pr_url.strip():
+        raise RuntimeError("missing pr_url")
+    cwd = _dao_git_repo_dir(env)
+    deadline = time.time() + max(1, int(max_wait_seconds))
+    last_state = "unknown"
+    while True:
+        data = _gh_json(
+            args=[
+                "gh",
+                "pr",
+                "view",
+                pr_url,
+                "--json",
+                "state,mergedAt,mergeCommit,url",
+            ],
+            cwd=cwd,
+            env=env,
+        )
+        state = str(data.get("state") or "").strip().upper()
+        last_state = state or last_state
+        merge_commit = data.get("mergeCommit") if isinstance(data.get("mergeCommit"), dict) else {}
+        if state == "MERGED":
+            return {
+                "pr_url": str(data.get("url") or pr_url),
+                "state": "MERGED",
+                "merged_at": data.get("mergedAt"),
+                "merge_commit_sha": str(merge_commit.get("oid") or "").strip() or None,
+            }
+        if time.time() >= deadline:
+            raise RuntimeError(f"pr_not_merged_within_timeout:{last_state.lower() or 'unknown'}")
+        time.sleep(5)
+
+
 def _run_git_worker(*, env: dict[str, str], base_url: str, max_tasks: int = 3) -> dict[str, Any]:
     run_env = dict(env)
     backend_src = str(REPO_ROOT / "backend")
@@ -470,6 +540,7 @@ def main() -> int:
     parser.add_argument("--fund-eth", default="0.002")  # per wallet for gas
     parser.add_argument("--sync-wait-seconds", type=int, default=120)
     parser.add_argument("--max-governance-wait-seconds", type=int, default=240)
+    parser.add_argument("--max-pr-merge-wait-seconds", type=int, default=300)
     parser.add_argument("--reset", action="store_true", help="Delete local e2e state and start a new run.")
     parser.add_argument("--mode", choices=["governance", "oracle"], default="governance")
     parser.add_argument("--format", choices=["md", "json"], default="md")
@@ -1156,6 +1227,14 @@ def main() -> int:
                             "commit_message": f"feat(surface): add {str(project.get('slug') or '')} pilot surface",
                             "open_pr": True,
                             "auto_merge": True,
+                            "merge_policy_required_checks": [
+                                "api-types",
+                                "backend",
+                                "contracts",
+                                "dependency-review",
+                                "frontend",
+                                "secrets-scan",
+                            ],
                             "pr_title": (
                                 f"feat(surface): add {str(project.get('name') or project.get('slug') or '')} "
                                 "pilot surface"
@@ -1197,6 +1276,14 @@ def main() -> int:
                             ),
                             "open_pr": True,
                             "auto_merge": True,
+                            "merge_policy_required_checks": [
+                                "api-types",
+                                "backend",
+                                "contracts",
+                                "dependency-review",
+                                "frontend",
+                                "secrets-scan",
+                            ],
                             "pr_title": (
                                 f"feat(backend-artifact): add {str(project.get('name') or project.get('slug') or '')} "
                                 "project artifact"
@@ -1313,6 +1400,41 @@ def main() -> int:
             existing["git_proof_posted"] = True
             _save_state(state)
 
+    # Wait for actual PR merge and record merge proof before eligibility/payout.
+    for existing in bounties:
+        if not isinstance(existing, dict):
+            continue
+        pr_url = str(existing.get("git_pr_url") or "").strip()
+        if not pr_url or existing.get("git_pr_merged"):
+            continue
+        merge_receipt = _wait_for_pr_merged(
+            pr_url=pr_url,
+            env=env,
+            max_wait_seconds=int(args.max_pr_merge_wait_seconds),
+        )
+        existing["git_pr_merged"] = True
+        existing["git_pr_state"] = merge_receipt.get("state")
+        existing["git_merged_at"] = merge_receipt.get("merged_at")
+        existing["git_merge_commit_sha"] = merge_receipt.get("merge_commit_sha")
+        _save_state(state)
+        if existing.get("thread_id") and not existing.get("git_merge_posted"):
+            _agent_post(
+                oracle_base_url,
+                f"/api/v1/agent/discussions/threads/{existing['thread_id']}/posts",
+                api_key=author["api_key"],
+                body={
+                    "body_md": (
+                        "### Merge confirmed\n"
+                        f"- pr_url: {pr_url}\n"
+                        f"- merged_at: `{existing.get('git_merged_at')}`\n"
+                        f"- merge_commit_sha: `{existing.get('git_merge_commit_sha') or existing.get('git_commit_sha')}`\n"
+                    ),
+                    "idempotency_key": f"e2e:bounty:git_merge:{existing['bounty_id']}",
+                },
+            )
+            existing["git_merge_posted"] = True
+            _save_state(state)
+
     # Submit/evaluate with real git evidence once artifact tasks are ready.
     for spec in bounty_specs:
         existing = next((b for b in bounties if b.get("key") == spec["key"]), None)
@@ -1321,7 +1443,7 @@ def main() -> int:
         bounty_id = str(existing["bounty_id"])
         claimant = spec["claimant"]
         pr_url = str(existing.get("git_pr_url") or f"https://example.invalid/pr/{bounty_id}")
-        merge_sha = str(existing.get("git_commit_sha") or "deadbeef")
+        merge_sha = str(existing.get("git_merge_commit_sha") or existing.get("git_commit_sha") or "deadbeef")
         if not existing.get("submitted"):
             _agent_post(
                 oracle_base_url,
@@ -1463,8 +1585,96 @@ def main() -> int:
                 "git_status": b.get("git_status"),
                 "git_pr_url": b.get("git_pr_url"),
                 "git_commit_sha": b.get("git_commit_sha"),
+                "git_pr_merged": bool(b.get("git_pr_merged")),
+                "git_merged_at": b.get("git_merged_at"),
+                "git_merge_commit_sha": b.get("git_merge_commit_sha"),
             }
         )
+
+    delivery_receipt = {
+        "generated_at": _utc_now_iso(),
+        "project_id": project_id,
+        "project_slug": project.get("slug"),
+        "project_name": project.get("name"),
+        "proposal_id": proposal_id,
+        "status": "ready" if all(bool(b.get("paid_tx_hash")) for b in summary_bounties) else "pending",
+        "bounties": summary_bounties,
+        "links": {
+            "portal_project": f"{portal_base_url}/projects/{project_id}",
+            "portal_app_surface": f"{portal_base_url}/apps/{project.get('slug')}",
+            "artifact": f"{oracle_base_url}/api/v1/project-artifacts/{project.get('slug')}",
+            "artifact_summary": f"{oracle_base_url}/api/v1/project-artifacts/{project.get('slug')}/summary",
+        },
+    }
+    state["delivery_receipt"] = delivery_receipt
+    _save_state(state)
+
+    receipt_slug = str(project.get("slug") or project_id or "project")
+    receipt_json_path = OUTPUT_DIR / f"{receipt_slug}-delivery-receipt.json"
+    receipt_md_path = OUTPUT_DIR / f"{receipt_slug}-delivery-receipt.md"
+    receipt_json_path.write_text(json.dumps(delivery_receipt, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+    receipt_lines = [
+        f"# Delivery Receipt: {project.get('name')}",
+        "",
+        f"- generated_at: `{delivery_receipt['generated_at']}`",
+        f"- project_id: `{project_id}`",
+        f"- proposal_id: `{proposal_id}`",
+        f"- status: `{delivery_receipt['status']}`",
+        "",
+        "## Deliverables",
+    ]
+    if summary_bounties:
+        for b in summary_bounties:
+            receipt_lines.append(f"- {b.get('key')}: `{b.get('bounty_id')}`")
+            receipt_lines.append(f"  status: `{'paid' if b.get('marked_paid') else 'pending'}`")
+            if b.get("git_pr_url"):
+                receipt_lines.append(f"  pr_url: {b.get('git_pr_url')}")
+            if b.get("git_merge_commit_sha"):
+                receipt_lines.append(f"  merge_commit_sha: `{b.get('git_merge_commit_sha')}`")
+            if b.get("paid_tx_hash"):
+                receipt_lines.append(f"  paid_tx_hash: `{b.get('paid_tx_hash')}`")
+    else:
+        receipt_lines.append("- none")
+    receipt_lines.extend(
+        [
+            "",
+            "## Links",
+            f"- project: {delivery_receipt['links']['portal_project']}",
+            f"- app_surface: {delivery_receipt['links']['portal_app_surface']}",
+            f"- artifact: {delivery_receipt['links']['artifact']}",
+            f"- artifact_summary: {delivery_receipt['links']['artifact_summary']}",
+            "",
+        ]
+    )
+    receipt_md_path.write_text("\n".join(receipt_lines) + "\n", encoding="utf-8")
+
+    if project.get("project_thread_id") and not state.get("delivery_receipt_posted"):
+        bullets = []
+        for b in summary_bounties:
+            bullets.append(
+                f"- {b.get('key')}: `{b.get('bounty_id')}` | pr: {b.get('git_pr_url')} | paid_tx: `{b.get('paid_tx_hash')}`"
+            )
+        _agent_post(
+            oracle_base_url,
+            f"/api/v1/agent/discussions/threads/{project['project_thread_id']}/posts",
+            api_key=author["api_key"],
+            body={
+                "body_md": "\n".join(
+                    [
+                        "## Delivery receipt",
+                        f"- project: `{project.get('name')}`",
+                        f"- proposal_id: `{proposal_id}`",
+                        f"- receipt_json: `{receipt_json_path}`",
+                        f"- receipt_md: `{receipt_md_path}`",
+                        "",
+                        *bullets,
+                    ]
+                ),
+                "idempotency_key": f"e2e:delivery_receipt:{project_id}",
+            },
+        )
+        state["delivery_receipt_posted"] = True
+        _save_state(state)
 
     summary = {
         "base_url": oracle_base_url,
@@ -1490,6 +1700,11 @@ def main() -> int:
         "tx": {
             "deposit_usdc_to_treasury": chain.get("deposit_usdc_to_treasury_tx"),
             "deposit_usdc_to_treasury_2": chain.get("deposit_usdc_to_treasury_tx2"),
+        },
+        "delivery_receipt": {
+            "status": delivery_receipt["status"],
+            "json_path": str(receipt_json_path),
+            "md_path": str(receipt_md_path),
         },
         "urls": urls,
         "local_state_path": str(STATE_PATH),
@@ -1550,6 +1765,11 @@ def main() -> int:
                     lines.append(f"  - git_pr_url: {b.get('git_pr_url')}")
         else:
             lines.append("- —")
+        lines.append("")
+        lines.append("## Delivery Receipt")
+        lines.append(f"- status: `{delivery_receipt['status']}`")
+        lines.append(f"- json: `{receipt_json_path}`")
+        lines.append(f"- markdown: `{receipt_md_path}`")
         lines.append("")
         lines.append("## Links")
         for k, v in urls.items():

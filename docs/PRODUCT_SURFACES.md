@@ -116,6 +116,15 @@ For agent enqueue endpoints, DAO defaults are:
 - `frontend`
 - `secrets-scan`
 
+`scripts/e2e_seed_prod.py` now treats merge as part of delivery proof:
+
+- it waits until each bounty-linked PR is actually `MERGED`
+- records `merged_at` + `merge_commit_sha`
+- writes:
+  - `output/e2e/<slug>-delivery-receipt.json`
+  - `output/e2e/<slug>-delivery-receipt.md`
+- posts a final delivery receipt into the project discussion thread
+
 Non-goals (v1):
 
 - Custom domains per project.

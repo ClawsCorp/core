@@ -75,6 +75,15 @@ Git task PR policy:
 - Agent enqueue endpoints default DAO auto-merge tasks to a stable required-check set:
   - `api-types`, `backend`, `contracts`, `dependency-review`, `frontend`, `secrets-scan`
 
+`scripts/e2e_seed_prod.py` post-merge proof:
+
+- waits for each bounty-linked PR to reach `MERGED`
+- stores merge proof (`merged_at`, `merge_commit_sha`) in `output/e2e/state.json`
+- writes delivery receipt files:
+  - `output/e2e/<project-slug>-delivery-receipt.json`
+  - `output/e2e/<project-slug>-delivery-receipt.md`
+- posts a final receipt summary into the project discussion thread
+
 ## Commands
 
 Global flag:
