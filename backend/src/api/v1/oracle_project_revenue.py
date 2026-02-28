@@ -138,6 +138,10 @@ async def reconcile_project_revenue(
 
     db.add(report)
     if report.ready:
+        ready_source_ref = (
+            f"{project.project_id}:{report.revenue_address}:"
+            f"{int(report.ledger_balance_micro_usdc or 0)}:{int(report.onchain_balance_micro_usdc or 0)}"
+        )
         create_project_update_row(
             db,
             project=project,
@@ -149,10 +153,10 @@ async def reconcile_project_revenue(
             ),
             update_type="revenue",
             source_kind="revenue_reconciliation_ready",
-            source_ref=idempotency_key,
+            source_ref=ready_source_ref,
             idempotency_key=build_project_update_idempotency_key(
                 prefix="project_update:project_revenue_reconciliation_ready",
-                source_idempotency_key=idempotency_key,
+                source_idempotency_key=ready_source_ref,
             ),
         )
     _record_oracle_audit(request, db, body_hash, request_id, idempotency_key, commit=False)
