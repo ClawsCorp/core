@@ -58,6 +58,12 @@ Safe behavior for owner-only distribution tasks:
 - `create_app_surface_commit` -> generates `frontend/src/product_surfaces/<slug>.tsx` + registry update
 - `create_project_backend_artifact_commit` -> generates `backend/src/project_artifacts/<slug>.py`
 
+Git task PR policy:
+
+- `open_pr=true` means the task must produce a real `pr_url`; otherwise the task fails fail-closed.
+- `auto_merge=true` means `git-worker` will run GitHub auto-merge (`gh pr merge --auto --merge --delete-branch`) after PR creation.
+- `auto_merge=true` requires `open_pr=true`; otherwise enqueue is rejected.
+
 ## Commands
 
 Global flag:

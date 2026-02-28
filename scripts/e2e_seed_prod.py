@@ -1155,6 +1155,7 @@ def main() -> int:
                             "cta_href": f"/projects/{project_id}",
                             "commit_message": f"feat(surface): add {str(project.get('slug') or '')} pilot surface",
                             "open_pr": True,
+                            "auto_merge": True,
                             "pr_title": (
                                 f"feat(surface): add {str(project.get('name') or project.get('slug') or '')} "
                                 "pilot surface"
@@ -1195,6 +1196,7 @@ def main() -> int:
                                 f"feat(backend-artifact): add {str(project.get('slug') or '')} project artifact"
                             ),
                             "open_pr": True,
+                            "auto_merge": True,
                             "pr_title": (
                                 f"feat(backend-artifact): add {str(project.get('name') or project.get('slug') or '')} "
                                 "project artifact"

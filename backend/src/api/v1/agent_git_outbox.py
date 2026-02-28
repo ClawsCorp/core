@@ -227,6 +227,9 @@ async def enqueue_project_surface_commit(
     if cta_href:
         worker_payload["cta_href"] = cta_href
     worker_payload["open_pr"] = bool(payload.open_pr)
+    if payload.auto_merge and not payload.open_pr:
+        raise HTTPException(status_code=400, detail="auto_merge_requires_open_pr")
+    worker_payload["auto_merge"] = bool(payload.auto_merge)
     worker_payload["pr_title"] = (payload.pr_title.strip() if payload.pr_title else _default_pr_title(project, slug))
     worker_payload["pr_body"] = (
         payload.pr_body.strip() if payload.pr_body else _default_pr_body(project, slug, idempotency_key)
@@ -304,6 +307,9 @@ async def enqueue_project_backend_artifact_commit(
     if artifact_summary:
         worker_payload["artifact_summary"] = artifact_summary
     worker_payload["open_pr"] = bool(payload.open_pr)
+    if payload.auto_merge and not payload.open_pr:
+        raise HTTPException(status_code=400, detail="auto_merge_requires_open_pr")
+    worker_payload["auto_merge"] = bool(payload.auto_merge)
     worker_payload["pr_title"] = (
         payload.pr_title.strip() if payload.pr_title else _default_backend_pr_title(project, slug)
     )

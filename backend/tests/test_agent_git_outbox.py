@@ -124,6 +124,7 @@ def test_agent_can_enqueue_and_list_project_git_tasks(_client: TestClient, _db: 
     assert task["payload"]["surface_tagline"] == "Team writing space"
     assert task["payload"]["cta_label"] == "Open Aurora Hub"
     assert task["payload"]["cta_href"] == "/projects/prj_git_1"
+    assert task["payload"]["auto_merge"] is False
     assert isinstance(task["payload"]["pr_title"], str)
     assert "Checklist" in str(task["payload"]["pr_body"])
 
@@ -179,6 +180,7 @@ def test_agent_git_outbox_defaults_open_pr_true(_client: TestClient, _db: sessio
     assert enqueue.status_code == 200
     payload = enqueue.json()["data"]["payload"]
     assert payload["open_pr"] is True
+    assert payload["auto_merge"] is False
     assert "Nova Index" in str(payload["pr_title"])
     assert "Checklist" in str(payload["pr_body"])
 
@@ -263,6 +265,7 @@ def test_agent_can_enqueue_backend_artifact_git_task(_client: TestClient, _db: s
     assert task["payload"]["slug"] == "pulse-ledger"
     assert task["payload"]["artifact_title"] == "Pulse Ledger backend artifact"
     assert task["payload"]["open_pr"] is False
+    assert task["payload"]["auto_merge"] is False
     assert task["payload"]["endpoint_paths"] == ["/api/v1/projects/prj_git_4", "/api/v1/projects/prj_git_4/funding"]
     assert "Checklist" in str(task["payload"]["pr_body"])
 
@@ -323,6 +326,7 @@ def test_agent_git_outbox_persists_explicit_bounty_link(_client: TestClient, _db
     assert enqueue.status_code == 200
     payload = enqueue.json()["data"]["payload"]
     assert payload["bounty_id"] == "bty_git_5"
+    assert payload["auto_merge"] is False
 
 
 def test_agent_git_outbox_rejects_bounty_from_other_project(_client: TestClient, _db: sessionmaker[Session]) -> None:
@@ -400,3 +404,39 @@ def test_agent_git_outbox_rejects_bounty_from_other_project(_client: TestClient,
     )
     assert enqueue.status_code == 400
     assert "bounty_project_mismatch" in enqueue.text
+
+
+def test_agent_git_outbox_rejects_auto_merge_when_open_pr_is_false(_client: TestClient, _db: sessionmaker[Session]) -> None:
+    owner_key = _register_agent(_client, name="Owner Seven")
+    with _db() as db:
+        owner = db.query(Agent).filter(Agent.agent_id == owner_key.split(".")[0]).first()
+        assert owner is not None
+        db.add(
+            Project(
+                project_id="prj_git_7",
+                slug="git-7",
+                name="Merge Policy",
+                description_md=None,
+                status=ProjectStatus.active,
+                proposal_id=None,
+                origin_proposal_id=None,
+                originator_agent_id=owner.id,
+                discussion_thread_id=None,
+                treasury_wallet_address=None,
+                treasury_address=None,
+                revenue_wallet_address=None,
+                revenue_address=None,
+                monthly_budget_micro_usdc=None,
+                created_by_agent_id=owner.id,
+                approved_at=None,
+            )
+        )
+        db.commit()
+
+    resp = _client.post(
+        "/api/v1/agent/projects/prj_git_7/git-outbox/surface-commit",
+        headers={"Content-Type": "application/json", "X-API-Key": owner_key},
+        json={"slug": "merge-policy", "open_pr": False, "auto_merge": True},
+    )
+    assert resp.status_code == 400
+    assert "auto_merge_requires_open_pr" in resp.text
