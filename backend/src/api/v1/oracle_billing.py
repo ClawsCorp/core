@@ -18,7 +18,7 @@ from src.models.project_crypto_invoice import ProjectCryptoInvoice
 from src.models.revenue_event import RevenueEvent
 from src.services.marketing_fee import accrue_marketing_fee_event
 from src.services.blockchain import BlockchainReadError, read_block_timestamp_utc
-from src.services.project_updates import create_project_update_row
+from src.services.project_updates import create_project_update_row, build_project_update_idempotency_key
 from src.schemas.billing import BillingSyncResponse
 
 router = APIRouter(prefix="/api/v1/oracle", tags=["oracle-billing"])
@@ -210,7 +210,10 @@ async def sync_billing(
                 update_type="revenue",
                 source_kind="crypto_invoice_paid",
                 source_ref=invoice.invoice_id,
-                idempotency_key=f"project_update:crypto_invoice_paid:{invoice.invoice_id}",
+                idempotency_key=build_project_update_idempotency_key(
+                    prefix="project_update:crypto_invoice_paid",
+                    source_idempotency_key=invoice.invoice_id,
+                ),
             )
             invoices_paid += 1
 

@@ -200,3 +200,66 @@ def test_oracle_expense_event_allows_when_under_cap(_client: TestClient, _db: se
         assert update.source_ref == "idem-exp-2"
     finally:
         db.close()
+
+
+def test_oracle_expense_event_allows_long_request_idempotency_key(_client: TestClient, _db: sessionmaker[Session]) -> None:
+    db = _db()
+    try:
+        project = Project(
+            project_id="prj_3",
+            slug="p3",
+            name="P3",
+            description_md=None,
+            status=ProjectStatus.active,
+            proposal_id=None,
+            origin_proposal_id=None,
+            originator_agent_id=None,
+            discussion_thread_id=None,
+            treasury_wallet_address=None,
+            treasury_address=None,
+            revenue_wallet_address=None,
+            revenue_address=None,
+            monthly_budget_micro_usdc=None,
+            created_by_agent_id=None,
+            approved_at=None,
+        )
+        db.add(project)
+        db.flush()
+        db.add(
+            ProjectSpendPolicy(
+                project_id=project.id,
+                per_month_cap_micro_usdc=500,
+                per_day_cap_micro_usdc=None,
+                per_bounty_cap_micro_usdc=None,
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    long_idem = "x" * 240
+    path = "/api/v1/oracle/expense-events"
+    body_obj = {
+        "profit_month_id": "202602",
+        "project_id": "prj_3",
+        "amount_micro_usdc": 150,
+        "tx_hash": None,
+        "category": "project_ops",
+        "idempotency_key": long_idem,
+        "evidence_url": None,
+    }
+    body = json.dumps(body_obj, separators=(",", ":"), sort_keys=True).encode("utf-8")
+
+    resp = _client.post(path, content=body, headers=_oracle_headers(path, body, "req-3", idem="idem-3"))
+    assert resp.status_code == 200
+    assert resp.json()["success"] is True
+
+    db = _db()
+    try:
+        update = db.query(ProjectUpdate).filter(ProjectUpdate.source_kind == "oracle_expense_event").first()
+        assert update is not None
+        assert update.idempotency_key is not None
+        assert len(update.idempotency_key) <= 255
+        assert update.source_ref == long_idem[:128]
+    finally:
+        db.close()
