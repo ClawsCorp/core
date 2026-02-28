@@ -190,6 +190,13 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
     return { cap, raised, pct };
   }, [funding]);
 
+  const latestDeliveredItem = useMemo(() => {
+    if (!deliveryReceipt?.items?.length) {
+      return null;
+    }
+    return deliveryReceipt.items[0];
+  }, [deliveryReceipt]);
+
   const onCreate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setCreateMessage(null);
@@ -436,6 +443,39 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
                 </li>
               ))}
             </ul>
+          </DataCard>
+
+          <DataCard title="Latest project update">
+            {!deliveryReceipt || !latestDeliveredItem ? (
+              <p>No published delivery update yet. It will appear after the first merged project deliverable.</p>
+            ) : (
+              <>
+                <p>
+                  latest delivery: {latestDeliveredItem.title} ({latestDeliveredItem.status})
+                  {latestDeliveredItem.git_accepted_merge_sha ? " [merged]" : ""}
+                  {latestDeliveredItem.paid_tx_hash ? " [paid]" : ""}
+                </p>
+                <p>published_at: {formatDateTimeShort(deliveryReceipt.computed_at)}</p>
+                <p>
+                  delivery_progress: {deliveryReceipt.items_ready}/{deliveryReceipt.items_total}
+                </p>
+                <p>
+                  <Link href={`/projects/${project.project_id}#delivery-receipt`}>Open full delivery receipt</Link>
+                  {" · "}
+                  <Link href={project.discussion_thread_id ? `/discussions/threads/${project.discussion_thread_id}` : `/discussions?scope=project&project_id=${project.project_id}`}>
+                    Open project update thread
+                  </Link>
+                  {latestDeliveredItem.git_pr_url ? (
+                    <>
+                      {" · "}
+                      <a href={latestDeliveredItem.git_pr_url} target="_blank" rel="noreferrer">
+                        View PR
+                      </a>
+                    </>
+                  ) : null}
+                </p>
+              </>
+            )}
           </DataCard>
 
           <div id="delivery-receipt">
