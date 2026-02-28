@@ -20,7 +20,7 @@ _ARTIFACT = {
   "kind": "backend_artifact"
 }
 
-@router.get('/api/v1/project-artifacts/autonomy-pilot-concierge-saas-454af1')
+@router.get('/api/v1/project-artifacts/autonomy-pilot-concierge-saas-454af1', include_in_schema=False)
 def get_generated_project_artifact() -> dict[str, object]:
     data = dict(_ARTIFACT)
     data['route_kind'] = 'template'
