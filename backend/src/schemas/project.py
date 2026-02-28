@@ -160,6 +160,42 @@ class ProjectRevenueReconciliationLatestResponse(BaseModel):
     data: ProjectRevenueReconciliationReportPublic | None
 
 
+class ProjectDeliveryReceiptItem(BaseModel):
+    bounty_num: int
+    bounty_id: str
+    title: str
+    status: str
+    amount_micro_usdc: int
+    funding_source: str
+    paid_tx_hash: str | None
+    git_task_id: str | None
+    git_task_type: str | None
+    git_task_status: str | None
+    git_branch_name: str | None
+    git_source_commit_sha: str | None
+    git_accepted_merge_sha: str | None
+    git_pr_url: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ProjectDeliveryReceipt(BaseModel):
+    project_num: int
+    project_id: str
+    slug: str
+    name: str
+    status: str
+    items_total: int
+    items_ready: int
+    computed_at: datetime
+    items: list[ProjectDeliveryReceiptItem]
+
+
+class ProjectDeliveryReceiptResponse(BaseModel):
+    success: bool
+    data: ProjectDeliveryReceipt | None
+
+
 class ProjectCapitalLeaderboardData(BaseModel):
     items: list[ProjectCapitalSummary]
     limit: int

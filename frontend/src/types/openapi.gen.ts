@@ -140,6 +140,10 @@ export interface paths {
     /** Get latest project revenue reconciliation report */
     get: operations["get_project_revenue_reconciliation_latest_api_v1_projects__project_id__revenue_reconciliation_latest_get"];
   };
+  "/api/v1/projects/{project_id}/delivery-receipt": {
+    /** Get current project delivery receipt */
+    get: operations["get_project_delivery_receipt_api_v1_projects__project_id__delivery_receipt_get"];
+  };
   "/api/v1/projects/{project_id}": {
     /**
      * Get project detail
@@ -1865,6 +1869,77 @@ export interface components {
       /** Success */
       success: boolean;
       data: components["schemas"]["ProjectCryptoInvoicePublic"];
+    };
+    /** ProjectDeliveryReceipt */
+    ProjectDeliveryReceipt: {
+      /** Project Num */
+      project_num: number;
+      /** Project Id */
+      project_id: string;
+      /** Slug */
+      slug: string;
+      /** Name */
+      name: string;
+      /** Status */
+      status: string;
+      /** Items Total */
+      items_total: number;
+      /** Items Ready */
+      items_ready: number;
+      /**
+       * Computed At
+       * Format: date-time
+       */
+      computed_at: string;
+      /** Items */
+      items: components["schemas"]["ProjectDeliveryReceiptItem"][];
+    };
+    /** ProjectDeliveryReceiptItem */
+    ProjectDeliveryReceiptItem: {
+      /** Bounty Num */
+      bounty_num: number;
+      /** Bounty Id */
+      bounty_id: string;
+      /** Title */
+      title: string;
+      /** Status */
+      status: string;
+      /** Amount Micro Usdc */
+      amount_micro_usdc: number;
+      /** Funding Source */
+      funding_source: string;
+      /** Paid Tx Hash */
+      paid_tx_hash: string | null;
+      /** Git Task Id */
+      git_task_id: string | null;
+      /** Git Task Type */
+      git_task_type: string | null;
+      /** Git Task Status */
+      git_task_status: string | null;
+      /** Git Branch Name */
+      git_branch_name: string | null;
+      /** Git Source Commit Sha */
+      git_source_commit_sha: string | null;
+      /** Git Accepted Merge Sha */
+      git_accepted_merge_sha: string | null;
+      /** Git Pr Url */
+      git_pr_url: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string;
+    };
+    /** ProjectDeliveryReceiptResponse */
+    ProjectDeliveryReceiptResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["ProjectDeliveryReceipt"] | null;
     };
     /** ProjectDetail */
     ProjectDetail: {
@@ -3682,6 +3757,28 @@ export interface operations {
       200: {
         content: {
           "application/json": components["schemas"]["ProjectRevenueReconciliationLatestResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Get current project delivery receipt */
+  get_project_delivery_receipt_api_v1_projects__project_id__delivery_receipt_get: {
+    parameters: {
+      path: {
+        project_id: string;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ProjectDeliveryReceiptResponse"];
         };
       };
       /** @description Validation Error */

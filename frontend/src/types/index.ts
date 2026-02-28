@@ -238,6 +238,37 @@ export interface ProjectRevenueReconciliationReport {
   computed_at: string;
 }
 
+export interface ProjectDeliveryReceiptItem {
+  bounty_num: number;
+  bounty_id: string;
+  title: string;
+  status: string;
+  amount_micro_usdc: number;
+  funding_source: string;
+  paid_tx_hash: string | null;
+  git_task_id: string | null;
+  git_task_type: string | null;
+  git_task_status: string | null;
+  git_branch_name: string | null;
+  git_source_commit_sha: string | null;
+  git_accepted_merge_sha: string | null;
+  git_pr_url: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectDeliveryReceipt {
+  project_num: number;
+  project_id: string;
+  slug: string;
+  name: string;
+  status: string;
+  items_total: number;
+  items_ready: number;
+  computed_at: string;
+  items: ProjectDeliveryReceiptItem[];
+}
+
 export interface ProjectDomainPublic {
   domain_id: string;
   project_id: string;
