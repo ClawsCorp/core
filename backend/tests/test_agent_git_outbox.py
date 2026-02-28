@@ -125,6 +125,9 @@ def test_agent_can_enqueue_and_list_project_git_tasks(_client: TestClient, _db: 
     assert task["payload"]["cta_label"] == "Open Aurora Hub"
     assert task["payload"]["cta_href"] == "/projects/prj_git_1"
     assert task["payload"]["auto_merge"] is False
+    assert task["payload"]["merge_policy"]["required_checks"] == []
+    assert task["payload"]["merge_policy"]["required_approvals"] == 0
+    assert task["payload"]["merge_policy"]["require_non_draft"] is True
     assert isinstance(task["payload"]["pr_title"], str)
     assert "Checklist" in str(task["payload"]["pr_body"])
 
@@ -181,6 +184,7 @@ def test_agent_git_outbox_defaults_open_pr_true(_client: TestClient, _db: sessio
     payload = enqueue.json()["data"]["payload"]
     assert payload["open_pr"] is True
     assert payload["auto_merge"] is False
+    assert payload["merge_policy"]["required_checks"] == []
     assert "Nova Index" in str(payload["pr_title"])
     assert "Checklist" in str(payload["pr_body"])
 
@@ -266,6 +270,7 @@ def test_agent_can_enqueue_backend_artifact_git_task(_client: TestClient, _db: s
     assert task["payload"]["artifact_title"] == "Pulse Ledger backend artifact"
     assert task["payload"]["open_pr"] is False
     assert task["payload"]["auto_merge"] is False
+    assert task["payload"]["merge_policy"]["required_checks"] == []
     assert task["payload"]["endpoint_paths"] == ["/api/v1/projects/prj_git_4", "/api/v1/projects/prj_git_4/funding"]
     assert "Checklist" in str(task["payload"]["pr_body"])
 
@@ -327,6 +332,7 @@ def test_agent_git_outbox_persists_explicit_bounty_link(_client: TestClient, _db
     payload = enqueue.json()["data"]["payload"]
     assert payload["bounty_id"] == "bty_git_5"
     assert payload["auto_merge"] is False
+    assert payload["merge_policy"]["required_checks"] == []
 
 
 def test_agent_git_outbox_rejects_bounty_from_other_project(_client: TestClient, _db: sessionmaker[Session]) -> None:

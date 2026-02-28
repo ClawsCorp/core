@@ -158,6 +158,103 @@ def _git_auto_merge_error(
     return None
 
 
+def _extract_check_state(raw: dict[str, Any]) -> tuple[str | None, str | None]:
+    name = str(
+        raw.get("name")
+        or raw.get("context")
+        or raw.get("workflow")
+        or ""
+    ).strip()
+    if not name:
+        return None, None
+    state = str(
+        raw.get("state")
+        or raw.get("status")
+        or raw.get("conclusion")
+        or raw.get("bucket")
+        or ""
+    ).strip()
+    return name, state.lower()
+
+
+def _git_merge_policy_error(
+    pr_url: str,
+    *,
+    required_checks: list[str],
+    required_approvals: int,
+    require_non_draft: bool,
+    repo_root: Path,
+) -> str | None:
+    view_raw = _run_local_cmd(
+        [
+            "gh",
+            "pr",
+            "view",
+            pr_url,
+            "--json",
+            "state,isDraft,reviewDecision",
+        ],
+        cwd=repo_root,
+    )
+    try:
+        view_data = json.loads(view_raw or "{}")
+    except ValueError as exc:
+        raise OracleRunnerError("unable to parse gh pr view json") from exc
+
+    state = str(view_data.get("state") or "").strip().upper()
+    if state != "OPEN":
+        return f"merge_policy_pr_not_open:{state.lower() or 'unknown'}"
+    if require_non_draft and bool(view_data.get("isDraft")):
+        return "merge_policy_pr_is_draft"
+
+    decision = str(view_data.get("reviewDecision") or "").strip().upper()
+    if int(required_approvals) > 0 and decision not in {"APPROVED"}:
+        return "merge_policy_review_not_approved"
+
+    expected_checks = [str(item or "").strip() for item in required_checks if str(item or "").strip()]
+    if not expected_checks:
+        return None
+
+    checks_raw = _run_local_cmd(
+        [
+            "gh",
+            "pr",
+            "checks",
+            pr_url,
+            "--json",
+            "name,state",
+        ],
+        cwd=repo_root,
+    )
+    try:
+        checks_data = json.loads(checks_raw or "[]")
+    except ValueError as exc:
+        raise OracleRunnerError("unable to parse gh pr checks json") from exc
+
+    check_states: dict[str, str] = {}
+    if isinstance(checks_data, list):
+        for item in checks_data:
+            if not isinstance(item, dict):
+                continue
+            name, state_value = _extract_check_state(item)
+            if name:
+                check_states[name] = state_value or ""
+
+    missing = [name for name in expected_checks if name not in check_states]
+    if missing:
+        return "merge_policy_checks_missing:" + ",".join(missing)
+
+    failed = [
+        name
+        for name in expected_checks
+        if check_states.get(name) in {"fail", "failed", "error", "cancel", "cancelled", "timed_out", "startup_failure"}
+    ]
+    if failed:
+        return "merge_policy_checks_failed:" + ",".join(failed)
+
+    return None
+
+
 def _load_execute_payload(path: str) -> tuple[bytes, dict[str, Any]]:
     if path.strip().lower() == "auto":
         raise OracleRunnerError("Use build-execute-payload or run-month with --execute-payload auto.")
@@ -1873,6 +1970,15 @@ def run(argv: list[str] | None = None) -> int:
                             commit_message = str(payload.get("commit_message") or f"feat(surface): add {slug} app surface")
                             open_pr = _coerce_bool(payload.get("open_pr"), default=True)
                             auto_merge = _coerce_bool(payload.get("auto_merge"), default=False)
+                            merge_policy_payload = payload.get("merge_policy")
+                            merge_policy = merge_policy_payload if isinstance(merge_policy_payload, dict) else {}
+                            required_checks = [
+                                str(item or "").strip()
+                                for item in (merge_policy.get("required_checks") or [])
+                                if str(item or "").strip()
+                            ]
+                            required_approvals = int(merge_policy.get("required_approvals") or 0)
+                            require_non_draft = _coerce_bool(merge_policy.get("require_non_draft"), default=True)
                             pr_title = str(payload.get("pr_title") or f"feat(surface): add {slug} app surface")
                             pr_body = str(payload.get("pr_body") or f"Autonomous surface generation for `{slug}` via git_outbox task `{task_id}`.")
 
@@ -1904,6 +2010,7 @@ def run(argv: list[str] | None = None) -> int:
 
                             pr_url: str | None = None
                             pr_error: str | None = None
+                            merge_policy_error: str | None = None
                             auto_merge_error: str | None = None
                             auto_merge_queued = False
                             if open_pr:
@@ -1936,11 +2043,19 @@ def run(argv: list[str] | None = None) -> int:
                                     pr_error = str(exc)
                             if auto_merge and pr_url:
                                 try:
-                                    _run_local_cmd(
-                                        ["gh", "pr", "merge", pr_url, "--auto", "--merge", "--delete-branch"],
-                                        cwd=repo_root,
+                                    merge_policy_error = _git_merge_policy_error(
+                                        pr_url,
+                                        required_checks=required_checks,
+                                        required_approvals=required_approvals,
+                                        require_non_draft=require_non_draft,
+                                        repo_root=repo_root,
                                     )
-                                    auto_merge_queued = True
+                                    if merge_policy_error is None:
+                                        _run_local_cmd(
+                                            ["gh", "pr", "merge", pr_url, "--auto", "--merge", "--delete-branch"],
+                                            cwd=repo_root,
+                                        )
+                                        auto_merge_queued = True
                                 except OracleRunnerError as exc:
                                     auto_merge_error = str(exc)
 
@@ -1951,7 +2066,13 @@ def run(argv: list[str] | None = None) -> int:
                                 "commit_sha": commit_sha,
                                 "open_pr": open_pr,
                                 "auto_merge": auto_merge,
+                                "merge_policy": {
+                                    "required_checks": required_checks,
+                                    "required_approvals": required_approvals,
+                                    "require_non_draft": require_non_draft,
+                                },
                                 "auto_merge_queued": auto_merge_queued,
+                                "merge_policy_error": merge_policy_error,
                                 "auto_merge_error": auto_merge_error,
                                 "pr_url": pr_url,
                                 "pr_error": pr_error,
@@ -1966,7 +2087,7 @@ def run(argv: list[str] | None = None) -> int:
                                 auto_merge,
                                 open_pr,
                                 pr_url,
-                                auto_merge_error,
+                                merge_policy_error or auto_merge_error,
                             )
                             final_error = pr_required_error or auto_merge_required_error
                             final_status = "failed" if final_error else "succeeded"
@@ -1982,6 +2103,12 @@ def run(argv: list[str] | None = None) -> int:
                                     "pr_url": pr_url,
                                     "pr_error": pr_error,
                                     "auto_merge": auto_merge,
+                                    "merge_policy": {
+                                        "required_checks": required_checks,
+                                        "required_approvals": required_approvals,
+                                        "require_non_draft": require_non_draft,
+                                    },
+                                    "merge_policy_error": merge_policy_error,
                                     "auto_merge_queued": auto_merge_queued,
                                     "auto_merge_error": auto_merge_error,
                                     "error_hint": final_error,
@@ -2001,6 +2128,15 @@ def run(argv: list[str] | None = None) -> int:
                             )
                             open_pr = _coerce_bool(payload.get("open_pr"), default=True)
                             auto_merge = _coerce_bool(payload.get("auto_merge"), default=False)
+                            merge_policy_payload = payload.get("merge_policy")
+                            merge_policy = merge_policy_payload if isinstance(merge_policy_payload, dict) else {}
+                            required_checks = [
+                                str(item or "").strip()
+                                for item in (merge_policy.get("required_checks") or [])
+                                if str(item or "").strip()
+                            ]
+                            required_approvals = int(merge_policy.get("required_approvals") or 0)
+                            require_non_draft = _coerce_bool(merge_policy.get("require_non_draft"), default=True)
                             pr_title = str(
                                 payload.get("pr_title") or f"feat(backend-artifact): add {slug} project artifact"
                             )
@@ -2040,6 +2176,7 @@ def run(argv: list[str] | None = None) -> int:
 
                             pr_url: str | None = None
                             pr_error: str | None = None
+                            merge_policy_error: str | None = None
                             auto_merge_error: str | None = None
                             auto_merge_queued = False
                             if open_pr:
@@ -2072,11 +2209,19 @@ def run(argv: list[str] | None = None) -> int:
                                     pr_error = str(exc)
                             if auto_merge and pr_url:
                                 try:
-                                    _run_local_cmd(
-                                        ["gh", "pr", "merge", pr_url, "--auto", "--merge", "--delete-branch"],
-                                        cwd=repo_root,
+                                    merge_policy_error = _git_merge_policy_error(
+                                        pr_url,
+                                        required_checks=required_checks,
+                                        required_approvals=required_approvals,
+                                        require_non_draft=require_non_draft,
+                                        repo_root=repo_root,
                                     )
-                                    auto_merge_queued = True
+                                    if merge_policy_error is None:
+                                        _run_local_cmd(
+                                            ["gh", "pr", "merge", pr_url, "--auto", "--merge", "--delete-branch"],
+                                            cwd=repo_root,
+                                        )
+                                        auto_merge_queued = True
                                 except OracleRunnerError as exc:
                                     auto_merge_error = str(exc)
 
@@ -2087,7 +2232,13 @@ def run(argv: list[str] | None = None) -> int:
                                 "commit_sha": commit_sha,
                                 "open_pr": open_pr,
                                 "auto_merge": auto_merge,
+                                "merge_policy": {
+                                    "required_checks": required_checks,
+                                    "required_approvals": required_approvals,
+                                    "require_non_draft": require_non_draft,
+                                },
                                 "auto_merge_queued": auto_merge_queued,
+                                "merge_policy_error": merge_policy_error,
                                 "auto_merge_error": auto_merge_error,
                                 "pr_url": pr_url,
                                 "pr_error": pr_error,
@@ -2099,7 +2250,7 @@ def run(argv: list[str] | None = None) -> int:
                                 auto_merge,
                                 open_pr,
                                 pr_url,
-                                auto_merge_error,
+                                merge_policy_error or auto_merge_error,
                             )
                             final_error = pr_required_error or auto_merge_required_error
                             final_status = "failed" if final_error else "succeeded"
@@ -2115,6 +2266,12 @@ def run(argv: list[str] | None = None) -> int:
                                     "pr_url": pr_url,
                                     "pr_error": pr_error,
                                     "auto_merge": auto_merge,
+                                    "merge_policy": {
+                                        "required_checks": required_checks,
+                                        "required_approvals": required_approvals,
+                                        "require_non_draft": require_non_draft,
+                                    },
+                                    "merge_policy_error": merge_policy_error,
                                     "auto_merge_queued": auto_merge_queued,
                                     "auto_merge_error": auto_merge_error,
                                     "error_hint": final_error,

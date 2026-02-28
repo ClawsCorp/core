@@ -95,6 +95,9 @@ class AgentGitOutboxCreateSurfaceRequest(BaseModel):
     cta_href: str | None = Field(default=None, min_length=1, max_length=512)
     open_pr: bool = True
     auto_merge: bool = False
+    merge_policy_required_checks: list[str] = Field(default_factory=list, max_length=16)
+    merge_policy_required_approvals: int = Field(default=0, ge=0, le=10)
+    merge_policy_require_non_draft: bool = True
     pr_title: str | None = Field(default=None, min_length=1, max_length=200)
     pr_body: str | None = Field(default=None, min_length=1, max_length=5000)
     idempotency_key: str | None = Field(default=None, min_length=1, max_length=255)
@@ -110,6 +113,9 @@ class AgentGitOutboxCreateBackendArtifactRequest(BaseModel):
     endpoint_paths: list[str] = Field(default_factory=list, max_length=12)
     open_pr: bool = True
     auto_merge: bool = False
+    merge_policy_required_checks: list[str] = Field(default_factory=list, max_length=16)
+    merge_policy_required_approvals: int = Field(default=0, ge=0, le=10)
+    merge_policy_require_non_draft: bool = True
     pr_title: str | None = Field(default=None, min_length=1, max_length=200)
     pr_body: str | None = Field(default=None, min_length=1, max_length=5000)
     idempotency_key: str | None = Field(default=None, min_length=1, max_length=255)

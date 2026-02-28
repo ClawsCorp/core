@@ -344,6 +344,11 @@ def test_git_worker_queues_auto_merge_when_requested(monkeypatch, capsys, tmp_pa
                                         "slug": "demo-artifact",
                                         "open_pr": True,
                                         "auto_merge": True,
+                                        "merge_policy": {
+                                            "required_checks": ["backend", "frontend"],
+                                            "required_approvals": 0,
+                                            "require_non_draft": True,
+                                        },
                                     },
                                 },
                                 "blocked_reason": None,
@@ -370,6 +375,15 @@ def test_git_worker_queues_auto_merge_when_requested(monkeypatch, capsys, tmp_pa
             return "b" * 40
         if args[:3] == ["gh", "pr", "create"]:
             return "https://github.com/ClawsCorp/core/pull/9999"
+        if args[:3] == ["gh", "pr", "view"]:
+            return json.dumps({"state": "OPEN", "isDraft": False, "reviewDecision": "APPROVED"})
+        if args[:3] == ["gh", "pr", "checks"]:
+            return json.dumps(
+                [
+                    {"name": "backend", "state": "pass"},
+                    {"name": "frontend", "state": "pending"},
+                ]
+            )
         if args[:3] == ["gh", "pr", "merge"]:
             return ""
         return ""
@@ -386,8 +400,89 @@ def test_git_worker_queues_auto_merge_when_requested(monkeypatch, capsys, tmp_pa
     assert processed[0]["status"] == "succeeded"
     assert processed[0]["auto_merge"] is True
     assert processed[0]["auto_merge_queued"] is True
+    assert processed[0]["merge_policy_error"] is None
     assert any(cmd[:3] == ["gh", "pr", "merge"] for cmd in commands)
     assert fake_client.completed[-1]["status"] == "succeeded"
+
+
+def test_git_worker_fails_auto_merge_when_required_check_is_missing(monkeypatch, capsys, tmp_path: Path) -> None:
+    class _FakeGitWorkerClient:
+        def __init__(self, _config: object):
+            self.claimed = False
+            self.completed: list[dict[str, object]] = []
+
+        def post(self, path: str, *, body_bytes: bytes, idempotency_key: str | None = None):
+            if path == "/api/v1/oracle/git-outbox/claim-next":
+                if self.claimed:
+                    return type("Resp", (), {"data": {"data": {"task": None, "blocked_reason": "no_tasks"}}})()
+                self.claimed = True
+                return type(
+                    "Resp",
+                    (),
+                    {
+                        "data": {
+                            "data": {
+                                "task": {
+                                    "task_id": "gto_test_3",
+                                    "task_type": "create_app_surface_commit",
+                                    "payload": {
+                                        "slug": "demo-surface",
+                                        "open_pr": True,
+                                        "auto_merge": True,
+                                        "merge_policy": {
+                                            "required_checks": ["backend", "frontend"],
+                                            "required_approvals": 0,
+                                            "require_non_draft": True,
+                                        },
+                                    },
+                                },
+                                "blocked_reason": None,
+                            }
+                        }
+                    },
+                )()
+            if path.endswith("/complete"):
+                payload = json.loads(body_bytes.decode("utf-8"))
+                self.completed.append(payload)
+                return type("Resp", (), {"data": {"data": {"task_id": "gto_test_3"}}})()
+            return type("Resp", (), {"data": {"data": {"ok": True}}})()
+
+    fake_client = _FakeGitWorkerClient(object())
+    commands: list[list[str]] = []
+
+    monkeypatch.setattr(cli, "load_config_from_env", lambda: object())
+    monkeypatch.setattr(cli, "OracleClient", lambda _config: fake_client)
+    monkeypatch.setattr(cli, "_discover_repo_root", lambda _explicit: tmp_path)
+
+    def _fake_run_local_cmd(args: list[str], *, cwd: Path) -> str:
+        commands.append(args)
+        if args[:3] == ["git", "rev-parse", "HEAD"]:
+            return "c" * 40
+        if args[:3] == ["gh", "pr", "create"]:
+            return "https://github.com/ClawsCorp/core/pull/10000"
+        if args[:3] == ["gh", "pr", "view"]:
+            return json.dumps({"state": "OPEN", "isDraft": False, "reviewDecision": "APPROVED"})
+        if args[:3] == ["gh", "pr", "checks"]:
+            return json.dumps([{"name": "backend", "state": "pass"}])
+        if args[:3] == ["gh", "pr", "merge"]:
+            return ""
+        return ""
+
+    monkeypatch.setattr(cli, "_run_local_cmd", _fake_run_local_cmd)
+
+    exit_code = cli.run(["git-worker", "--json", "--worker-id", "test-worker", "--max-tasks", "1", "--repo-dir", str(tmp_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    data = json.loads(captured.out.strip())
+    processed = data["processed"]
+    assert len(processed) == 1
+    assert processed[0]["status"] == "failed"
+    assert processed[0]["merge_policy_error"] == "merge_policy_checks_missing:frontend"
+    assert processed[0]["auto_merge_queued"] is False
+    assert not any(cmd[:3] == ["gh", "pr", "merge"] for cmd in commands)
+    assert fake_client.completed[-1]["status"] == "failed"
+    assert fake_client.completed[-1]["error_hint"] == "merge_policy_checks_missing:frontend"
 
 
 class _FakeClientReconcileBlocked(_FakeClient):

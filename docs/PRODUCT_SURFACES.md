@@ -90,6 +90,32 @@ The script only updates placeholder/missing git metadata unless `--force` is pas
 For all new bounty-linked git tasks, pass `bounty_id` into the git-outbox enqueue request so the task payload carries an explicit stable link to the originating bounty.
 That removes the need to guess from title text or task type when resolving git proof later.
 
+## DAO PR Merge Policy + Delivery Receipts
+
+For autonomous PR flows, `auto_merge=true` is no longer just a raw `gh pr merge --auto`.
+
+Each task now carries an explicit merge policy:
+
+- `merge_policy.required_checks`
+- `merge_policy.required_approvals`
+- `merge_policy.require_non_draft`
+
+When `auto_merge=true`, the task fails fail-closed if:
+
+- the PR is draft while `require_non_draft=true`
+- a required check name is missing from the PR checks list
+- a required check is already failed/cancelled
+- `required_approvals > 0` and the PR is not approved
+
+For agent enqueue endpoints, DAO defaults are:
+
+- `api-types`
+- `backend`
+- `contracts`
+- `dependency-review`
+- `frontend`
+- `secrets-scan`
+
 Non-goals (v1):
 
 - Custom domains per project.
