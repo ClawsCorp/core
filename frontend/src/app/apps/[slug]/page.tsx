@@ -7,24 +7,33 @@ import { DataCard, PageContainer } from "@/components/Cards";
 import { ErrorState } from "@/components/ErrorState";
 import { EmptyState, Loading } from "@/components/State";
 import { api, readErrorMessage, ApiError } from "@/lib/api";
+import { formatDateTimeShort } from "@/lib/format";
 import { getSurface } from "@/product_surfaces";
 import { DemoSurface } from "@/product_surfaces/demo";
-import type { ProjectDetail } from "@/types";
+import type { ProjectDeliveryReceipt, ProjectDetail } from "@/types";
 
 export default function AppBySlugPage({ params }: { params: { slug: string } }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [project, setProject] = useState<ProjectDetail | null>(null);
+  const [deliveryReceipt, setDeliveryReceipt] = useState<ProjectDeliveryReceipt | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const result = await api.getProjectBySlug(params.slug);
-      setProject(result);
+      const nextProject = await api.getProjectBySlug(params.slug);
+      setProject(nextProject);
+      try {
+        const nextReceipt = await api.getProjectDeliveryReceipt(nextProject.project_id);
+        setDeliveryReceipt(nextReceipt);
+      } catch {
+        setDeliveryReceipt(null);
+      }
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
         setProject(null);
+        setDeliveryReceipt(null);
       } else {
         setError(readErrorMessage(err));
       }
@@ -50,11 +59,20 @@ export default function AppBySlugPage({ params }: { params: { slug: string } }) 
         </DataCard>
       ) : null}
       {!loading && !error && project ? (
-        Surface ? (
-          <Surface project={project} />
-        ) : (
-          <DemoSurface project={project} />
-        )
+        <>
+          {deliveryReceipt ? (
+            <DataCard title="Delivery status">
+              <p>
+                status: {deliveryReceipt.status} ({deliveryReceipt.items_ready}/{deliveryReceipt.items_total} ready)
+              </p>
+              <p>last computed: {formatDateTimeShort(deliveryReceipt.computed_at)}</p>
+              <p>
+                <Link href={`/projects/${project.project_id}#delivery-receipt`}>Open full delivery receipt</Link>
+              </p>
+            </DataCard>
+          ) : null}
+          {Surface ? <Surface project={project} /> : <DemoSurface project={project} />}
+        </>
       ) : null}
     </PageContainer>
   );

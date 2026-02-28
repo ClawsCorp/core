@@ -125,6 +125,15 @@ For agent enqueue endpoints, DAO defaults are:
   - `output/e2e/<slug>-delivery-receipt.md`
 - posts a final delivery receipt into the project discussion thread
 
+The same proof is now exposed as public project data:
+
+- `GET /api/v1/projects/<project_id>/delivery-receipt`
+
+The portal surfaces it in two places:
+
+- project detail page: `Delivery receipt`
+- `/apps/<slug>` page: compact `Delivery status` summary with a link to the full receipt
+
 Non-goals (v1):
 
 - Custom domains per project.
