@@ -20,6 +20,7 @@ from src.models.git_outbox import GitOutbox
 from src.models.project import Project
 from src.models.project_member import ProjectMember
 from src.schemas.git_outbox import (
+    AgentGitOutboxCreateBackendArtifactRequest,
     AgentGitOutboxCreateSurfaceRequest,
     AgentGitOutboxListData,
     AgentGitOutboxListResponse,
@@ -80,6 +81,10 @@ def _default_pr_title(project: Project, slug: str) -> str:
     return f"feat(surface): {project.name} - {slug}"
 
 
+def _default_backend_pr_title(project: Project, slug: str) -> str:
+    return f"feat(backend-artifact): {project.name} - {slug}"
+
+
 def _default_pr_body(project: Project, slug: str, task_idempotency_key: str) -> str:
     return "\n".join(
         [
@@ -95,6 +100,25 @@ def _default_pr_body(project: Project, slug: str, task_idempotency_key: str) -> 
             "- [ ] frontend lint/build passed",
             "- [ ] app surface opens on /apps/<slug>",
             "- [ ] copy/content reviewed",
+        ]
+    )
+
+
+def _default_backend_pr_body(project: Project, slug: str, task_idempotency_key: str) -> str:
+    return "\n".join(
+        [
+            "## Summary",
+            f"- add generated backend artifact `{slug}` for project `{project.name}` (ID {project.project_id})",
+            "- capture minimal API contract and operator checklist",
+            "",
+            "## Autonomous Task",
+            f"- idempotency_key: `{task_idempotency_key}`",
+            f"- project_id: `{project.project_id}`",
+            "",
+            "## Checklist",
+            "- [ ] artifact file generated under backend/src/project_artifacts",
+            "- [ ] endpoint list matches current project scope",
+            "- [ ] follow-up tasks reference this artifact in discussions/bounties",
         ]
     )
 
@@ -184,6 +208,82 @@ async def enqueue_project_surface_commit(
     row = enqueue_git_outbox_task(
         db,
         task_type="create_app_surface_commit",
+        payload=worker_payload,
+        idempotency_key=idempotency_key,
+        project_id=int(project.id),
+        requested_by_agent_id=int(agent.id),
+    )
+
+    record_audit(
+        db,
+        actor_type="agent",
+        agent_id=agent.agent_id,
+        method=request.method,
+        path=request.url.path,
+        idempotency_key=idempotency_key,
+        body_hash=body_hash,
+        signature_status=getattr(request.state, "signature_status", "none"),
+        request_id=request_id,
+        commit=False,
+    )
+    db.commit()
+    db.refresh(row)
+    return GitOutboxTaskResponse(success=True, data=_to_task(row))
+
+
+@router.post("/{project_id}/git-outbox/backend-artifact-commit", response_model=GitOutboxTaskResponse)
+async def enqueue_project_backend_artifact_commit(
+    project_id: str,
+    payload: AgentGitOutboxCreateBackendArtifactRequest,
+    request: Request,
+    agent: Agent = Depends(require_agent_auth),
+    db: Session = Depends(get_db),
+) -> GitOutboxTaskResponse:
+    body_hash = hash_body(await request.body())
+    request_id = request.headers.get("X-Request-ID") or str(uuid4())
+
+    project = _find_project_by_identifier(db, project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if not _agent_can_access_project(db, project, agent):
+        raise HTTPException(status_code=403, detail="project_access_denied")
+
+    slug = _validate_slug(payload.slug)
+    deterministic_seed = f"backend_artifact:{project.project_id}:{agent.agent_id}:{slug}"
+    deterministic_idempotency_key = (
+        f"backend_artifact:{hashlib.sha256(deterministic_seed.encode('utf-8')).hexdigest()}"
+    )
+    idempotency_key = request.headers.get("Idempotency-Key") or payload.idempotency_key or deterministic_idempotency_key
+
+    endpoint_paths: list[str] = []
+    for item in payload.endpoint_paths:
+        candidate = item.strip()
+        if not candidate:
+            continue
+        endpoint_paths.append(candidate[:200])
+
+    worker_payload: dict[str, object] = {"slug": slug, "endpoint_paths": endpoint_paths}
+    if payload.branch_name:
+        worker_payload["branch_name"] = payload.branch_name.strip()
+    if payload.commit_message:
+        worker_payload["commit_message"] = payload.commit_message.strip()
+    artifact_title = _trim_or_none(payload.artifact_title, max_length=160)
+    artifact_summary = _trim_or_none(payload.artifact_summary, max_length=1200)
+    if artifact_title:
+        worker_payload["artifact_title"] = artifact_title
+    if artifact_summary:
+        worker_payload["artifact_summary"] = artifact_summary
+    worker_payload["open_pr"] = bool(payload.open_pr)
+    worker_payload["pr_title"] = (
+        payload.pr_title.strip() if payload.pr_title else _default_backend_pr_title(project, slug)
+    )
+    worker_payload["pr_body"] = (
+        payload.pr_body.strip() if payload.pr_body else _default_backend_pr_body(project, slug, idempotency_key)
+    )
+
+    row = enqueue_git_outbox_task(
+        db,
+        task_type="create_project_backend_artifact_commit",
         payload=worker_payload,
         idempotency_key=idempotency_key,
         project_id=int(project.id),

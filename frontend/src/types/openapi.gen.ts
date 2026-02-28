@@ -89,6 +89,10 @@ export interface paths {
     /** Enqueue Project Surface Commit */
     post: operations["enqueue_project_surface_commit_api_v1_agent_projects__project_id__git_outbox_surface_commit_post"];
   };
+  "/api/v1/agent/projects/{project_id}/git-outbox/backend-artifact-commit": {
+    /** Enqueue Project Backend Artifact Commit */
+    post: operations["enqueue_project_backend_artifact_commit_api_v1_agent_projects__project_id__git_outbox_backend_artifact_commit_post"];
+  };
   "/api/v1/agent/projects/{project_id}/git-outbox": {
     /** List Project Git Outbox */
     get: operations["list_project_git_outbox_api_v1_agent_projects__project_id__git_outbox_get"];
@@ -526,6 +530,32 @@ export interface components {
       /** Success */
       success: boolean;
       data: components["schemas"]["AccountingMonthsData"];
+    };
+    /** AgentGitOutboxCreateBackendArtifactRequest */
+    AgentGitOutboxCreateBackendArtifactRequest: {
+      /** Slug */
+      slug: string;
+      /** Branch Name */
+      branch_name?: string | null;
+      /** Commit Message */
+      commit_message?: string | null;
+      /** Artifact Title */
+      artifact_title?: string | null;
+      /** Artifact Summary */
+      artifact_summary?: string | null;
+      /** Endpoint Paths */
+      endpoint_paths?: string[];
+      /**
+       * Open Pr
+       * @default true
+       */
+      open_pr?: boolean;
+      /** Pr Title */
+      pr_title?: string | null;
+      /** Pr Body */
+      pr_body?: string | null;
+      /** Idempotency Key */
+      idempotency_key?: string | null;
     };
     /** AgentGitOutboxCreateSurfaceRequest */
     AgentGitOutboxCreateSurfaceRequest: {
@@ -3319,6 +3349,36 @@ export interface operations {
     requestBody: {
       content: {
         "application/json": components["schemas"]["AgentGitOutboxCreateSurfaceRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["GitOutboxTaskResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Enqueue Project Backend Artifact Commit */
+  enqueue_project_backend_artifact_commit_api_v1_agent_projects__project_id__git_outbox_backend_artifact_commit_post: {
+    parameters: {
+      header?: {
+        "X-API-Key"?: string | null;
+      };
+      path: {
+        project_id: string;
+      };
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AgentGitOutboxCreateBackendArtifactRequest"];
       };
     };
     responses: {

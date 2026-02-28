@@ -1044,6 +1044,7 @@ def main() -> int:
     ]
 
     # Create/claim/submit/evaluate for each bounty.
+    legacy_git_surface = state.get("git_surface")
     for spec in bounty_specs:
         existing = next((b for b in bounties if b.get("key") == spec["key"]), None)
         if existing is None:
@@ -1121,15 +1122,100 @@ def main() -> int:
             existing["claimed"] = True
             _save_state(state)
 
-        if not existing.get("submitted"):
-            _agent_post(
-                oracle_base_url,
-                f"/api/v1/bounties/{bounty_id}/submit",
-                api_key=claimant["api_key"],
-                body={"pr_url": f"https://example.invalid/pr/{bounty_id}", "merge_sha": "deadbeef"},
-            )
-            existing["submitted"] = True
-            _save_state(state)
+        if not existing.get("git_task_id"):
+            if (
+                spec["key"] == "frontend_demo_surface"
+                and isinstance(legacy_git_surface, dict)
+                and str(legacy_git_surface.get("status") or "") == "succeeded"
+                and str(legacy_git_surface.get("task_id") or "")
+            ):
+                existing["git_task_id"] = str(legacy_git_surface.get("task_id"))
+                existing["git_status"] = str(legacy_git_surface.get("status"))
+                existing["git_branch_name"] = legacy_git_surface.get("branch_name")
+                existing["git_commit_sha"] = legacy_git_surface.get("commit_sha")
+                existing["git_pr_url"] = legacy_git_surface.get("pr_url")
+                existing["git_task_type"] = "create_app_surface_commit"
+                _save_state(state)
+            else:
+                if spec["key"] == "frontend_demo_surface":
+                    task_resp = _agent_post(
+                        oracle_base_url,
+                        f"/api/v1/agent/projects/{project_id}/git-outbox/surface-commit",
+                        api_key=claimant["api_key"],
+                        body={
+                            "slug": str(project.get("slug") or ""),
+                            "surface_title": str(project.get("name") or project.get("slug") or ""),
+                            "surface_tagline": "Autonomous pilot: funding, payout, and delivery verified on-chain.",
+                            "surface_description": (
+                                "Generated from the frontend bounty deliverable. "
+                                "This page summarizes the project state, treasury, funding, and linked work."
+                            ),
+                            "cta_label": "Open Project Workspace",
+                            "cta_href": f"/projects/{project_id}",
+                            "commit_message": f"feat(surface): add {str(project.get('slug') or '')} pilot surface",
+                            "open_pr": True,
+                            "pr_title": (
+                                f"feat(surface): add {str(project.get('name') or project.get('slug') or '')} "
+                                "pilot surface"
+                            ),
+                            "pr_body": "\n".join(
+                                [
+                                    "## Summary",
+                                    f"- frontend bounty deliverable for `{bounty_id}`",
+                                    f"- generate `/apps/{str(project.get('slug') or '')}` through git outbox",
+                                    f"- link the surface to project `{project_id}`",
+                                ]
+                            ),
+                            "idempotency_key": f"e2e:bounty:git:{bounty_id}:frontend",
+                        },
+                    )
+                    existing["git_task_type"] = "create_app_surface_commit"
+                else:
+                    task_resp = _agent_post(
+                        oracle_base_url,
+                        f"/api/v1/agent/projects/{project_id}/git-outbox/backend-artifact-commit",
+                        api_key=claimant["api_key"],
+                        body={
+                            "slug": str(project.get("slug") or ""),
+                            "artifact_title": f"{str(project.get('name') or project.get('slug') or '')} backend artifact",
+                            "artifact_summary": (
+                                "Generated from the backend bounty deliverable. "
+                                "Captures the minimal API contract and operator-facing safety checks."
+                            ),
+                            "endpoint_paths": [
+                                f"/api/v1/projects/{project_id}",
+                                f"/api/v1/projects/{project_id}/capital",
+                                f"/api/v1/projects/{project_id}/funding",
+                                f"/api/v1/bounties?project_id={project_id}",
+                                f"/api/v1/discussions/threads?scope=project&project_id={project_id}",
+                            ],
+                            "commit_message": (
+                                f"feat(backend-artifact): add {str(project.get('slug') or '')} project artifact"
+                            ),
+                            "open_pr": True,
+                            "pr_title": (
+                                f"feat(backend-artifact): add {str(project.get('name') or project.get('slug') or '')} "
+                                "project artifact"
+                            ),
+                            "pr_body": "\n".join(
+                                [
+                                    "## Summary",
+                                    f"- backend bounty deliverable for `{bounty_id}`",
+                                    f"- generate backend artifact for project `{project_id}`",
+                                    "- capture current API contract and fail-closed checks",
+                                ]
+                            ),
+                            "idempotency_key": f"e2e:bounty:git:{bounty_id}:backend",
+                        },
+                    )
+                    existing["git_task_type"] = "create_project_backend_artifact_commit"
+                task_data = task_resp.get("data", {}) if isinstance(task_resp.get("data"), dict) else {}
+                task_id = task_data.get("task_id")
+                if not isinstance(task_id, str) or not task_id:
+                    raise RuntimeError("unexpected bounty git-outbox enqueue response")
+                existing["git_task_id"] = task_id
+                existing["git_status"] = task_data.get("status")
+                _save_state(state)
 
         if existing.get("thread_id") and not existing.get("claimant_posted"):
             if spec["key"] == "frontend_demo_surface":
@@ -1166,13 +1252,88 @@ def main() -> int:
             existing["claimant_posted"] = True
             _save_state(state)
 
+    # Process bounty-linked git tasks and publish machine-readable proof.
+    if any(
+        isinstance(b, dict) and b.get("git_task_id") and b.get("git_status") != "succeeded"
+        for b in bounties
+    ):
+        state["git_worker_last_run"] = _run_git_worker(env=env, base_url=oracle_base_url, max_tasks=5)
+        _save_state(state)
+
+    task_list = _agent_get(
+        oracle_base_url,
+        f"/api/v1/agent/projects/{project_id}/git-outbox",
+        api_key=author["api_key"],
+    )
+    task_items = task_list.get("data", {}).get("items")
+    if not isinstance(task_items, list):
+        raise RuntimeError("unexpected git-outbox list response")
+    task_map = {
+        str(item.get("task_id") or ""): item
+        for item in task_items
+        if isinstance(item, dict) and str(item.get("task_id") or "")
+    }
+    for existing in bounties:
+        if not isinstance(existing, dict) or not existing.get("git_task_id"):
+            continue
+        task = task_map.get(str(existing["git_task_id"]))
+        if not isinstance(task, dict):
+            raise RuntimeError("bounty git-outbox task not found")
+        existing["git_status"] = task.get("status")
+        existing["git_branch_name"] = task.get("branch_name")
+        existing["git_commit_sha"] = task.get("commit_sha")
+        existing["git_pr_url"] = task.get("pr_url")
+        existing["git_result"] = task.get("result")
+        existing["git_last_error_hint"] = task.get("last_error_hint")
+        _save_state(state)
+        if existing.get("git_status") != "succeeded":
+            raise RuntimeError(
+                f"bounty git task did not succeed: {existing.get('git_last_error_hint') or existing.get('git_status')}"
+            )
+        if existing.get("thread_id") and not existing.get("git_proof_posted"):
+            _agent_post(
+                oracle_base_url,
+                f"/api/v1/agent/discussions/threads/{existing['thread_id']}/posts",
+                api_key=author["api_key"],
+                body={
+                    "body_md": (
+                        "### Git deliverable recorded\n"
+                        f"- task_id: `{existing['git_task_id']}`\n"
+                        f"- branch: `{existing.get('git_branch_name')}`\n"
+                        f"- commit: `{existing.get('git_commit_sha')}`\n"
+                        f"- pr_url: {existing.get('git_pr_url')}\n"
+                    ),
+                    "idempotency_key": f"e2e:bounty:git_proof:{existing['bounty_id']}",
+                },
+            )
+            existing["git_proof_posted"] = True
+            _save_state(state)
+
+    # Submit/evaluate with real git evidence once artifact tasks are ready.
+    for spec in bounty_specs:
+        existing = next((b for b in bounties if b.get("key") == spec["key"]), None)
+        if not existing or "bounty_id" not in existing:
+            continue
+        bounty_id = str(existing["bounty_id"])
+        claimant = spec["claimant"]
+        pr_url = str(existing.get("git_pr_url") or f"https://example.invalid/pr/{bounty_id}")
+        merge_sha = str(existing.get("git_commit_sha") or "deadbeef")
+        if not existing.get("submitted"):
+            _agent_post(
+                oracle_base_url,
+                f"/api/v1/bounties/{bounty_id}/submit",
+                api_key=claimant["api_key"],
+                body={"pr_url": pr_url, "merge_sha": merge_sha},
+            )
+            existing["submitted"] = True
+            _save_state(state)
         if not existing.get("eligible"):
             oracle.post(
                 f"/api/v1/bounties/{bounty_id}/evaluate-eligibility",
                 {
-                    "pr_url": f"https://example.invalid/pr/{bounty_id}",
+                    "pr_url": pr_url,
                     "merged": True,
-                    "merge_sha": "deadbeef",
+                    "merge_sha": merge_sha,
                     "required_checks": [
                         {"name": "backend", "status": "success"},
                         {"name": "frontend", "status": "success"},
@@ -1250,93 +1411,24 @@ def main() -> int:
         project["capital_reconciliation_post_outflow"] = recon_after.get("data")
         _save_state(state)
 
-    # 9) Autonomous git surface commit via git-outbox -> local git-worker.
-    git_task = state.get("git_surface")
-    if not isinstance(git_task, dict):
-        git_task = {}
-        state["git_surface"] = git_task
-
-    project_slug = str(project.get("slug") or "").strip()
-    if not project_slug:
-        raise RuntimeError("project slug missing before git surface task")
-
-    git_idempotency_key = f"e2e:git:surface:{project_id}:{project_slug}"
-    if "task_id" not in git_task:
-        git_resp = _agent_post(
-            oracle_base_url,
-            f"/api/v1/agent/projects/{project_id}/git-outbox/surface-commit",
-            api_key=author["api_key"],
-            body={
-                "slug": project_slug,
-                "surface_title": str(project.get("name") or project_slug),
-                "surface_tagline": "Autonomous pilot: funding, payout, and delivery verified on-chain.",
-                "surface_description": (
-                    "This demo surface was generated by the internal DAO git pipeline. "
-                    "It proves that an approved proposal can become a funded project, pay bounties, "
-                    "and publish a user-facing product page through git outbox and git worker without manual edits."
-                ),
-                "cta_label": "Open Project Workspace",
-                "cta_href": f"/projects/{project_id}",
-                "commit_message": f"feat(surface): add {project_slug} pilot surface",
-                "open_pr": True,
-                "pr_title": f"feat(surface): add {str(project.get('name') or project_slug)} pilot surface",
-                "pr_body": "\n".join(
-                    [
-                        "## Summary",
-                        f"- generate `/apps/{project_slug}` through git outbox",
-                        f"- tie the surface to project `{str(project.get('name') or project_slug)}` ({project_id})",
-                        "- prove DAO-driven branch/commit/PR flow in the production e2e pilot",
-                        "",
-                        "## Evidence",
-                        f"- proposal: `{proposal_id}`",
-                        f"- project: `{project_id}`",
-                        f"- project_thread_id: `{project.get('project_thread_id')}`",
-                    ]
-                ),
-                "idempotency_key": git_idempotency_key,
-            },
-        )
-        task_data = git_resp.get("data", {}) if isinstance(git_resp.get("data"), dict) else {}
-        task_id = task_data.get("task_id")
-        if not isinstance(task_id, str) or not task_id:
-            raise RuntimeError("unexpected git-outbox enqueue response")
-        git_task["task_id"] = task_id
-        git_task["status"] = task_data.get("status")
-        git_task["idempotency_key"] = git_idempotency_key
-        _save_state(state)
-
-    if git_task.get("status") != "succeeded":
-        git_task["worker_run"] = _run_git_worker(env=env, base_url=oracle_base_url, max_tasks=3)
-        _save_state(state)
-        task_list = _agent_get(
-            oracle_base_url,
-            f"/api/v1/agent/projects/{project_id}/git-outbox",
-            api_key=author["api_key"],
-        )
-        items = task_list.get("data", {}).get("items")
-        if not isinstance(items, list):
-            raise RuntimeError("unexpected git-outbox list response")
-        matched = next(
-            (
-                item
-                for item in items
-                if isinstance(item, dict) and str(item.get("task_id") or "") == str(git_task.get("task_id") or "")
-            ),
-            None,
-        )
-        if not isinstance(matched, dict):
-            raise RuntimeError("git-outbox task not found after worker run")
-        git_task["status"] = matched.get("status")
-        git_task["branch_name"] = matched.get("branch_name")
-        git_task["commit_sha"] = matched.get("commit_sha")
-        git_task["pr_url"] = matched.get("pr_url")
-        git_task["result"] = matched.get("result")
-        git_task["last_error_hint"] = matched.get("last_error_hint")
-        _save_state(state)
-        if git_task.get("status") != "succeeded":
-            raise RuntimeError(
-                f"git-outbox task did not succeed: {git_task.get('last_error_hint') or git_task.get('status')}"
-            )
+    # 9) Summarize bounty-linked git deliverables. Keep legacy `git_surface` for compatibility.
+    frontend_git = next(
+        (
+            b
+            for b in bounties
+            if isinstance(b, dict) and str(b.get("key") or "") == "frontend_demo_surface" and b.get("git_task_id")
+        ),
+        None,
+    )
+    git_task = frontend_git if isinstance(frontend_git, dict) else {}
+    state["git_surface"] = {
+        "task_id": git_task.get("git_task_id"),
+        "status": git_task.get("git_status"),
+        "branch_name": git_task.get("git_branch_name"),
+        "commit_sha": git_task.get("git_commit_sha"),
+        "pr_url": git_task.get("git_pr_url"),
+    }
+    _save_state(state)
 
     urls = {
         "portal_agents": f"{portal_base_url}/agents",
@@ -1347,7 +1439,7 @@ def main() -> int:
         "portal_bounties": f"{portal_base_url}/bounties?project_id={project_id}",
         "portal_discussions_global": f"{portal_base_url}/discussions?scope=global",
         "portal_discussions_project": f"{portal_base_url}/discussions?scope=project&project_id={project_id}",
-        "git_pr": git_task.get("pr_url"),
+        "git_pr": git_task.get("git_pr_url"),
     }
     summary_bounties: list[dict[str, Any]] = []
     for b in state.get("bounties", []) if isinstance(state.get("bounties"), list) else []:
@@ -1363,6 +1455,10 @@ def main() -> int:
                 "thread_id": b.get("thread_id"),
                 "paid_tx_hash": b.get("paid_tx_hash"),
                 "marked_paid": bool(b.get("marked_paid")),
+                "git_task_id": b.get("git_task_id"),
+                "git_status": b.get("git_status"),
+                "git_pr_url": b.get("git_pr_url"),
+                "git_commit_sha": b.get("git_commit_sha"),
             }
         )
 
@@ -1380,11 +1476,11 @@ def main() -> int:
         "project_name": project.get("name"),
         "treasury_address": treasury["address"],
         "git_surface": {
-            "task_id": git_task.get("task_id"),
-            "status": git_task.get("status"),
-            "branch_name": git_task.get("branch_name"),
-            "commit_sha": git_task.get("commit_sha"),
-            "pr_url": git_task.get("pr_url"),
+            "task_id": git_task.get("git_task_id"),
+            "status": git_task.get("git_status"),
+            "branch_name": git_task.get("git_branch_name"),
+            "commit_sha": git_task.get("git_commit_sha"),
+            "pr_url": git_task.get("git_pr_url"),
         },
         "bounties": summary_bounties,
         "tx": {
@@ -1421,14 +1517,14 @@ def main() -> int:
         lines.append(f"- treasury_address: `{treasury['address']}`")
         lines.append("")
         lines.append("## Autonomous Git Surface")
-        lines.append(f"- task_id: `{git_task.get('task_id')}`")
-        lines.append(f"- status: `{git_task.get('status')}`")
-        if git_task.get("branch_name"):
-            lines.append(f"- branch_name: `{git_task.get('branch_name')}`")
-        if git_task.get("commit_sha"):
-            lines.append(f"- commit_sha: `{git_task.get('commit_sha')}`")
-        if git_task.get("pr_url"):
-            lines.append(f"- pr_url: {git_task.get('pr_url')}")
+        lines.append(f"- task_id: `{git_task.get('git_task_id')}`")
+        lines.append(f"- status: `{git_task.get('git_status')}`")
+        if git_task.get("git_branch_name"):
+            lines.append(f"- branch_name: `{git_task.get('git_branch_name')}`")
+        if git_task.get("git_commit_sha"):
+            lines.append(f"- commit_sha: `{git_task.get('git_commit_sha')}`")
+        if git_task.get("git_pr_url"):
+            lines.append(f"- pr_url: {git_task.get('git_pr_url')}")
         lines.append("")
         lines.append("## Funding / Capital")
         lines.append(f"- deposit tx #1: `{chain.get('deposit_usdc_to_treasury_tx')}`")
@@ -1444,6 +1540,10 @@ def main() -> int:
                     lines.append(f"  - paid_tx_hash: `{b.get('paid_tx_hash')}`")
                 if b.get("thread_id"):
                     lines.append(f"  - thread_id: `{b.get('thread_id')}`")
+                if b.get("git_task_id"):
+                    lines.append(f"  - git_task_id: `{b.get('git_task_id')}`")
+                if b.get("git_pr_url"):
+                    lines.append(f"  - git_pr_url: {b.get('git_pr_url')}")
         else:
             lines.append("- —")
         lines.append("")
