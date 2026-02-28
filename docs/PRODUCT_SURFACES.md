@@ -154,6 +154,7 @@ Current automatic sources include:
 - project capital inflow (manual + sync)
 - project expense events (oracle expense + bounty payout)
 - strict-ready capital and revenue reconciliation milestones
+- project-revenue outflow milestones (revenue-backed expense + revenue-funded bounty payout)
 - domain add / verify
 - crypto invoice creation
 - crypto invoice paid confirmation

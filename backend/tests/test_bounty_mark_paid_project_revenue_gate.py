@@ -26,8 +26,11 @@ from src.main import app
 import src.models  # noqa: F401
 from src.models.audit_log import AuditLog
 from src.models.bounty import Bounty, BountyFundingSource, BountyStatus
+from src.models.expense_event import ExpenseEvent
 from src.models.project import Project, ProjectStatus
 from src.models.project_revenue_reconciliation_report import ProjectRevenueReconciliationReport
+from src.models.project_update import ProjectUpdate
+from src.models.revenue_event import RevenueEvent
 
 ORACLE_SECRET = "test-oracle-secret"
 
@@ -243,3 +246,43 @@ def test_mark_paid_fresh_revenue_reconciliation_reaches_insufficient_revenue_che
     with _db() as db:
         _assert_latest_audit(db, idem="idem-rev-insufficient", blocked_reason="insufficient_project_revenue")
 
+
+def test_mark_paid_revenue_success_publishes_revenue_milestone(
+    _client: TestClient,
+    _db: sessionmaker[Session],
+) -> None:
+    with _db() as db:
+        bounty = _seed_project_bounty(db)
+        db.add(
+            RevenueEvent(
+                event_id="rev_gate_1",
+                profit_month_id="202602",
+                project_id=bounty.project_id,
+                amount_micro_usdc=2_000_000,
+                tx_hash="0x" + "3" * 64,
+                source="test_revenue",
+                idempotency_key="rev-gate-1",
+                evidence_url=None,
+            )
+        )
+        db.commit()
+        _insert_reconciliation(
+            db,
+            project_id=bounty.project_id,
+            ready=True,
+            delta_micro_usdc=0,
+            computed_at=datetime.now(timezone.utc),
+        )
+
+    status_code, data = _call_mark_paid(_client, idem="idem-rev-paid")
+    assert status_code == 200
+    assert data["success"] is True
+    assert data["blocked_reason"] is None
+    assert data["data"]["status"] == "paid"
+
+    with _db() as db:
+        assert db.query(ExpenseEvent).count() == 1
+        update = db.query(ProjectUpdate).filter(ProjectUpdate.source_kind == "revenue_bounty_paid").first()
+        assert update is not None
+        assert update.update_type == "revenue"
+        assert update.source_ref == "bty_rev_gate_1"

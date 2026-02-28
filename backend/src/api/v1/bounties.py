@@ -552,6 +552,7 @@ async def mark_paid(
     if bounty.project_id is not None:
         project = db.query(Project).filter(Project.id == bounty.project_id).first()
         if project is not None:
+            is_revenue_payout = bounty.funding_source == BountyFundingSource.project_revenue
             create_project_update_row(
                 db,
                 project=project,
@@ -562,11 +563,11 @@ async def mark_paid(
                     f" via funding source `{bounty.funding_source.value}`."
                     + (f" Paid tx: `{payload.paid_tx_hash}`." if payload.paid_tx_hash else "")
                 ),
-                update_type="expense",
-                source_kind="bounty_paid",
+                update_type="revenue" if is_revenue_payout else "expense",
+                source_kind="revenue_bounty_paid" if is_revenue_payout else "bounty_paid",
                 source_ref=bounty.bounty_id,
                 idempotency_key=build_project_update_idempotency_key(
-                    prefix="project_update:bounty_paid",
+                    prefix="project_update:revenue_bounty_paid" if is_revenue_payout else "project_update:bounty_paid",
                     source_idempotency_key=bounty.bounty_id,
                 ),
             )
