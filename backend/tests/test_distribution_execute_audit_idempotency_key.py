@@ -513,6 +513,68 @@ def test_distribution_execute_blocked_validation_failure_has_audit_idempotency_k
     )
 
 
+def test_distribution_execute_blocked_when_no_recipients_has_audit_idempotency_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+
+    secret = "test-secret"
+    monkeypatch.setenv("ORACLE_HMAC_SECRET", secret)
+    monkeypatch.setenv("ORACLE_REQUEST_TTL_SECONDS", "300")
+    monkeypatch.setenv("ORACLE_CLOCK_SKEW_SECONDS", "5")
+    monkeypatch.setenv("ORACLE_ACCEPT_LEGACY_SIGNATURES", "false")
+
+    profit_month_id = "202602"
+    profit_sum = 20_000_000
+    with session_local() as db:
+        _insert_settlement(db, profit_month_id=profit_month_id, profit_sum=profit_sum)
+        _insert_reconciliation(
+            db,
+            profit_month_id=profit_month_id,
+            profit_sum=profit_sum,
+            ready=True,
+            delta_micro_usdc=0,
+        )
+
+    monkeypatch.setattr(
+        oracle_mod,
+        "read_distribution_state",
+        lambda _: DistributionState(exists=True, total_profit_micro_usdc=profit_sum, distributed=False),
+    )
+
+    app = _make_test_app(session_local)
+    client = TestClient(app)
+
+    path = f"/api/v1/oracle/distributions/{profit_month_id}/execute"
+    payload = {
+        "stakers": [],
+        "staker_shares": [],
+        "authors": [],
+        "author_shares": [],
+    }
+    body = json.dumps(payload, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    request_id = "req-exec-no-recipients-1"
+
+    status, data = _post_signed(client, secret=secret, request_id=request_id, path=path, body=body)
+    assert status == 200
+    assert data["success"] is False
+    assert data["data"]["blocked_reason"] == "recipients_required"
+    assert data["data"]["idempotency_key"]
+
+    _assert_audit_has_idempotency_key(
+        session_local,
+        request_id=request_id,
+        path=path,
+        expected_idempotency_key=data["data"]["idempotency_key"],
+    )
+
+
 def test_distribution_execute_blocked_distribution_missing_has_audit_idempotency_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
