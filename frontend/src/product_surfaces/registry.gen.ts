@@ -4,10 +4,12 @@ import type { ComponentType } from "react";
 
 import type { ProjectDetail } from "@/types";
 
+import { AutonomyPilotConciergeSaas454af1Surface } from "./autonomy-pilot-concierge-saas-454af1";
 import { DemoSurface } from "./demo";
 
 export type ProductSurfaceComponent = ComponentType<{ project: ProjectDetail }>;
 
 export const SURFACE_MAP: Record<string, ProductSurfaceComponent> = {
+  "autonomy-pilot-concierge-saas-454af1": AutonomyPilotConciergeSaas454af1Surface,
   demo: DemoSurface,
 };
