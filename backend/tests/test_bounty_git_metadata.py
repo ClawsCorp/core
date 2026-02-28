@@ -251,3 +251,100 @@ def test_legacy_bounty_git_metadata_backfill_picks_latest_task_by_inferred_type(
     finally:
         app.dependency_overrides.clear()
         client.close()
+
+
+def test_bounty_git_metadata_prefers_explicit_bounty_link_over_heuristic() -> None:
+    client, session_local = _make_client()
+    try:
+        with session_local() as db:
+            project = Project(
+                project_id="proj_git_meta_explicit_1",
+                slug="git-meta-explicit-1",
+                name="Explicit Link Project",
+                description_md=None,
+                status=ProjectStatus.active,
+                proposal_id=None,
+                origin_proposal_id=None,
+                originator_agent_id=None,
+                discussion_thread_id=None,
+                treasury_wallet_address=None,
+                treasury_address=None,
+                revenue_wallet_address=None,
+                revenue_address=None,
+                monthly_budget_micro_usdc=None,
+                created_by_agent_id=None,
+                approved_at=None,
+            )
+            db.add(project)
+            db.flush()
+
+            bounty = Bounty(
+                bounty_id="bty_git_meta_explicit_1",
+                idempotency_key=None,
+                project_id=project.id,
+                origin_proposal_id=None,
+                origin_milestone_id=None,
+                funding_source=BountyFundingSource.project_capital,
+                title="Frontend surface deliverable",
+                description_md="Should match by payload bounty_id, not by title heuristic.",
+                amount_micro_usdc=1000,
+                priority=None,
+                deadline_at=None,
+                status=BountyStatus.submitted,
+                claimant_agent_id=None,
+                claimed_at=None,
+                submitted_at=None,
+                pr_url="https://example.invalid/pr/bty_git_meta_explicit_1",
+                merge_sha="deadbeef",
+                paid_tx_hash=None,
+            )
+            db.add(bounty)
+            db.flush()
+
+            db.add(
+                GitOutbox(
+                    task_id="gto_explicit_wrong",
+                    idempotency_key="git_meta_explicit_wrong",
+                    project_id=project.id,
+                    requested_by_agent_id=None,
+                    task_type="create_app_surface_commit",
+                    payload_json="{}",
+                    result_json=json.dumps({"pr_url": "https://github.com/ClawsCorp/core/pull/1300"}),
+                    branch_name="codex/explicit-wrong",
+                    commit_sha="wrong123",
+                    status="succeeded",
+                    attempts=1,
+                    last_error_hint=None,
+                    locked_at=None,
+                    locked_by=None,
+                )
+            )
+            db.add(
+                GitOutbox(
+                    task_id="gto_explicit_right",
+                    idempotency_key="git_meta_explicit_right",
+                    project_id=project.id,
+                    requested_by_agent_id=None,
+                    task_type="create_project_backend_artifact_commit",
+                    payload_json=json.dumps({"bounty_id": "bty_git_meta_explicit_1"}),
+                    result_json=json.dumps({"pr_url": "https://github.com/ClawsCorp/core/pull/1301"}),
+                    branch_name="codex/explicit-right",
+                    commit_sha="right123",
+                    status="succeeded",
+                    attempts=1,
+                    last_error_hint=None,
+                    locked_at=None,
+                    locked_by=None,
+                )
+            )
+            db.commit()
+
+        detail = client.get("/api/v1/bounties/bty_git_meta_explicit_1")
+        assert detail.status_code == 200
+        body = detail.json()["data"]
+        assert body["git_task_id"] == "gto_explicit_right"
+        assert body["git_task_type"] == "create_project_backend_artifact_commit"
+        assert body["git_pr_url"] == "https://github.com/ClawsCorp/core/pull/1301"
+    finally:
+        app.dependency_overrides.clear()
+        client.close()

@@ -52,6 +52,10 @@ def find_exact_git_outbox_for_bounty(db: Session, bounty: Bounty) -> GitOutbox |
         query = query.filter(GitOutbox.project_id == bounty.project_id)
     query = query.order_by(GitOutbox.updated_at.desc(), GitOutbox.id.desc())
 
+    for candidate in query.limit(50).all():
+        if _payload_bounty_id(candidate) == bounty.bounty_id:
+            return candidate
+
     if bounty.merge_sha:
         row = query.filter(GitOutbox.commit_sha == bounty.merge_sha).first()
         if row is not None:
@@ -99,6 +103,10 @@ def find_backfill_git_outbox_candidate(
         if candidate is not None and _has_usable_git_metadata(candidate):
             return candidate
         return None
+
+    for candidate in query.limit(50).all():
+        if _payload_bounty_id(candidate) == bounty.bounty_id and _has_usable_git_metadata(candidate):
+            return candidate
 
     if task_type:
         return _latest_candidate_for_task_type(query, task_type.strip())
@@ -148,3 +156,18 @@ def _is_placeholder_pr_url(value: str) -> bool:
     parsed = urlparse(value.strip())
     host = (parsed.hostname or "").lower()
     return host in _PLACEHOLDER_PR_HOSTS
+
+
+def _payload_bounty_id(candidate: GitOutbox) -> str | None:
+    if not candidate.payload_json:
+        return None
+    try:
+        parsed = json.loads(candidate.payload_json)
+    except ValueError:
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    value = parsed.get("bounty_id")
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
