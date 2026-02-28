@@ -91,7 +91,7 @@ def main() -> int:
                 "",
                 "_ARTIFACT = " + json.dumps(payload, indent=2, ensure_ascii=True),
                 "",
-                f"@router.get('/api/v1/project-artifacts/{slug}')",
+                f"@router.get('/api/v1/project-artifacts/{slug}', include_in_schema=False)",
                 "def get_generated_project_artifact() -> dict[str, object]:",
                 "    data = dict(_ARTIFACT)",
                 "    data['route_kind'] = 'template'",
