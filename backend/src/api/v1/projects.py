@@ -13,6 +13,7 @@ from src.api.v1.dependencies import require_oracle_hmac
 from src.core.audit import record_audit
 from src.core.database import get_db
 from src.models.agent import Agent
+from src.models.bounty import Bounty, BountyStatus
 from src.models.project import Project, ProjectStatus
 from src.models.project_capital_event import ProjectCapitalEvent
 from src.models.project_capital_reconciliation_report import ProjectCapitalReconciliationReport
@@ -29,6 +30,9 @@ from src.schemas.project_funding import (
 from src.schemas.project import (
     ProjectCapitalLeaderboardData,
     ProjectCapitalLeaderboardResponse,
+    ProjectDeliveryReceipt,
+    ProjectDeliveryReceiptItem,
+    ProjectDeliveryReceiptResponse,
     ProjectCapitalReconciliationLatestResponse,
     ProjectCapitalReconciliationReportPublic,
     ProjectRevenueReconciliationLatestResponse,
@@ -46,6 +50,7 @@ from src.schemas.project import (
     ProjectStatusUpdateRequest,
     ProjectSummary,
 )
+from src.services.bounty_git import bounty_has_real_git_metadata, extract_git_pr_url, find_exact_git_outbox_for_bounty
 
 router = APIRouter(prefix="/api/v1/projects", tags=["public-projects", "projects"])
 
@@ -332,6 +337,77 @@ def get_project_revenue_reconciliation_latest(
         .first()
     )
     return ProjectRevenueReconciliationLatestResponse(success=True, data=_revenue_reconciliation_public(project.project_id, report))
+
+
+@router.get(
+    "/{project_id}/delivery-receipt",
+    response_model=ProjectDeliveryReceiptResponse,
+    summary="Get current project delivery receipt",
+)
+def get_project_delivery_receipt(
+    project_id: str,
+    db: Session = Depends(get_db),
+) -> ProjectDeliveryReceiptResponse:
+    project = _find_project_by_identifier(db, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    bounties = (
+        db.query(Bounty)
+        .filter(Bounty.project_id == project.id)
+        .order_by(Bounty.created_at.asc(), Bounty.id.asc())
+        .all()
+    )
+    if not bounties:
+        return ProjectDeliveryReceiptResponse(success=True, data=None)
+
+    items: list[ProjectDeliveryReceiptItem] = []
+    ready_count = 0
+    latest_updated_at = project.updated_at
+    for bounty in bounties:
+        git_task = find_exact_git_outbox_for_bounty(db, bounty)
+        git_pr_url = extract_git_pr_url(git_task) if git_task is not None else None
+        item_ready = bounty.status == BountyStatus.paid and bounty_has_real_git_metadata(bounty)
+        if item_ready:
+            ready_count += 1
+        if bounty.updated_at > latest_updated_at:
+            latest_updated_at = bounty.updated_at
+        items.append(
+            ProjectDeliveryReceiptItem(
+                bounty_num=int(bounty.id),
+                bounty_id=bounty.bounty_id,
+                title=bounty.title,
+                status=bounty.status.value if isinstance(bounty.status, BountyStatus) else str(bounty.status),
+                amount_micro_usdc=int(bounty.amount_micro_usdc),
+                funding_source=bounty.funding_source.value if hasattr(bounty.funding_source, "value") else str(bounty.funding_source),
+                paid_tx_hash=bounty.paid_tx_hash,
+                git_task_id=git_task.task_id if git_task is not None else None,
+                git_task_type=git_task.task_type if git_task is not None else None,
+                git_task_status=git_task.status if git_task is not None else None,
+                git_branch_name=git_task.branch_name if git_task is not None else None,
+                git_source_commit_sha=git_task.commit_sha if git_task is not None else None,
+                git_accepted_merge_sha=bounty.merge_sha,
+                git_pr_url=git_pr_url or bounty.pr_url,
+                created_at=bounty.created_at,
+                updated_at=bounty.updated_at,
+            )
+        )
+
+    status = "ready" if ready_count == len(items) else "pending"
+    return ProjectDeliveryReceiptResponse(
+        success=True,
+        data=ProjectDeliveryReceipt(
+            project_num=int(project.id),
+            project_id=project.project_id,
+            slug=project.slug,
+            name=project.name,
+            status=status,
+            items_total=len(items),
+            items_ready=ready_count,
+            computed_at=latest_updated_at,
+            items=items,
+        ),
+    )
 
 
 @router.get(

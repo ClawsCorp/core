@@ -19,6 +19,7 @@ import type {
   GitOutboxTask,
   ProjectCapitalSummary,
   ProjectCryptoInvoice,
+  ProjectDeliveryReceipt,
   ProjectDetail,
   ProjectDomainPublic,
   ProjectFundingSummary,
@@ -31,6 +32,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [capital, setCapital] = useState<ProjectCapitalSummary | null>(null);
   const [funding, setFunding] = useState<ProjectFundingSummary | null>(null);
+  const [deliveryReceipt, setDeliveryReceipt] = useState<ProjectDeliveryReceipt | null>(null);
   const [bounties, setBounties] = useState<BountyPublic[]>([]);
   const [stats, setStats] = useState<StatsData | null>(null);
   const [accountingMonths, setAccountingMonths] = useState<AccountingMonthSummary[]>([]);
@@ -68,10 +70,11 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
     setError(null);
     try {
       const agentApiKey = getAgentApiKey();
-      const [projectResult, capitalResult, fundingResult, bountiesResult, statsResult, accountingResult, domainsResult, invoicesResult, gitOutboxResult] = await Promise.all([
+      const [projectResult, capitalResult, fundingResult, deliveryReceiptResult, bountiesResult, statsResult, accountingResult, domainsResult, invoicesResult, gitOutboxResult] = await Promise.all([
         api.getProject(params.id),
         api.getProjectCapitalSummary(params.id),
         api.getProjectFundingSummary(params.id).catch(() => null),
+        api.getProjectDeliveryReceipt(params.id).catch(() => null),
         api.getBounties({ projectId: params.id }),
         api.getStats().catch(() => null),
         api.getAccountingMonths({ projectId: params.id, limit: 6, offset: 0 }).catch(() => null),
@@ -82,6 +85,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
       setProject(projectResult);
       setCapital(capitalResult);
       setFunding(fundingResult);
+      setDeliveryReceipt(deliveryReceiptResult);
       setBounties(bountiesResult.items);
       setStats(statsResult);
       setAccountingMonths(accountingResult?.items ?? []);
@@ -432,6 +436,42 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
                 </li>
               ))}
             </ul>
+          </DataCard>
+
+          <DataCard title="Delivery receipt">
+            {!deliveryReceipt ? (
+              <p>No computed delivery receipt yet. It will appear after this project has bounty deliverables.</p>
+            ) : (
+              <>
+                <p>status: {deliveryReceipt.status}</p>
+                <p>
+                  items_ready: {deliveryReceipt.items_ready} / {deliveryReceipt.items_total}
+                </p>
+                <p>computed_at: {formatDateTimeShort(deliveryReceipt.computed_at)}</p>
+                {deliveryReceipt.items.length === 0 ? (
+                  <p>No deliverables in the current receipt.</p>
+                ) : (
+                  <ul>
+                    {deliveryReceipt.items.map((item) => (
+                      <li key={item.bounty_id}>
+                        {item.title} (ID {item.bounty_num}) · {item.status} · {formatMicroUsdc(item.amount_micro_usdc)}
+                        {item.git_pr_url ? (
+                          <>
+                            {" · "}
+                            <a href={item.git_pr_url} target="_blank" rel="noreferrer">
+                              PR
+                            </a>
+                          </>
+                        ) : null}
+                        {item.git_task_status ? ` · git=${item.git_task_status}` : ""}
+                        {item.git_accepted_merge_sha ? ` · merge=${item.git_accepted_merge_sha.slice(0, 10)}` : ""}
+                        {item.paid_tx_hash ? ` · paid=${item.paid_tx_hash.slice(0, 10)}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            )}
           </DataCard>
 
           <DataCard title="Quick ops (Oracle runner)">
