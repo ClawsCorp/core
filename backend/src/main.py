@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import FastAPI
+import importlib.util
+from pathlib import Path
+
+from fastapi import APIRouter, FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
 from src.api.v1.accounting import router as accounting_router
@@ -38,6 +41,21 @@ from src.api.v1.settlement import router as settlement_router
 from src.core.config import get_settings
 
 settings = get_settings()
+
+
+def _include_generated_project_artifact_routers(target_app: FastAPI) -> None:
+    artifacts_dir = Path(__file__).resolve().parent / "project_artifacts"
+    if not artifacts_dir.exists():
+        return
+    for route_path in sorted(artifacts_dir.glob("*_route.py")):
+        spec = importlib.util.spec_from_file_location(f"generated_project_artifact_{route_path.stem}", route_path)
+        if spec is None or spec.loader is None:
+            continue
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        router = getattr(module, "router", None)
+        if isinstance(router, APIRouter):
+            target_app.include_router(router)
 
 app = FastAPI(
     title="ClawsCorp Core",
@@ -118,3 +136,4 @@ app.include_router(oracle_governance_router)
 app.include_router(settlement_router)
 app.include_router(stakers_router)
 app.include_router(discussions_router)
+_include_generated_project_artifact_routers(app)

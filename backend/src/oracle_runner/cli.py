@@ -1976,7 +1976,9 @@ def run(argv: list[str] | None = None) -> int:
                                         artifact_cmd.extend(["--endpoint", endpoint_value])
                             _run_local_cmd(artifact_cmd, cwd=repo_root)
                             artifact_file = f"backend/src/project_artifacts/{slug}.py"
+                            route_file = f"backend/src/project_artifacts/{slug.replace('-', '_')}_route.py"
                             _run_local_cmd(["git", "add", artifact_file], cwd=repo_root)
+                            _run_local_cmd(["git", "add", route_file], cwd=repo_root)
                             _run_local_cmd(["git", "commit", "-m", commit_message], cwd=repo_root)
                             _run_local_cmd(["git", "push", "-u", "origin", branch_name], cwd=repo_root)
                             commit_sha = _run_local_cmd(["git", "rev-parse", "HEAD"], cwd=repo_root)
@@ -2020,7 +2022,7 @@ def run(argv: list[str] | None = None) -> int:
                                 "open_pr": open_pr,
                                 "pr_url": pr_url,
                                 "pr_error": pr_error,
-                                "files": [artifact_file],
+                                "files": [artifact_file, route_file],
                             }
                             _update(result, branch_name, commit_sha)
                             _complete("succeeded", None, result, branch_name, commit_sha)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import secrets
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -16,6 +17,7 @@ from src.core.security import hash_body
 from src.models.agent import Agent
 from src.models.bounty import Bounty, BountyFundingSource, BountyStatus
 from src.models.expense_event import ExpenseEvent
+from src.models.git_outbox import GitOutbox
 from src.models.project_capital_event import ProjectCapitalEvent
 from src.models.milestone import Milestone
 from src.models.proposal import Proposal
@@ -103,6 +105,7 @@ def list_bounties(
     )
     items = [
         _bounty_public(
+            db,
             row.Bounty,
             row.project_id,
             row.claimant_agent_num,
@@ -155,6 +158,7 @@ def get_bounty(
     result = BountyDetailResponse(
         success=True,
         data=_bounty_public(
+            db,
             row.Bounty,
             row.project_id,
             row.claimant_agent_num,
@@ -200,7 +204,7 @@ async def create_bounty(
 
     return BountyDetailResponse(
         success=True,
-        data=_bounty_public(bounty, project.project_id if project else None, None, None, None),
+        data=_bounty_public(db, bounty, project.project_id if project else None, None, None, None),
     )
 
 
@@ -284,7 +288,7 @@ async def create_bounty_agent(
 
     return BountyDetailResponse(
         success=True,
-        data=_bounty_public(bounty, project_public_id, None, None, None),
+        data=_bounty_public(db, bounty, project_public_id, None, None, None),
     )
 
 
@@ -326,7 +330,7 @@ async def claim_bounty(
 
     return BountyDetailResponse(
         success=True,
-        data=_bounty_public(bounty, row.project_id, agent.id, agent.agent_id, agent.name),
+        data=_bounty_public(db, bounty, row.project_id, agent.id, agent.agent_id, agent.name),
     )
 
 
@@ -381,6 +385,7 @@ async def submit_bounty(
     return BountyDetailResponse(
         success=True,
         data=_bounty_public(
+            db,
             bounty,
             row.project_id,
             row.claimant_agent_num or agent.id,
@@ -449,6 +454,7 @@ async def evaluate_eligibility(
     return BountyEligibilityResponse(
         success=True,
         data=_bounty_public(
+            db,
             bounty,
             row.project_id,
             row.claimant_agent_num,
@@ -527,6 +533,7 @@ async def mark_paid(
         return BountyMarkPaidResponse(
             success=False,
             data=_bounty_public(
+                db,
                 bounty,
                 row.project_id,
                 row.claimant_agent_num,
@@ -571,6 +578,7 @@ async def mark_paid(
     return BountyMarkPaidResponse(
         success=True,
         data=_bounty_public(
+            db,
             bounty,
             row.project_id,
             row.claimant_agent_num,
@@ -676,12 +684,14 @@ def _find_project_by_identifier(db: Session, identifier: str) -> Project | None:
 
 
 def _bounty_public(
+    db: Session,
     bounty: Bounty,
     project_id: str | None,
     claimant_agent_num: int | None,
     claimant_agent_id: str | None,
     claimant_agent_name: str | None,
 ) -> BountyPublic:
+    git_row = _find_git_outbox_for_bounty(db, bounty)
     return BountyPublic(
         bounty_num=bounty.id,
         bounty_id=bounty.bounty_id,
@@ -702,10 +712,50 @@ def _bounty_public(
         submitted_at=bounty.submitted_at,
         pr_url=bounty.pr_url,
         merge_sha=bounty.merge_sha,
+        git_task_id=git_row.task_id if git_row is not None else None,
+        git_task_type=git_row.task_type if git_row is not None else None,
+        git_task_status=git_row.status if git_row is not None else None,
+        git_branch_name=git_row.branch_name if git_row is not None else None,
+        git_commit_sha=git_row.commit_sha if git_row is not None else None,
+        git_pr_url=_extract_git_pr_url(git_row),
         paid_tx_hash=bounty.paid_tx_hash,
         created_at=bounty.created_at,
         updated_at=bounty.updated_at,
     )
+
+
+def _extract_git_pr_url(row: GitOutbox | None) -> str | None:
+    if row is None or not row.result_json:
+        return None
+    try:
+        parsed = json.loads(row.result_json)
+    except ValueError:
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    value = parsed.get("pr_url")
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
+def _find_git_outbox_for_bounty(db: Session, bounty: Bounty) -> GitOutbox | None:
+    query = db.query(GitOutbox)
+    if bounty.project_id is not None:
+        query = query.filter(GitOutbox.project_id == bounty.project_id)
+    query = query.order_by(GitOutbox.updated_at.desc(), GitOutbox.id.desc())
+
+    if bounty.merge_sha:
+        row = query.filter(GitOutbox.commit_sha == bounty.merge_sha).first()
+        if row is not None:
+            return row
+
+    if bounty.pr_url:
+        for candidate in query.limit(50).all():
+            if _extract_git_pr_url(candidate) == bounty.pr_url:
+                return candidate
+
+    return None
 
 
 

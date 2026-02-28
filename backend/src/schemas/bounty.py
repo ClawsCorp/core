@@ -92,6 +92,12 @@ class BountyPublic(BaseModel):
     submitted_at: datetime | None
     pr_url: str | None
     merge_sha: str | None
+    git_task_id: str | None = None
+    git_task_type: str | None = None
+    git_task_status: str | None = None
+    git_branch_name: str | None = None
+    git_commit_sha: str | None = None
+    git_pr_url: str | None = None
     paid_tx_hash: str | None
     created_at: datetime
     updated_at: datetime

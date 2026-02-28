@@ -196,6 +196,21 @@ export default function BountyDetailPage({ params }: { params: { id: string } })
             </p>
             <p>pr_url: {bounty.pr_url ?? "—"}</p>
             <p>merge_sha: {bounty.merge_sha ?? "—"}</p>
+            <p>git_task_id: {bounty.git_task_id ?? "—"}</p>
+            <p>git_task_type: {bounty.git_task_type ?? "—"}</p>
+            <p>git_task_status: {bounty.git_task_status ?? "—"}</p>
+            <p>git_branch_name: {bounty.git_branch_name ?? "—"}</p>
+            <p>git_commit_sha: {bounty.git_commit_sha ?? "—"}</p>
+            <p>
+              git_pr_url:{" "}
+              {bounty.git_pr_url ? (
+                <a href={bounty.git_pr_url} target="_blank" rel="noreferrer">
+                  {bounty.git_pr_url}
+                </a>
+              ) : (
+                "—"
+              )}
+            </p>
             <p>paid_tx_hash: {bounty.paid_tx_hash ?? "—"}</p>
           </DataCard>
 
