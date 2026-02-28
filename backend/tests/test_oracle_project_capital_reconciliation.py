@@ -23,6 +23,7 @@ from src.main import app
 
 import src.models  # noqa: F401
 from src.models.project import Project, ProjectStatus
+from src.models.project_capital_event import ProjectCapitalEvent
 from src.models.project_update import ProjectUpdate
 
 ORACLE_SECRET = "test-oracle-secret"
@@ -86,47 +87,56 @@ def _client(_db: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch) -> Test
         app.dependency_overrides.clear()
 
 
-def test_reconcile_project_revenue_publishes_ready_project_update(
+def test_reconcile_project_capital_publishes_one_ready_project_update(
     _client: TestClient,
     _db: sessionmaker[Session],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     with _db() as db:
+        project = Project(
+            project_id="prj_cap_ready_1",
+            slug="cap-ready-one",
+            name="Capital Ready One",
+            status=ProjectStatus.active,
+            treasury_address="0x" + "1" * 40,
+        )
+        db.add(project)
+        db.flush()
         db.add(
-            Project(
-                project_id="prj_rev_1",
-                slug="rev-one",
-                name="Revenue One",
-                status=ProjectStatus.active,
-                revenue_address="0x" + "1" * 40,
+            ProjectCapitalEvent(
+                event_id="pcap_ready_1",
+                idempotency_key="pcap-ready-1",
+                profit_month_id="202602",
+                project_id=project.id,
+                delta_micro_usdc=500,
+                source="test_funding",
+                evidence_tx_hash=None,
+                evidence_url=None,
             )
         )
         db.commit()
 
     class _Balance:
-        balance_micro_usdc = 0
+        balance_micro_usdc = 500
 
-    monkeypatch.setattr("src.api.v1.oracle_project_revenue.get_usdc_balance_micro_usdc", lambda _addr: _Balance())
+    monkeypatch.setattr("src.api.v1.oracle_project_capital.get_usdc_balance_micro_usdc", lambda _addr: _Balance())
 
-    path = "/api/v1/oracle/projects/prj_rev_1/revenue/reconciliation"
+    path = "/api/v1/oracle/projects/prj_cap_ready_1/capital/reconciliation"
     body = b""
-    resp = _client.post(path, content=body, headers=_oracle_headers(path, body, "req-rev-1", idem="idem-rev-1"))
+    resp = _client.post(path, content=body, headers=_oracle_headers(path, body, "req-cap-1", idem="idem-cap-1"))
     assert resp.status_code == 200
-    payload = resp.json()
-    assert payload["success"] is True
-    assert payload["data"]["ready"] is True
+    assert resp.json()["success"] is True
+    assert resp.json()["data"]["ready"] is True
 
-    resp = _client.post(path, content=body, headers=_oracle_headers(path, body, "req-rev-2", idem="idem-rev-2"))
+    resp = _client.post(path, content=body, headers=_oracle_headers(path, body, "req-cap-2", idem="idem-cap-2"))
     assert resp.status_code == 200
-    payload = resp.json()
-    assert payload["success"] is True
-    assert payload["data"]["ready"] is True
+    assert resp.json()["success"] is True
+    assert resp.json()["data"]["ready"] is True
 
     with _db() as db:
-        updates = db.query(ProjectUpdate).filter(ProjectUpdate.source_kind == "revenue_reconciliation_ready").all()
+        updates = db.query(ProjectUpdate).filter(ProjectUpdate.source_kind == "capital_reconciliation_ready").all()
         assert len(updates) == 1
         update = updates[0]
-        assert update is not None
-        assert update.update_type == "revenue"
+        assert update.update_type == "funding"
         assert update.idempotency_key is not None
         assert len(update.idempotency_key) <= 255

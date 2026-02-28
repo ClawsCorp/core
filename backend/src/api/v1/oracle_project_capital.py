@@ -628,6 +628,28 @@ async def reconcile_project_capital(
         )
 
     db.add(report)
+    if report.ready:
+        ready_source_ref = (
+            f"{project.project_id}:{report.treasury_address}:"
+            f"{int(report.ledger_balance_micro_usdc or 0)}:{int(report.onchain_balance_micro_usdc or 0)}"
+        )
+        create_project_update_row(
+            db,
+            project=project,
+            agent=None,
+            title="Capital reconciliation ready",
+            body_md=(
+                f"Capital reconciliation is strict-ready with ledger `{int(report.ledger_balance_micro_usdc or 0)}`"
+                f" and on-chain `{int(report.onchain_balance_micro_usdc or 0)}` micro-USDC."
+            ),
+            update_type="funding",
+            source_kind="capital_reconciliation_ready",
+            source_ref=ready_source_ref,
+            idempotency_key=build_project_update_idempotency_key(
+                prefix="project_update:project_capital_reconciliation_ready",
+                source_idempotency_key=ready_source_ref,
+            ),
+        )
     _record_oracle_audit(request, db, body_hash, request_id, idempotency_key, commit=False)
     db.commit()
     db.refresh(report)
