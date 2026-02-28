@@ -131,6 +131,12 @@ def test_project_funding_summary_uses_open_round_and_deposits(_client: TestClien
     assert opened["success"] is True
     assert opened["data"]["status"] == "open"
     assert opened["data"]["cap_micro_usdc"] == 5000
+    updates_after_open = _client.get("/api/v1/projects/prj_fund/updates")
+    assert updates_after_open.status_code == 200
+    open_updates = updates_after_open.json()["data"]["items"]
+    assert len(open_updates) == 1
+    assert open_updates[0]["update_type"] == "funding"
+    assert open_updates[0]["source_ref"] == opened["data"]["round_id"]
 
     # Observe a treasury deposit and run sync.
     with _db() as db:
@@ -170,6 +176,18 @@ def test_project_funding_summary_uses_open_round_and_deposits(_client: TestClien
     assert data["contributors"][0]["amount_micro_usdc"] == 1234
     assert data["contributors_data_source"] == "observed_transfers"
     assert data["unattributed_micro_usdc"] == 0
+
+    round_id = opened["data"]["round_id"]
+    path_close = f"/api/v1/oracle/projects/prj_fund/funding-rounds/{round_id}/close"
+    body_close = json.dumps({"idempotency_key": "fr-close-1"}).encode("utf-8")
+    resp_close = _client.post(path_close, content=body_close, headers=_oracle_headers(path_close, body_close, "req-close", idem="idem-close"))
+    assert resp_close.status_code == 200
+    assert resp_close.json()["success"] is True
+    updates_after_close = _client.get("/api/v1/projects/prj_fund/updates")
+    assert updates_after_close.status_code == 200
+    close_updates = updates_after_close.json()["data"]["items"]
+    assert len(close_updates) == 2
+    assert close_updates[0]["title"] == "Funding round closed: Round 1"
 
 
 def test_project_funding_summary_falls_back_to_ledger_inflow_when_indexer_lags(

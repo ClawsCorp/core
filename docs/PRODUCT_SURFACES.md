@@ -150,6 +150,7 @@ The project page uses this as the primary source for the visible `Latest project
 Current automatic sources include:
 
 - delivery receipt publication
+- funding round open / close
 - domain add / verify
 - crypto invoice creation
 
