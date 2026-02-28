@@ -27,6 +27,7 @@ from src.models.project_domain import ProjectDomain
 from src.models.project_crypto_invoice import ProjectCryptoInvoice
 from src.models.project_funding_deposit import ProjectFundingDeposit
 from src.models.project_funding_round import ProjectFundingRound
+from src.models.project_update import ProjectUpdate
 from src.models.proposal import Proposal, ProposalStatus
 from src.models.project_settlement import ProjectSettlement
 from src.models.reputation_event import ReputationEvent
@@ -69,6 +70,7 @@ __all__ = [
     "ProjectCryptoInvoice",
     "ProjectFundingDeposit",
     "ProjectFundingRound",
+    "ProjectUpdate",
     "ProjectStatus",
     "ProjectSettlement",
     "Proposal",

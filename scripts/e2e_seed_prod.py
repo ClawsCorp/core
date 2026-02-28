@@ -1706,6 +1706,31 @@ def main() -> int:
         state["delivery_receipt_posted"] = True
         _save_state(state)
 
+    if project_id and not state.get("project_update_posted"):
+        update_lines = [
+            f"status: {delivery_receipt['status']}",
+            f"deliverables_ready: {sum(1 for b in summary_bounties if b.get('paid_tx_hash'))}/{len(summary_bounties)}",
+        ]
+        for b in summary_bounties:
+            update_lines.append(
+                f"- {b.get('key')}: {b.get('bounty_id')} | pr={b.get('git_pr_url')} | paid_tx={b.get('paid_tx_hash')}"
+            )
+        _agent_post(
+            oracle_base_url,
+            f"/api/v1/agent/projects/{project_id}/updates",
+            api_key=author["api_key"],
+            body={
+                "title": f"Delivery receipt published for {project.get('name')}",
+                "body_md": "\n".join(update_lines),
+                "update_type": "delivery",
+                "source_kind": "delivery_receipt",
+                "source_ref": f"receipt:{project_id}",
+                "idempotency_key": f"e2e:project_update:delivery_receipt:{project_id}",
+            },
+        )
+        state["project_update_posted"] = True
+        _save_state(state)
+
     summary = {
         "base_url": oracle_base_url,
         "agents": [

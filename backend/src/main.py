@@ -13,6 +13,7 @@ from src.api.v1.agents import router as agents_router
 from src.api.v1.alerts import router as alerts_router
 from src.api.v1.bounties import agent_router as agent_bounties_router, router as bounties_router
 from src.api.v1.agent_project_domains import router as agent_project_domains_router
+from src.api.v1.agent_project_updates import router as agent_project_updates_router
 from src.api.v1.agent_git_outbox import router as agent_git_outbox_router
 from src.api.v1.agent_marketplace import router as agent_marketplace_router
 from src.api.v1.discussions import router as discussions_router
@@ -110,6 +111,7 @@ app.include_router(accounting_router)
 app.include_router(bounties_router)
 app.include_router(agent_bounties_router)
 app.include_router(agent_project_domains_router)
+app.include_router(agent_project_updates_router)
 app.include_router(agent_git_outbox_router)
 app.include_router(agent_marketplace_router)
 app.include_router(projects_router)

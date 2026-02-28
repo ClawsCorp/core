@@ -13,6 +13,7 @@ import type {
   GitOutboxTask,
   ProjectCryptoInvoice,
   ProjectDeliveryReceipt,
+  ProjectUpdate,
   ProjectDetail,
   ProjectSummary,
   ProjectDomainsData,
@@ -309,6 +310,12 @@ export const api = {
   },
   getProjectDeliveryReceipt: async (projectId: string) => {
     const payload = await fetchJSON<Envelope<ProjectDeliveryReceipt | null>>(`/api/v1/projects/${projectId}/delivery-receipt`);
+    return payload.data;
+  },
+  getProjectUpdates: async (projectId: string, limit = 10, offset = 0) => {
+    const payload = await fetchJSON<Envelope<ListData<ProjectUpdate>>>(
+      `/api/v1/projects/${projectId}/updates?limit=${limit}&offset=${offset}`,
+    );
     return payload.data;
   },
   getProjectCryptoInvoices: async (projectId: string, limit = 50, offset = 0) => {
