@@ -141,6 +141,23 @@ def _git_pr_required_error(open_pr: bool, pr_url: str | None, pr_error: str | No
     return pr_error or "pr_create_required"
 
 
+def _git_auto_merge_error(
+    auto_merge: bool,
+    open_pr: bool,
+    pr_url: str | None,
+    auto_merge_error: str | None,
+) -> str | None:
+    if not auto_merge:
+        return None
+    if not open_pr:
+        return "auto_merge_requires_open_pr"
+    if not isinstance(pr_url, str) or not pr_url.strip():
+        return "auto_merge_requires_pr_url"
+    if auto_merge_error:
+        return auto_merge_error
+    return None
+
+
 def _load_execute_payload(path: str) -> tuple[bytes, dict[str, Any]]:
     if path.strip().lower() == "auto":
         raise OracleRunnerError("Use build-execute-payload or run-month with --execute-payload auto.")
@@ -1855,6 +1872,7 @@ def run(argv: list[str] | None = None) -> int:
                             branch_name = str(payload.get("branch_name") or f"codex/dao-surface-{slug}-{task_id[:6]}")
                             commit_message = str(payload.get("commit_message") or f"feat(surface): add {slug} app surface")
                             open_pr = _coerce_bool(payload.get("open_pr"), default=True)
+                            auto_merge = _coerce_bool(payload.get("auto_merge"), default=False)
                             pr_title = str(payload.get("pr_title") or f"feat(surface): add {slug} app surface")
                             pr_body = str(payload.get("pr_body") or f"Autonomous surface generation for `{slug}` via git_outbox task `{task_id}`.")
 
@@ -1886,6 +1904,8 @@ def run(argv: list[str] | None = None) -> int:
 
                             pr_url: str | None = None
                             pr_error: str | None = None
+                            auto_merge_error: str | None = None
+                            auto_merge_queued = False
                             if open_pr:
                                 try:
                                     pr_create = _run_local_cmd(
@@ -1914,6 +1934,15 @@ def run(argv: list[str] | None = None) -> int:
                                             pr_url = pr_create.strip()
                                 except OracleRunnerError as exc:
                                     pr_error = str(exc)
+                            if auto_merge and pr_url:
+                                try:
+                                    _run_local_cmd(
+                                        ["gh", "pr", "merge", pr_url, "--auto", "--merge", "--delete-branch"],
+                                        cwd=repo_root,
+                                    )
+                                    auto_merge_queued = True
+                                except OracleRunnerError as exc:
+                                    auto_merge_error = str(exc)
 
                             result = {
                                 "stage": "committed",
@@ -1921,6 +1950,9 @@ def run(argv: list[str] | None = None) -> int:
                                 "branch_name": branch_name,
                                 "commit_sha": commit_sha,
                                 "open_pr": open_pr,
+                                "auto_merge": auto_merge,
+                                "auto_merge_queued": auto_merge_queued,
+                                "auto_merge_error": auto_merge_error,
                                 "pr_url": pr_url,
                                 "pr_error": pr_error,
                                 "files": [
@@ -1930,8 +1962,15 @@ def run(argv: list[str] | None = None) -> int:
                             }
                             _update(result, branch_name, commit_sha)
                             pr_required_error = _git_pr_required_error(open_pr, pr_url, pr_error)
-                            final_status = "failed" if pr_required_error else "succeeded"
-                            _complete(final_status, pr_required_error, result, branch_name, commit_sha)
+                            auto_merge_required_error = _git_auto_merge_error(
+                                auto_merge,
+                                open_pr,
+                                pr_url,
+                                auto_merge_error,
+                            )
+                            final_error = pr_required_error or auto_merge_required_error
+                            final_status = "failed" if final_error else "succeeded"
+                            _complete(final_status, final_error, result, branch_name, commit_sha)
                             processed.append(
                                 {
                                     "task_id": task_id,
@@ -1942,12 +1981,15 @@ def run(argv: list[str] | None = None) -> int:
                                     "commit_sha": commit_sha,
                                     "pr_url": pr_url,
                                     "pr_error": pr_error,
-                                    "error_hint": pr_required_error,
+                                    "auto_merge": auto_merge,
+                                    "auto_merge_queued": auto_merge_queued,
+                                    "auto_merge_error": auto_merge_error,
+                                    "error_hint": final_error,
                                 }
                             )
                             processed_this_loop += 1
                             if bool(args.loop):
-                                progress_status = "error" if pr_required_error else "ok"
+                                progress_status = "error" if final_error else "ok"
                                 _print_progress("git_worker_task", progress_status, detail=f"{task_type} {task_id}")
                             continue
 
@@ -1958,6 +2000,7 @@ def run(argv: list[str] | None = None) -> int:
                                 payload.get("commit_message") or f"feat(backend-artifact): add {slug} project artifact"
                             )
                             open_pr = _coerce_bool(payload.get("open_pr"), default=True)
+                            auto_merge = _coerce_bool(payload.get("auto_merge"), default=False)
                             pr_title = str(
                                 payload.get("pr_title") or f"feat(backend-artifact): add {slug} project artifact"
                             )
@@ -1997,6 +2040,8 @@ def run(argv: list[str] | None = None) -> int:
 
                             pr_url: str | None = None
                             pr_error: str | None = None
+                            auto_merge_error: str | None = None
+                            auto_merge_queued = False
                             if open_pr:
                                 try:
                                     pr_create = _run_local_cmd(
@@ -2025,6 +2070,15 @@ def run(argv: list[str] | None = None) -> int:
                                             pr_url = pr_create.strip()
                                 except OracleRunnerError as exc:
                                     pr_error = str(exc)
+                            if auto_merge and pr_url:
+                                try:
+                                    _run_local_cmd(
+                                        ["gh", "pr", "merge", pr_url, "--auto", "--merge", "--delete-branch"],
+                                        cwd=repo_root,
+                                    )
+                                    auto_merge_queued = True
+                                except OracleRunnerError as exc:
+                                    auto_merge_error = str(exc)
 
                             result = {
                                 "stage": "committed",
@@ -2032,14 +2086,24 @@ def run(argv: list[str] | None = None) -> int:
                                 "branch_name": branch_name,
                                 "commit_sha": commit_sha,
                                 "open_pr": open_pr,
+                                "auto_merge": auto_merge,
+                                "auto_merge_queued": auto_merge_queued,
+                                "auto_merge_error": auto_merge_error,
                                 "pr_url": pr_url,
                                 "pr_error": pr_error,
                                 "files": [artifact_file, route_file],
                             }
                             _update(result, branch_name, commit_sha)
                             pr_required_error = _git_pr_required_error(open_pr, pr_url, pr_error)
-                            final_status = "failed" if pr_required_error else "succeeded"
-                            _complete(final_status, pr_required_error, result, branch_name, commit_sha)
+                            auto_merge_required_error = _git_auto_merge_error(
+                                auto_merge,
+                                open_pr,
+                                pr_url,
+                                auto_merge_error,
+                            )
+                            final_error = pr_required_error or auto_merge_required_error
+                            final_status = "failed" if final_error else "succeeded"
+                            _complete(final_status, final_error, result, branch_name, commit_sha)
                             processed.append(
                                 {
                                     "task_id": task_id,
@@ -2050,12 +2114,15 @@ def run(argv: list[str] | None = None) -> int:
                                     "commit_sha": commit_sha,
                                     "pr_url": pr_url,
                                     "pr_error": pr_error,
-                                    "error_hint": pr_required_error,
+                                    "auto_merge": auto_merge,
+                                    "auto_merge_queued": auto_merge_queued,
+                                    "auto_merge_error": auto_merge_error,
+                                    "error_hint": final_error,
                                 }
                             )
                             processed_this_loop += 1
                             if bool(args.loop):
-                                progress_status = "error" if pr_required_error else "ok"
+                                progress_status = "error" if final_error else "ok"
                                 _print_progress("git_worker_task", progress_status, detail=f"{task_type} {task_id}")
                             continue
 

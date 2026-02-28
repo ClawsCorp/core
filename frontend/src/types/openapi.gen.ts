@@ -552,6 +552,11 @@ export interface components {
        * @default true
        */
       open_pr?: boolean;
+      /**
+       * Auto Merge
+       * @default false
+       */
+      auto_merge?: boolean;
       /** Pr Title */
       pr_title?: string | null;
       /** Pr Body */
@@ -584,6 +589,11 @@ export interface components {
        * @default true
        */
       open_pr?: boolean;
+      /**
+       * Auto Merge
+       * @default false
+       */
+      auto_merge?: boolean;
       /** Pr Title */
       pr_title?: string | null;
       /** Pr Body */
