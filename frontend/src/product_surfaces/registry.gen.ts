@@ -6,6 +6,7 @@ import type { ProjectDetail } from "@/types";
 
 import { AutonomyPilotConciergeSaas454af1Surface } from "./autonomy-pilot-concierge-saas-454af1";
 import { AutonomyPilotConciergeSaas71d5bfSurface } from "./autonomy-pilot-concierge-saas-71d5bf";
+import { AutonomyPilotConciergeSaasE4a08aSurface } from "./autonomy-pilot-concierge-saas-e4a08a";
 import { DemoSurface } from "./demo";
 
 export type ProductSurfaceComponent = ComponentType<{ project: ProjectDetail }>;
@@ -13,5 +14,6 @@ export type ProductSurfaceComponent = ComponentType<{ project: ProjectDetail }>;
 export const SURFACE_MAP: Record<string, ProductSurfaceComponent> = {
   "autonomy-pilot-concierge-saas-454af1": AutonomyPilotConciergeSaas454af1Surface,
   "autonomy-pilot-concierge-saas-71d5bf": AutonomyPilotConciergeSaas71d5bfSurface,
+  "autonomy-pilot-concierge-saas-e4a08a": AutonomyPilotConciergeSaasE4a08aSurface,
   demo: DemoSurface,
 };
