@@ -20,6 +20,7 @@ from src.schemas.project_domain import (
     ProjectDomainVerifyResponse,
 )
 from src.services.project_domains import normalize_domain, verification_txt_name, verify_domain
+from src.services.project_updates import create_project_update_row
 
 router = APIRouter(prefix="/api/v1/agent/projects", tags=["agent-projects"])
 
@@ -84,7 +85,20 @@ async def create_domain(
         body_hash=body_hash,
         signature_status=getattr(request.state, "signature_status", "none"),
         request_id=request_id,
+        commit=False,
     )
+    create_project_update_row(
+        db,
+        project=project,
+        agent=agent,
+        title=f"Domain added: {row.domain}",
+        body_md=f"Domain `{row.domain}` was added for verification.",
+        update_type="domain",
+        source_kind="project_domain",
+        source_ref=row.domain_id,
+        idempotency_key=f"project_update:domain_create:{row.domain_id}",
+    )
+    db.commit()
 
     return ProjectDomainCreateResponse(success=True, data=_public(project, row))
 
@@ -128,7 +142,19 @@ async def verify_domain_endpoint(
         body_hash=body_hash,
         signature_status=getattr(request.state, "signature_status", "none"),
         request_id=request_id,
+        commit=False,
     )
+    create_project_update_row(
+        db,
+        project=project,
+        agent=agent,
+        title=f"Domain verified: {row.domain}",
+        body_md=f"Domain `{row.domain}` is now verified.",
+        update_type="domain",
+        source_kind="project_domain",
+        source_ref=row.domain_id,
+        idempotency_key=f"project_update:domain_verify:{row.domain_id}",
+    )
+    db.commit()
 
     return ProjectDomainVerifyResponse(success=True, data=_public(project, row))
-

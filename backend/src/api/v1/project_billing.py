@@ -25,6 +25,7 @@ from src.schemas.project_billing import (
     ProjectCryptoInvoicePublic,
     ProjectCryptoInvoiceResponse,
 )
+from src.services.project_updates import create_project_update_row
 
 router = APIRouter(prefix="/api/v1/projects", tags=["project-billing", "public-projects"])
 agent_router = APIRouter(prefix="/api/v1/agent/projects", tags=["project-billing"])
@@ -168,6 +169,20 @@ async def create_project_crypto_invoice(
         signature_status=getattr(request.state, "signature_status", "none"),
         request_id=request_id,
         commit=False,
+    )
+    create_project_update_row(
+        db,
+        project=project,
+        agent=agent,
+        title=f"Crypto invoice created: {invoice.invoice_id}",
+        body_md=(
+            f"Invoice `{invoice.invoice_id}` created for {int(invoice.amount_micro_usdc)} micro-USDC"
+            f" to `{invoice.payment_address}`."
+        ),
+        update_type="billing",
+        source_kind="crypto_invoice",
+        source_ref=invoice.invoice_id,
+        idempotency_key=f"project_update:crypto_invoice:{invoice.invoice_id}",
     )
     db.commit()
     db.refresh(invoice)

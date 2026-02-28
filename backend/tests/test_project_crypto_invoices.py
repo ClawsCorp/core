@@ -115,6 +115,12 @@ def test_project_crypto_invoice_create_and_list_support_numeric_and_public_ids(
     assert created["project_id"] == "prj_crypto"
     assert created["status"] == "pending"
     assert created["payment_address"] == "0x00000000000000000000000000000000000000bb"
+    updates_resp = _client.get("/api/v1/projects/prj_crypto/updates")
+    assert updates_resp.status_code == 200
+    updates = updates_resp.json()["data"]["items"]
+    assert len(updates) == 1
+    assert updates[0]["update_type"] == "billing"
+    assert updates[0]["source_ref"] == created["invoice_id"]
 
     list_public = _client.get("/api/v1/projects/prj_crypto/crypto-invoices")
     assert list_public.status_code == 200

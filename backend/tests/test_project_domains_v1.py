@@ -115,6 +115,11 @@ def test_project_domain_create_list_verify(_client: TestClient, _db: sessionmake
     )
     assert resp.status_code == 200
     domain_id = resp.json()["data"]["domain_id"]
+    updates_after_create = _client.get("/api/v1/projects/prj_dom/updates")
+    assert updates_after_create.status_code == 200
+    create_item = updates_after_create.json()["data"]["items"][0]
+    assert create_item["update_type"] == "domain"
+    assert create_item["source_ref"] == domain_id
 
     # Force token to known value for verification test.
     db = _db()
@@ -141,3 +146,8 @@ def test_project_domain_create_list_verify(_client: TestClient, _db: sessionmake
     )
     assert resp.status_code == 200
     assert resp.json()["data"]["status"] == "verified"
+    updates_after_verify = _client.get("/api/v1/projects/prj_dom/updates")
+    assert updates_after_verify.status_code == 200
+    items = updates_after_verify.json()["data"]["items"]
+    assert len(items) == 2
+    assert items[0]["title"] == "Domain verified: example.com"

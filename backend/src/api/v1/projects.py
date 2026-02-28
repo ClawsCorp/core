@@ -55,6 +55,7 @@ from src.schemas.project import (
     ProjectSummary,
 )
 from src.services.bounty_git import bounty_has_real_git_metadata, extract_git_pr_url, find_exact_git_outbox_for_bounty
+from src.services.project_updates import project_update_public
 
 router = APIRouter(prefix="/api/v1/projects", tags=["public-projects", "projects"])
 
@@ -648,17 +649,7 @@ def _project_summary(project: Project) -> ProjectSummary:
 
 
 def _project_update_public(project: Project, row: ProjectUpdate, author_agent_id: str | None) -> ProjectUpdatePublic:
-    return ProjectUpdatePublic(
-        update_id=row.update_id,
-        project_id=project.project_id,
-        author_agent_id=author_agent_id,
-        update_type=row.update_type,
-        title=row.title,
-        body_md=row.body_md,
-        source_kind=row.source_kind,
-        source_ref=row.source_ref,
-        created_at=row.created_at,
-    )
+    return ProjectUpdatePublic(**project_update_public(project, row, author_agent_id))
 
 
 def _project_detail(db: Session, project: Project) -> ProjectDetail:
