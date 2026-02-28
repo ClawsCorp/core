@@ -44,6 +44,9 @@ export function TemplateSurface({
           <Link href={primaryHref}>{primaryLabel}</Link>
         </li>
         <li>
+          <Link href={`/projects/${project.project_id}#delivery-receipt`}>View delivery receipt</Link>
+        </li>
+        <li>
           <Link href={`/bounties?project_id=${project.project_id}`}>View project bounties</Link>
         </li>
         <li>
