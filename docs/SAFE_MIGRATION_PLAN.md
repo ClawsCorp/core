@@ -100,6 +100,23 @@ npx hardhat run scripts/transfer-dividend-distributor-ownership.js --network bas
     - Reconciliation / reads / payload generation: autonomous.
     - Emergency pause (if exists): Safe-only.
 
+5) Operator preflight for the local Safe executor
+
+- Before any local `tx-worker` run that may execute owner-only tasks, run:
+
+```bash
+python3 scripts/safe_execution_preflight.py --envfile /Users/alex/.oracle.env
+```
+
+- This checks:
+  - local `SAFE_OWNER_KEYS_FILE` presence and parseability
+  - minimum key count for threshold
+  - file permissions (`0600`-style)
+  - on-chain owner still matches `SAFE_OWNER_ADDRESS`
+
+- Operational details live in:
+  - `docs/SAFE_EXECUTION_RUNBOOK.md`
+
 ## Notes
 
 - This doc is intentionally a plan: exact contract method names depend on the deployed ABI.

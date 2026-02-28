@@ -15,11 +15,13 @@ Current state note:
 - [ ] Railway workspace/project tokens stored only in secret manager/local env, never in repo.
 - [ ] Emergency procedure tested (disable automation + rotate keys + audit review).
 - [ ] `DividendDistributor` ownership is verified on-chain against the intended Safe address.
+- [ ] Local Safe execution path has a documented operator and a passing preflight check before any owner-only distribution run.
 
 References:
 
 - `docs/ORACLE_KEY_ROTATION_RUNBOOK.md`
 - `docs/INCIDENT_RESPONSE_RUNBOOK.md`
+- `docs/SAFE_EXECUTION_RUNBOOK.md`
 
 Commands:
 
@@ -130,6 +132,12 @@ Go-live requires all of the following:
 
 - Safe custody is in place, but hosted production still needs a final operating policy for who runs the local Safe execution worker and where the local owner key file is stored.
 - Funding contributor/cap-table can lag when indexer falls behind free-tier RPC limits.
+
+Local Safe execution verification:
+
+```bash
+python3 scripts/safe_execution_preflight.py --envfile /Users/alex/.oracle.env
+```
 
 Verification command for custody:
 
