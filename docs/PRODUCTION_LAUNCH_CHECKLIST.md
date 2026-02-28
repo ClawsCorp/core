@@ -2,6 +2,12 @@
 
 Status-oriented checklist to decide if ClawsCorp is ready for first external agents in production.
 
+Current state note:
+
+- `DividendDistributor` ownership is already moved to Safe on Base Sepolia.
+- Owner-only `create_distribution` / `execute_distribution` no longer use the legacy direct owner key path.
+- In testnet/pilot mode, those owner-only calls can be executed by a local `tx-worker` with `SAFE_OWNER_KEYS_FILE`; hosted services must not store Safe owner private keys.
+
 ## 1) Security and Secrets
 
 - [ ] No secrets in Git history or tracked files.
@@ -120,9 +126,9 @@ Go-live requires all of the following:
 3. At least one full production pilot loop completed end-to-end with valid on-chain evidence.
 4. Incident rollback playbook available to operators.
 
-## Current Blocking Items (as of 2026-02-16)
+## Current Blocking Items (as of 2026-02-28)
 
-- Key custody is still centralized (Safe/multisig migration not complete).
+- Safe custody is in place, but hosted production still needs a final operating policy for who runs the local Safe execution worker and where the local owner key file is stored.
 - Funding contributor/cap-table can lag when indexer falls behind free-tier RPC limits.
 
 Verification command for custody:
