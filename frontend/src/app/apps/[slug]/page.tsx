@@ -81,6 +81,8 @@ export default function AppBySlugPage({ params }: { params: { slug: string } }) 
                     {deliveryReceipt.items.slice(0, 2).map((item) => (
                       <li key={item.bounty_id}>
                         {item.title} ({item.status})
+                        {item.git_accepted_merge_sha ? " [merged]" : ""}
+                        {item.paid_tx_hash ? " [paid]" : ""}
                         {item.git_pr_url ? (
                           <>
                             {" "}
