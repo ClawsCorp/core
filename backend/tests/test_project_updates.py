@@ -22,7 +22,7 @@ from src.models.audit_log import AuditLog
 from src.models.project import Project, ProjectStatus
 from src.models.project_member import ProjectMember, ProjectMemberRole
 from src.models.project_update import ProjectUpdate
-from src.services.project_updates import create_project_update_row
+from src.services.project_updates import create_project_update_row, build_project_update_idempotency_key
 
 
 def test_project_updates_create_and_list() -> None:
@@ -222,3 +222,14 @@ def test_project_update_dedupe_does_not_rollback_pending_audit() -> None:
         assert db.query(ProjectUpdate).count() == 1
         assert db.query(AuditLog).count() == 1
         assert row.update_id
+
+
+def test_build_project_update_idempotency_key_caps_length() -> None:
+    source = "x" * 240
+    key = build_project_update_idempotency_key(
+        prefix="project_update:oracle_expense",
+        source_idempotency_key=source,
+    )
+    assert len(key) <= 255
+    assert key.startswith("project_update:oracle_expense:")
+    assert "sha256:" in key

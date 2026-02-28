@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import secrets
 
 from sqlalchemy.exc import IntegrityError
@@ -8,6 +9,20 @@ from sqlalchemy.orm import Session
 from src.models.agent import Agent
 from src.models.project import Project
 from src.models.project_update import ProjectUpdate
+
+MAX_PROJECT_UPDATE_IDEMPOTENCY_KEY_LEN = 255
+
+
+def build_project_update_idempotency_key(*, prefix: str, source_idempotency_key: str) -> str:
+    raw = f"{prefix}:{source_idempotency_key}"
+    if len(raw) <= MAX_PROJECT_UPDATE_IDEMPOTENCY_KEY_LEN:
+        return raw
+
+    digest = hashlib.sha256(source_idempotency_key.encode("utf-8")).hexdigest()
+    suffix = f"sha256:{digest}"
+    max_prefix_len = MAX_PROJECT_UPDATE_IDEMPOTENCY_KEY_LEN - len(suffix) - 1
+    safe_prefix = prefix[: max(0, max_prefix_len)]
+    return f"{safe_prefix}:{suffix}"
 
 
 def _generate_update_id(db: Session) -> str:

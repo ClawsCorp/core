@@ -15,7 +15,7 @@ from src.models.expense_event import ExpenseEvent
 from src.models.project import Project
 from src.services.marketing_fee import accrue_marketing_fee_event, build_marketing_fee_idempotency_key
 from src.services.project_spend_policy import check_spend_allowed
-from src.services.project_updates import create_project_update_row
+from src.services.project_updates import create_project_update_row, build_project_update_idempotency_key
 from src.models.revenue_event import RevenueEvent
 from src.schemas.accounting import (
     ExpenseEventCreateRequest,
@@ -142,7 +142,10 @@ async def create_expense_event(
                 update_type="expense",
                 source_kind="oracle_expense_event",
                 source_ref=payload.idempotency_key,
-                idempotency_key=f"project_update:oracle_expense:{payload.idempotency_key}",
+                idempotency_key=build_project_update_idempotency_key(
+                    prefix="project_update:oracle_expense",
+                    source_idempotency_key=payload.idempotency_key,
+                ),
             )
         _record_oracle_audit(request, db, body_hash, request_id, payload.idempotency_key, commit=False)
         db.commit()

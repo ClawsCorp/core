@@ -20,7 +20,7 @@ from src.schemas.project_domain import (
     ProjectDomainVerifyResponse,
 )
 from src.services.project_domains import normalize_domain, verification_txt_name, verify_domain
-from src.services.project_updates import create_project_update_row
+from src.services.project_updates import create_project_update_row, build_project_update_idempotency_key
 
 router = APIRouter(prefix="/api/v1/agent/projects", tags=["agent-projects"])
 
@@ -96,7 +96,10 @@ async def create_domain(
         update_type="domain",
         source_kind="project_domain",
         source_ref=row.domain_id,
-        idempotency_key=f"project_update:domain_create:{row.domain_id}",
+        idempotency_key=build_project_update_idempotency_key(
+            prefix="project_update:domain_create",
+            source_idempotency_key=row.domain_id,
+        ),
     )
     db.commit()
 
@@ -153,7 +156,10 @@ async def verify_domain_endpoint(
         update_type="domain",
         source_kind="project_domain",
         source_ref=row.domain_id,
-        idempotency_key=f"project_update:domain_verify:{row.domain_id}",
+        idempotency_key=build_project_update_idempotency_key(
+            prefix="project_update:domain_verify",
+            source_idempotency_key=row.domain_id,
+        ),
     )
     db.commit()
 

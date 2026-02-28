@@ -49,7 +49,7 @@ from src.services.marketing_fee import (
     build_marketing_fee_idempotency_key,
     calculate_marketing_fee_micro_usdc,
 )
-from src.services.project_updates import create_project_update_row
+from src.services.project_updates import create_project_update_row, build_project_update_idempotency_key
 
 router = APIRouter(prefix="/api/v1/oracle", tags=["oracle-project-capital"])
 
@@ -149,7 +149,10 @@ async def create_project_capital_event(
             update_type="funding",
             source_kind="project_capital_event",
             source_ref=event.event_id,
-            idempotency_key=f"project_update:project_capital_event:{event.event_id}",
+            idempotency_key=build_project_update_idempotency_key(
+                prefix="project_update:project_capital_event",
+                source_idempotency_key=event.event_id,
+            ),
         )
     _record_oracle_audit(request, db, body_hash, request_id, payload.idempotency_key, commit=False)
     db.commit()
@@ -286,7 +289,10 @@ async def sync_project_capital_from_observed_usdc_transfers(
                     update_type="funding",
                     source_kind="project_capital_event",
                     source_ref=event.event_id,
-                    idempotency_key=f"project_update:project_capital_sync:{event.event_id}",
+                    idempotency_key=build_project_update_idempotency_key(
+                        prefix="project_update:project_capital_sync",
+                        source_idempotency_key=event.event_id,
+                    ),
                 )
 
         dep = ProjectFundingDeposit(
@@ -449,7 +455,10 @@ async def open_project_funding_round(
         update_type="funding",
         source_kind="funding_round",
         source_ref=row.round_id,
-        idempotency_key=f"project_update:funding_round_open:{row.round_id}",
+        idempotency_key=build_project_update_idempotency_key(
+            prefix="project_update:funding_round_open",
+            source_idempotency_key=row.round_id,
+        ),
     )
     db.commit()
     db.refresh(row)
@@ -495,7 +504,10 @@ async def close_project_funding_round(
         update_type="funding",
         source_kind="funding_round",
         source_ref=row.round_id,
-        idempotency_key=f"project_update:funding_round_close:{row.round_id}",
+        idempotency_key=build_project_update_idempotency_key(
+            prefix="project_update:funding_round_close",
+            source_idempotency_key=row.round_id,
+        ),
     )
     db.commit()
     db.refresh(row)

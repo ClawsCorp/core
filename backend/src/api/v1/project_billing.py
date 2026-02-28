@@ -25,7 +25,7 @@ from src.schemas.project_billing import (
     ProjectCryptoInvoicePublic,
     ProjectCryptoInvoiceResponse,
 )
-from src.services.project_updates import create_project_update_row
+from src.services.project_updates import create_project_update_row, build_project_update_idempotency_key
 
 router = APIRouter(prefix="/api/v1/projects", tags=["project-billing", "public-projects"])
 agent_router = APIRouter(prefix="/api/v1/agent/projects", tags=["project-billing"])
@@ -182,7 +182,10 @@ async def create_project_crypto_invoice(
         update_type="billing",
         source_kind="crypto_invoice",
         source_ref=invoice.invoice_id,
-        idempotency_key=f"project_update:crypto_invoice:{invoice.invoice_id}",
+        idempotency_key=build_project_update_idempotency_key(
+            prefix="project_update:crypto_invoice",
+            source_idempotency_key=invoice.invoice_id,
+        ),
     )
     db.commit()
     db.refresh(invoice)

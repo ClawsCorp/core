@@ -33,7 +33,7 @@ from src.services.project_revenue import (
 )
 from src.services.bounty_git import extract_git_pr_url, find_exact_git_outbox_for_bounty
 from src.services.project_spend_policy import check_spend_allowed
-from src.services.project_updates import create_project_update_row
+from src.services.project_updates import create_project_update_row, build_project_update_idempotency_key
 from src.services.reputation_hooks import emit_reputation_event
 
 from src.schemas.bounty import (
@@ -565,7 +565,10 @@ async def mark_paid(
                 update_type="expense",
                 source_kind="bounty_paid",
                 source_ref=bounty.bounty_id,
-                idempotency_key=f"project_update:bounty_paid:{bounty.bounty_id}",
+                idempotency_key=build_project_update_idempotency_key(
+                    prefix="project_update:bounty_paid",
+                    source_idempotency_key=bounty.bounty_id,
+                ),
             )
 
     if row.agent_id:
