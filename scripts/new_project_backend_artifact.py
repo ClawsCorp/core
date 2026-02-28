@@ -48,7 +48,9 @@ def main() -> int:
 
     ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
     artifact_file = ARTIFACTS_DIR / f"{slug}.py"
-    if artifact_file.exists():
+    route_module_stem = slug.replace("-", "_")
+    route_file = ARTIFACTS_DIR / f"{route_module_stem}_route.py"
+    if artifact_file.exists() and route_file.exists():
         raise SystemExit(f"artifact already exists: {artifact_file}")
 
     payload = {
@@ -58,24 +60,54 @@ def main() -> int:
         "endpoints": endpoints,
         "kind": "backend_artifact",
     }
+    created_files: list[str] = []
 
-    source = "\n".join(
-        [
-            "# SPDX-License-Identifier: BSL-1.1",
-            "",
-            '"""Generated project backend artifact."""',
-            "",
-            "PROJECT_BACKEND_ARTIFACT = " + json.dumps(payload, indent=2, ensure_ascii=True),
-            "",
-        ]
-    )
-    artifact_file.write_text(source, encoding="utf-8")
+    if not artifact_file.exists():
+        source = "\n".join(
+            [
+                "# SPDX-License-Identifier: BSL-1.1",
+                "",
+                '"""Generated project backend artifact."""',
+                "",
+                "PROJECT_BACKEND_ARTIFACT = " + json.dumps(payload, indent=2, ensure_ascii=True),
+                "",
+            ]
+        )
+        artifact_file.write_text(source, encoding="utf-8")
+        created_files.append(str(artifact_file.relative_to(REPO_ROOT)))
+
+    if not route_file.exists():
+        route_source = "\n".join(
+            [
+                "# SPDX-License-Identifier: BSL-1.1",
+                "",
+                '"""Generated executable project artifact route."""',
+                "",
+                "from __future__ import annotations",
+                "",
+                "from fastapi import APIRouter",
+                "",
+                "router = APIRouter(tags=['generated-project-artifacts'])",
+                "",
+                "_ARTIFACT = " + json.dumps(payload, indent=2, ensure_ascii=True),
+                "",
+                f"@router.get('/api/v1/project-artifacts/{slug}')",
+                "def get_generated_project_artifact() -> dict[str, object]:",
+                "    data = dict(_ARTIFACT)",
+                "    data['route_kind'] = 'template'",
+                "    return {'success': True, 'data': data}",
+                "",
+            ]
+        )
+        route_file.write_text(route_source, encoding="utf-8")
+        created_files.append(str(route_file.relative_to(REPO_ROOT)))
+
     print(
         json.dumps(
             {
                 "ok": True,
                 "slug": slug,
-                "file": str(artifact_file.relative_to(REPO_ROOT)),
+                "files": created_files,
                 "endpoints": endpoints,
             },
             ensure_ascii=True,

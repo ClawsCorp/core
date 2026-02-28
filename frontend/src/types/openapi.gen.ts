@@ -812,6 +812,18 @@ export interface components {
       pr_url: string | null;
       /** Merge Sha */
       merge_sha: string | null;
+      /** Git Task Id */
+      git_task_id?: string | null;
+      /** Git Task Type */
+      git_task_type?: string | null;
+      /** Git Task Status */
+      git_task_status?: string | null;
+      /** Git Branch Name */
+      git_branch_name?: string | null;
+      /** Git Commit Sha */
+      git_commit_sha?: string | null;
+      /** Git Pr Url */
+      git_pr_url?: string | null;
       /** Paid Tx Hash */
       paid_tx_hash: string | null;
       /**

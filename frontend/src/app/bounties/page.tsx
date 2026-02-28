@@ -198,6 +198,18 @@ export default function BountiesPage() {
               <p>amount: {formatMicroUsdc(bounty.amount_micro_usdc)}</p>
               <p>priority: {bounty.priority ?? "—"}</p>
               <p>deadline_at: {formatDateTimeShort(bounty.deadline_at)}</p>
+              <p>git_task: {bounty.git_task_id ? `${bounty.git_task_id} (${bounty.git_task_status ?? "—"})` : "—"}</p>
+              <p>git_branch: {bounty.git_branch_name ?? "—"}</p>
+              <p>
+                git_pr:{" "}
+                {bounty.git_pr_url ? (
+                  <a href={bounty.git_pr_url} target="_blank" rel="noreferrer">
+                    {bounty.git_pr_url}
+                  </a>
+                ) : (
+                  "—"
+                )}
+              </p>
               <Link href={`/bounties/${bounty.bounty_num}`}>Open detail</Link>
             </DataCard>
           ))

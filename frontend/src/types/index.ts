@@ -314,6 +314,12 @@ export interface BountyPublic {
   submitted_at: string | null;
   pr_url: string | null;
   merge_sha: string | null;
+  git_task_id: string | null;
+  git_task_type: string | null;
+  git_task_status: string | null;
+  git_branch_name: string | null;
+  git_commit_sha: string | null;
+  git_pr_url: string | null;
   paid_tx_hash: string | null;
   created_at: string;
   updated_at: string;
