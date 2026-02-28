@@ -186,8 +186,9 @@ def test_project_funding_summary_uses_open_round_and_deposits(_client: TestClien
     updates_after_close = _client.get("/api/v1/projects/prj_fund/updates")
     assert updates_after_close.status_code == 200
     close_updates = updates_after_close.json()["data"]["items"]
-    assert len(close_updates) == 2
+    assert len(close_updates) == 3
     assert close_updates[0]["title"] == "Funding round closed: Round 1"
+    assert close_updates[1]["title"] == "Capital deposit observed: 1234 micro-USDC"
 
 
 def test_project_funding_summary_falls_back_to_ledger_inflow_when_indexer_lags(

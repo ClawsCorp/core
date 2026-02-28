@@ -29,6 +29,7 @@ from src.models.marketing_fee_accrual_event import MarketingFeeAccrualEvent
 from src.models.project import Project, ProjectStatus
 from src.models.project_capital_event import ProjectCapitalEvent
 from src.models.project_funding_deposit import ProjectFundingDeposit
+from src.models.project_update import ProjectUpdate
 
 ORACLE_SECRET = "test-oracle-secret"
 
@@ -151,6 +152,7 @@ def test_project_capital_sync_creates_capital_events(_client: TestClient, _db: s
     with _db() as db:
         assert db.query(ProjectCapitalEvent).count() == 1
         assert db.query(ProjectFundingDeposit).count() == 1
+        assert db.query(ProjectUpdate).count() == 1
         evt = db.query(ProjectCapitalEvent).first()
         assert evt is not None
         assert evt.profit_month_id == "202602"
@@ -172,6 +174,7 @@ def test_project_capital_sync_creates_capital_events(_client: TestClient, _db: s
     with _db() as db:
         assert db.query(ProjectFundingDeposit).count() == 1
         assert db.query(MarketingFeeAccrualEvent).count() == 1
+        assert db.query(ProjectUpdate).count() == 1
 
 
 def test_project_capital_sync_skips_transfer_already_accounted_by_evidence_tx_hash(

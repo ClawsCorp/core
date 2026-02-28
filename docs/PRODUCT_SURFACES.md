@@ -151,6 +151,7 @@ Current automatic sources include:
 
 - delivery receipt publication
 - funding round open / close
+- project capital inflow (manual + sync)
 - domain add / verify
 - crypto invoice creation
 
