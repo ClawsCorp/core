@@ -1378,9 +1378,23 @@ def main() -> int:
         existing["git_last_error_hint"] = task.get("last_error_hint")
         _save_state(state)
         if existing.get("git_status") != "succeeded":
-            raise RuntimeError(
-                f"bounty git task did not succeed: {existing.get('git_last_error_hint') or existing.get('git_status')}"
-            )
+            pr_url = str(existing.get("git_pr_url") or "").strip()
+            if pr_url:
+                merge_receipt = _wait_for_pr_merged(
+                    pr_url=pr_url,
+                    env=env,
+                    max_wait_seconds=max(1, min(int(args.max_pr_merge_wait_seconds), 15)),
+                )
+                existing["git_status"] = "superseded_by_merge"
+                existing["git_pr_merged"] = True
+                existing["git_pr_state"] = merge_receipt.get("state")
+                existing["git_merged_at"] = merge_receipt.get("merged_at")
+                existing["git_merge_commit_sha"] = merge_receipt.get("merge_commit_sha")
+                _save_state(state)
+            else:
+                raise RuntimeError(
+                    f"bounty git task did not succeed: {existing.get('git_last_error_hint') or existing.get('git_status')}"
+                )
         if existing.get("thread_id") and not existing.get("git_proof_posted"):
             _agent_post(
                 oracle_base_url,
@@ -1444,7 +1458,13 @@ def main() -> int:
         claimant = spec["claimant"]
         pr_url = str(existing.get("git_pr_url") or f"https://example.invalid/pr/{bounty_id}")
         merge_sha = str(existing.get("git_merge_commit_sha") or existing.get("git_commit_sha") or "deadbeef")
-        if not existing.get("submitted"):
+        current = _public_get(oracle_base_url, f"/api/v1/bounties/{bounty_id}").get("data", {})
+        current_status = str(current.get("status") or "")
+        if current_status in {"submitted", "eligible_for_payout", "paid"}:
+            existing["submitted"] = True
+        if current_status in {"eligible_for_payout", "paid"}:
+            existing["eligible"] = True
+        if current_status == "claimed" and not existing.get("submitted"):
             _agent_post(
                 oracle_base_url,
                 f"/api/v1/bounties/{bounty_id}/submit",
@@ -1453,7 +1473,9 @@ def main() -> int:
             )
             existing["submitted"] = True
             _save_state(state)
-        if not existing.get("eligible"):
+        current = _public_get(oracle_base_url, f"/api/v1/bounties/{bounty_id}").get("data", {})
+        current_status = str(current.get("status") or "")
+        if current_status == "submitted" and not existing.get("eligible"):
             oracle.post(
                 f"/api/v1/bounties/{bounty_id}/evaluate-eligibility",
                 {
@@ -1481,6 +1503,14 @@ def main() -> int:
             continue
         bounty_id = str(bstate["bounty_id"])
         claimant = spec["claimant"]
+        current = _public_get(oracle_base_url, f"/api/v1/bounties/{bounty_id}").get("data", {})
+        current_status = str(current.get("status") or "")
+        if current_status == "paid":
+            bstate["marked_paid"] = True
+            if current.get("paid_tx_hash"):
+                bstate["paid_tx_hash"] = current.get("paid_tx_hash")
+            _save_state(state)
+            continue
 
         # Reconcile *before* each on-chain outflow (fail-closed gate precondition).
         recon2 = oracle.post(
