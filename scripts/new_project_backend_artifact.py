@@ -60,6 +60,11 @@ def main() -> int:
         "endpoints": endpoints,
         "kind": "backend_artifact",
     }
+    links = {
+        "artifact_path": f"/api/v1/project-artifacts/{slug}",
+        "artifact_summary_path": f"/api/v1/project-artifacts/{slug}/summary",
+        "portal_app_path": f"/apps/{slug}",
+    }
     created_files: list[str] = []
 
     if not artifact_file.exists():
@@ -90,12 +95,30 @@ def main() -> int:
                 "router = APIRouter(tags=['generated-project-artifacts'])",
                 "",
                 "_ARTIFACT = " + json.dumps(payload, indent=2, ensure_ascii=True),
+                "_LINKS = " + json.dumps(links, indent=2, ensure_ascii=True),
                 "",
                 f"@router.get('/api/v1/project-artifacts/{slug}', include_in_schema=False)",
                 "def get_generated_project_artifact() -> dict[str, object]:",
                 "    data = dict(_ARTIFACT)",
+                "    data['links'] = dict(_LINKS)",
                 "    data['route_kind'] = 'template'",
                 "    return {'success': True, 'data': data}",
+                "",
+                f"@router.get('/api/v1/project-artifacts/{slug}/summary', include_in_schema=False)",
+                "def get_generated_project_artifact_summary() -> dict[str, object]:",
+                "    return {",
+                "        'success': True,",
+                "        'data': {",
+                "            'slug': _ARTIFACT['slug'],",
+                "            'title': _ARTIFACT.get('title'),",
+                "            'summary': _ARTIFACT.get('summary'),",
+                "            'kind': _ARTIFACT.get('kind'),",
+                "            'status': 'ready',",
+                "            'endpoints': list(_ARTIFACT.get('endpoints') or []),",
+                "            'links': dict(_LINKS),",
+                "            'route_kind': 'summary_template',",
+                "        },",
+                "    }",
                 "",
             ]
         )

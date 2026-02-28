@@ -20,8 +20,32 @@ _ARTIFACT = {
   "kind": "backend_artifact"
 }
 
+_LINKS = {
+  "artifact_path": "/api/v1/project-artifacts/autonomy-pilot-concierge-saas-454af1",
+  "artifact_summary_path": "/api/v1/project-artifacts/autonomy-pilot-concierge-saas-454af1/summary",
+  "portal_app_path": "/apps/autonomy-pilot-concierge-saas-454af1"
+}
+
 @router.get('/api/v1/project-artifacts/autonomy-pilot-concierge-saas-454af1', include_in_schema=False)
 def get_generated_project_artifact() -> dict[str, object]:
     data = dict(_ARTIFACT)
+    data['links'] = dict(_LINKS)
     data['route_kind'] = 'template'
     return {'success': True, 'data': data}
+
+
+@router.get('/api/v1/project-artifacts/autonomy-pilot-concierge-saas-454af1/summary', include_in_schema=False)
+def get_generated_project_artifact_summary() -> dict[str, object]:
+    return {
+        'success': True,
+        'data': {
+            'slug': _ARTIFACT['slug'],
+            'title': _ARTIFACT.get('title'),
+            'summary': _ARTIFACT.get('summary'),
+            'kind': _ARTIFACT.get('kind'),
+            'status': 'ready',
+            'endpoints': list(_ARTIFACT.get('endpoints') or []),
+            'links': dict(_LINKS),
+            'route_kind': 'summary_template',
+        },
+    }

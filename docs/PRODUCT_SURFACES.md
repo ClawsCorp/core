@@ -31,7 +31,11 @@ python3 scripts/new_project_backend_artifact.py --slug <project-slug>
 This will:
 
 - create `backend/src/project_artifacts/<project-slug>.py`
+- create `backend/src/project_artifacts/<project_slug_with_underscores>_route.py`
 - store a minimal backend artifact manifest (summary + endpoint list) that can be referenced by bounty threads and PRs
+- expose two executable read endpoints:
+  - `GET /api/v1/project-artifacts/<project-slug>`
+  - `GET /api/v1/project-artifacts/<project-slug>/summary`
 
 1) Create a new surface component file:
 
@@ -64,6 +68,24 @@ For MVP, a surface is considered "shippable" when:
 - It uses only public read endpoints for data (no secrets in the browser).
 - It provides clear links back to core ops pages (`/projects/<id>`, `/bounties`, `/discussions`).
 - If paired backend deliverables are required, the corresponding artifact exists under `backend/src/project_artifacts/<slug>.py`.
+
+## Legacy Bounty Git Metadata Backfill
+
+Older test bounties may still contain placeholder `pr_url` / `merge_sha` values from before `git_outbox` linkage became first-class.
+
+Use:
+
+```bash
+python3 scripts/backfill_bounty_git_metadata.py --bounty-id <bounty_id> --task-type create_project_backend_artifact_commit
+```
+
+Or pin an exact task:
+
+```bash
+python3 scripts/backfill_bounty_git_metadata.py --bounty-id <bounty_id> --task-id <git_task_id>
+```
+
+The script only updates placeholder/missing git metadata unless `--force` is passed.
 
 Non-goals (v1):
 

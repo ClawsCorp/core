@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import secrets
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -32,6 +31,7 @@ from src.services.project_revenue import (
     get_project_revenue_spendable_balance_micro_usdc,
     is_reconciliation_fresh as is_revenue_reconciliation_fresh,
 )
+from src.services.bounty_git import extract_git_pr_url, find_exact_git_outbox_for_bounty
 from src.services.project_spend_policy import check_spend_allowed
 from src.services.reputation_hooks import emit_reputation_event
 
@@ -717,45 +717,15 @@ def _bounty_public(
         git_task_status=git_row.status if git_row is not None else None,
         git_branch_name=git_row.branch_name if git_row is not None else None,
         git_commit_sha=git_row.commit_sha if git_row is not None else None,
-        git_pr_url=_extract_git_pr_url(git_row),
+        git_pr_url=extract_git_pr_url(git_row),
         paid_tx_hash=bounty.paid_tx_hash,
         created_at=bounty.created_at,
         updated_at=bounty.updated_at,
     )
 
 
-def _extract_git_pr_url(row: GitOutbox | None) -> str | None:
-    if row is None or not row.result_json:
-        return None
-    try:
-        parsed = json.loads(row.result_json)
-    except ValueError:
-        return None
-    if not isinstance(parsed, dict):
-        return None
-    value = parsed.get("pr_url")
-    if isinstance(value, str) and value.strip():
-        return value.strip()
-    return None
-
-
 def _find_git_outbox_for_bounty(db: Session, bounty: Bounty) -> GitOutbox | None:
-    query = db.query(GitOutbox)
-    if bounty.project_id is not None:
-        query = query.filter(GitOutbox.project_id == bounty.project_id)
-    query = query.order_by(GitOutbox.updated_at.desc(), GitOutbox.id.desc())
-
-    if bounty.merge_sha:
-        row = query.filter(GitOutbox.commit_sha == bounty.merge_sha).first()
-        if row is not None:
-            return row
-
-    if bounty.pr_url:
-        for candidate in query.limit(50).all():
-            if _extract_git_pr_url(candidate) == bounty.pr_url:
-                return candidate
-
-    return None
+    return find_exact_git_outbox_for_bounty(db, bounty)
 
 
 
