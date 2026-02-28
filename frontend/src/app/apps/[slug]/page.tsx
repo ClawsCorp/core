@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { DataCard, PageContainer } from "@/components/Cards";
 import { ErrorState } from "@/components/ErrorState";
@@ -10,7 +10,7 @@ import { api, readErrorMessage, ApiError } from "@/lib/api";
 import { formatDateTimeShort, formatMicroUsdc } from "@/lib/format";
 import { getSurface } from "@/product_surfaces";
 import { DemoSurface } from "@/product_surfaces/demo";
-import type { ProjectDeliveryReceipt, ProjectDetail, ProjectFundingSummary } from "@/types";
+import type { ProjectDeliveryReceipt, ProjectDetail, ProjectFundingSummary, ProjectUpdate } from "@/types";
 
 export default function AppBySlugPage({ params }: { params: { slug: string } }) {
   const [loading, setLoading] = useState(true);
@@ -18,6 +18,7 @@ export default function AppBySlugPage({ params }: { params: { slug: string } }) 
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [deliveryReceipt, setDeliveryReceipt] = useState<ProjectDeliveryReceipt | null>(null);
   const [fundingSummary, setFundingSummary] = useState<ProjectFundingSummary | null>(null);
+  const [projectUpdates, setProjectUpdates] = useState<ProjectUpdate[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -37,11 +38,18 @@ export default function AppBySlugPage({ params }: { params: { slug: string } }) 
       } catch {
         setFundingSummary(null);
       }
+      try {
+        const nextUpdates = await api.getProjectUpdates(nextProject.project_id, 10, 0);
+        setProjectUpdates(nextUpdates.items ?? []);
+      } catch {
+        setProjectUpdates([]);
+      }
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
         setProject(null);
         setDeliveryReceipt(null);
         setFundingSummary(null);
+        setProjectUpdates([]);
       } else {
         setError(readErrorMessage(err));
       }
@@ -55,6 +63,17 @@ export default function AppBySlugPage({ params }: { params: { slug: string } }) 
   }, [load]);
 
   const Surface = project ? getSurface(project.slug) : null;
+  const commercialUpdates = useMemo(() => {
+    const commercialKinds = new Set([
+      "crypto_invoice",
+      "crypto_invoice_paid",
+      "billing_settlement",
+      "revenue_reconciliation_ready",
+      "revenue_outflow",
+      "revenue_bounty_paid",
+    ]);
+    return projectUpdates.filter((item) => item.source_kind && commercialKinds.has(item.source_kind)).slice(0, 3);
+  }, [projectUpdates]);
 
   return (
     <PageContainer title={`App / ${params.slug}`}>
@@ -108,6 +127,21 @@ export default function AppBySlugPage({ params }: { params: { slug: string } }) 
               <p>last deposit: {formatDateTimeShort(fundingSummary.last_deposit_at)}</p>
               <p>
                 <Link href={`/projects/${project.project_id}`}>Open full project operations</Link>
+              </p>
+            </DataCard>
+          ) : null}
+          {commercialUpdates.length > 0 ? (
+            <DataCard title="Commercial activity">
+              <p>Recent customer billing and revenue milestones.</p>
+              <ul>
+                {commercialUpdates.map((item) => (
+                  <li key={item.update_id}>
+                    {item.title} ({item.source_kind}) · {formatDateTimeShort(item.created_at)}
+                  </li>
+                ))}
+              </ul>
+              <p>
+                <Link href={`/projects/${project.project_id}`}>Open full project timeline</Link>
               </p>
             </DataCard>
           ) : null}
