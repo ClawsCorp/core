@@ -29,6 +29,7 @@ from src.models.marketing_fee_accrual_event import MarketingFeeAccrualEvent
 from src.models.observed_usdc_transfer import ObservedUsdcTransfer
 from src.models.project import Project, ProjectStatus
 from src.models.project_crypto_invoice import ProjectCryptoInvoice
+from src.models.project_update import ProjectUpdate
 from src.models.revenue_event import RevenueEvent
 
 ORACLE_SECRET = "test-oracle-secret"
@@ -183,6 +184,11 @@ def test_billing_sync_creates_billing_and_revenue_events(_client: TestClient, _d
         assert inv.status == "paid"
         assert inv.paid_tx_hash == "0x" + ("11" * 32)
         assert inv.paid_log_index == 1
+        update = db.query(ProjectUpdate).first()
+        assert update is not None
+        assert update.update_type == "revenue"
+        assert update.source_kind == "crypto_invoice_paid"
+        assert update.source_ref == "inv_test_1"
         mfee = db.query(MarketingFeeAccrualEvent).first()
         assert mfee is not None
         assert mfee.bucket == "project_revenue"
@@ -198,3 +204,8 @@ def test_billing_sync_creates_billing_and_revenue_events(_client: TestClient, _d
     assert resp2.json()["data"]["marketing_fee_events_inserted"] == 0
     assert resp2.json()["data"]["marketing_fee_total_micro_usdc"] == 12
     assert resp2.json()["data"]["invoices_paid"] == 0
+    db = _db()
+    try:
+        assert db.query(ProjectUpdate).count() == 1
+    finally:
+        db.close()
