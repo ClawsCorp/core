@@ -45,6 +45,9 @@ Safe behavior for owner-only distribution tasks:
 - If `SAFE_OWNER_ADDRESS` is set and `SAFE_OWNER_KEYS_FILE` is not set, `create_distribution` / `execute_distribution` fail-closed into `blocked` with `safe_execution_required` and include machine-readable Safe calldata in task result.
 - If both `SAFE_OWNER_ADDRESS` and `SAFE_OWNER_KEYS_FILE` are set, local `tx-worker` can execute the Safe transaction directly (testnet automation mode) and then record the resulting on-chain tx hash back into the backend.
 - `SAFE_OWNER_KEYS_FILE` must stay local and must never be committed to the repo or stored in Railway/Vercel secrets.
+- Before running local Safe execution, run:
+  - `python3 scripts/safe_execution_preflight.py --envfile /Users/alex/.oracle.env`
+- See `docs/SAFE_EXECUTION_RUNBOOK.md` for the full operator procedure.
 
 `git-worker` environment variables (runs locally, applies git tasks):
 
