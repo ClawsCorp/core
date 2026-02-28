@@ -18,6 +18,7 @@ from src.models.project_crypto_invoice import ProjectCryptoInvoice
 from src.models.revenue_event import RevenueEvent
 from src.services.marketing_fee import accrue_marketing_fee_event
 from src.services.blockchain import BlockchainReadError, read_block_timestamp_utc
+from src.services.project_updates import create_project_update_row
 from src.schemas.billing import BillingSyncResponse
 
 router = APIRouter(prefix="/api/v1/oracle", tags=["oracle-billing"])
@@ -46,15 +47,11 @@ async def sync_billing(
     request_id = request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID") or str(uuid4())
     body_hash = getattr(request.state, "body_hash", "")
 
-    projects = (
-        db.query(Project.id, Project.project_id, Project.revenue_address)
-        .filter(Project.revenue_address.isnot(None))
-        .all()
-    )
-    addr_to_project: dict[str, tuple[int, str]] = {}
-    for pid, public_id, addr in projects:
-        if addr:
-            addr_to_project[str(addr).lower()] = (int(pid), str(public_id))
+    projects = db.query(Project).filter(Project.revenue_address.isnot(None)).all()
+    addr_to_project: dict[str, Project] = {}
+    for project in projects:
+        if project.revenue_address:
+            addr_to_project[str(project.revenue_address).lower()] = project
 
     if not addr_to_project:
         record_audit(
@@ -100,7 +97,9 @@ async def sync_billing(
         dest = str(t.to_address).lower()
         if dest not in addr_to_project:
             continue
-        project_db_id, project_public_id = addr_to_project[dest]
+        project_row = addr_to_project[dest]
+        project_db_id = int(project_row.id)
+        project_public_id = str(project_row.project_id)
 
         # Best-effort block timestamp (cache per block). If it fails, fall back to observed_at.
         profit_month_id: str
@@ -199,6 +198,20 @@ async def sync_billing(
             invoice.paid_log_index = int(t.log_index)
             invoice.paid_at = t.observed_at
             db.add(invoice)
+            create_project_update_row(
+                db,
+                project=project_row,
+                agent=None,
+                title=f"Invoice paid: {invoice.invoice_id}",
+                body_md=(
+                    f"Invoice `{invoice.invoice_id}` was paid via `{t.tx_hash}`"
+                    f" for {int(t.amount_micro_usdc)} micro-USDC."
+                ),
+                update_type="revenue",
+                source_kind="crypto_invoice_paid",
+                source_ref=invoice.invoice_id,
+                idempotency_key=f"project_update:crypto_invoice_paid:{invoice.invoice_id}",
+            )
             invoices_paid += 1
 
     record_audit(

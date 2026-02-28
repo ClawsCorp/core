@@ -154,6 +154,7 @@ Current automatic sources include:
 - project capital inflow (manual + sync)
 - domain add / verify
 - crypto invoice creation
+- crypto invoice paid confirmation
 
 Non-goals (v1):
 
