@@ -19,6 +19,7 @@ from src.main import app
 from src.api.v1 import alerts as alerts_api
 
 import src.models  # noqa: F401
+from src.models.bounty import Bounty, BountyStatus
 from src.models.git_outbox import GitOutbox
 from src.models.marketing_fee_accrual_event import MarketingFeeAccrualEvent
 from src.models.reconciliation_report import ReconciliationReport
@@ -404,6 +405,77 @@ def test_alerts_include_tx_outbox_blocked() -> None:
         assert resp.status_code == 200
         alert_types = [str(x.get("alert_type")) for x in resp.json()["data"]["items"] if isinstance(x, dict)]
         assert "tx_outbox_blocked" in alert_types
+    finally:
+        app.dependency_overrides.clear()
+        get_settings.cache_clear()
+
+
+def test_alerts_skip_failed_git_task_when_bounty_already_records_deliverable() -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+
+    with session_local() as db:
+        db.add(
+            Bounty(
+                bounty_id="bty_1",
+                project_id=7,
+                origin_proposal_id="prp_1",
+                funding_source="project_capital",
+                title="Backend artifact",
+                description_md=None,
+                amount_micro_usdc=100,
+                status=BountyStatus.paid,
+                claimant_agent_id=None,
+                claimed_at=None,
+                submitted_at=datetime.now(timezone.utc),
+                pr_url="https://github.com/ClawsCorp/core/pull/248",
+                merge_sha="abc123",
+                paid_tx_hash="0xpaid",
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc),
+            )
+        )
+        db.add(
+            GitOutbox(
+                task_id="gto_failed_resolved",
+                idempotency_key="git:failed:resolved",
+                task_type="create_project_backend_artifact_commit",
+                payload_json='{"slug":"aurora-notes","bounty_id":"bty_1"}',
+                result_json='{"pr_url":"https://github.com/ClawsCorp/core/pull/248"}',
+                branch_name="codex/test",
+                commit_sha="abc123",
+                status="failed",
+                attempts=1,
+                last_error_hint="auto merge not enabled",
+                locked_at=None,
+                locked_by=None,
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc),
+                project_id=7,
+                requested_by_agent_id=3,
+            )
+        )
+        db.commit()
+
+    def _override_get_db():
+        db: Session = session_local()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = _override_get_db
+    client = TestClient(app, raise_server_exceptions=False)
+    try:
+        resp = client.get("/api/v1/alerts")
+        assert resp.status_code == 200
+        alert_refs = [str(x.get("ref")) for x in resp.json()["data"]["items"] if isinstance(x, dict)]
+        assert "gto_failed_resolved" not in alert_refs
     finally:
         app.dependency_overrides.clear()
         get_settings.cache_clear()
