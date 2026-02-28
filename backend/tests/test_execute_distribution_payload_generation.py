@@ -200,6 +200,48 @@ def test_execute_payload_includes_originator_wallet_weighted_by_project_profit(
     assert data["author_shares"] == [800]
 
 
+def test_execute_payload_blocks_when_no_recipients_exist(
+    _client: TestClient,
+    _db: sessionmaker[Session],
+) -> None:
+    month = "202501"
+    with _db() as db:
+        db.add(
+            Settlement(
+                profit_month_id=month,
+                revenue_sum_micro_usdc=1000,
+                expense_sum_micro_usdc=0,
+                profit_sum_micro_usdc=1000,
+                profit_nonnegative=True,
+            )
+        )
+        db.add(
+            ReconciliationReport(
+                profit_month_id=month,
+                revenue_sum_micro_usdc=1000,
+                expense_sum_micro_usdc=0,
+                profit_sum_micro_usdc=1000,
+                distributor_balance_micro_usdc=1000,
+                delta_micro_usdc=0,
+                ready=True,
+                blocked_reason=None,
+                rpc_chain_id=None,
+                rpc_url_name=None,
+            )
+        )
+        db.commit()
+
+    path = f"/api/v1/oracle/distributions/{month}/execute/payload"
+    status, payload = _post_signed(_client, request_id="req_empty_1", path=path, body=b"{}")
+    assert status == 200, payload
+    assert payload["success"] is False
+    data = payload["data"]
+    assert data["status"] == "blocked"
+    assert data["blocked_reason"] == "recipients_required"
+    assert data["stakers"] == []
+    assert data["authors"] == []
+
+
 def test_execute_payload_caps_authors_to_50(_client: TestClient, _db: sessionmaker[Session]) -> None:
     month = "202501"
     with _db() as db:

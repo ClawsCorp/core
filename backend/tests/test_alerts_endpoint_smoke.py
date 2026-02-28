@@ -22,6 +22,7 @@ import src.models  # noqa: F401
 from src.models.git_outbox import GitOutbox
 from src.models.marketing_fee_accrual_event import MarketingFeeAccrualEvent
 from src.models.reconciliation_report import ReconciliationReport
+from src.models.distribution_execution import DistributionExecution
 from src.models.tx_outbox import TxOutbox
 
 
@@ -403,6 +404,63 @@ def test_alerts_include_tx_outbox_blocked() -> None:
         assert resp.status_code == 200
         alert_types = [str(x.get("alert_type")) for x in resp.json()["data"]["items"] if isinstance(x, dict)]
         assert "tx_outbox_blocked" in alert_types
+    finally:
+        app.dependency_overrides.clear()
+        get_settings.cache_clear()
+
+
+def test_alerts_skip_failed_distribution_task_when_superseded_by_success() -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+
+    with session_local() as db:
+        db.add(
+            TxOutbox(
+                task_id="txo_failed_old",
+                idempotency_key="execute_distribution:202604:old",
+                task_type="execute_distribution",
+                payload_json='{"profit_month_id":"202604"}',
+                result_json='{"stage":"failed","error_hint":"reverted"}',
+                tx_hash=None,
+                status="failed",
+                attempts=1,
+                last_error_hint="reverted",
+                locked_at=None,
+                locked_by=None,
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc),
+            )
+        )
+        db.add(
+            DistributionExecution(
+                profit_month_id="202604",
+                idempotency_key="execute_distribution:202604:new",
+                status="submitted",
+                tx_hash="0xabc",
+                blocked_reason=None,
+            )
+        )
+        db.commit()
+
+    def _override_get_db():
+        db: Session = session_local()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = _override_get_db
+    client = TestClient(app, raise_server_exceptions=False)
+    try:
+        resp = client.get("/api/v1/alerts")
+        assert resp.status_code == 200
+        alert_types = [str(x.get("alert_type")) for x in resp.json()["data"]["items"] if isinstance(x, dict)]
+        assert "tx_outbox_failed" not in alert_types
     finally:
         app.dependency_overrides.clear()
         get_settings.cache_clear()

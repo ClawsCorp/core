@@ -2053,6 +2053,8 @@ def _record_blocked_execution(
 
 
 def _validate_execute_distribution_payload(payload: DistributionExecuteRequest) -> str | None:
+    if len(payload.stakers) + len(payload.authors) == 0:
+        return "recipients_required"
     if len(payload.stakers) > _MAX_STAKERS or len(payload.authors) > _MAX_AUTHORS:
         return "recipient_caps_exceeded"
     if len(payload.stakers) != len(payload.staker_shares) or len(payload.authors) != len(payload.author_shares):

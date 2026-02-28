@@ -18,6 +18,8 @@ from src.models.project import Project, ProjectStatus
 from src.models.project_capital_reconciliation_report import ProjectCapitalReconciliationReport
 from src.models.project_revenue_reconciliation_report import ProjectRevenueReconciliationReport
 from src.models.reconciliation_report import ReconciliationReport
+from src.models.distribution_creation import DistributionCreation
+from src.models.distribution_execution import DistributionExecution
 from src.models.tx_outbox import TxOutbox
 from src.schemas.alerts import AlertItem, AlertsData, AlertsResponse
 from src.services.project_capital import is_reconciliation_fresh as is_capital_fresh
@@ -71,6 +73,37 @@ def _fetch_dividend_distributor_owner(settings) -> tuple[str | None, str | None]
         return None, "invalid_result"
     owner = "0x" + result[-40:]
     return owner, None
+
+
+def _is_failed_tx_outbox_superseded(db: Session, task: TxOutbox) -> bool:
+    if task.task_type not in {"create_distribution", "execute_distribution"}:
+        return False
+
+    try:
+        payload = json.loads(task.payload_json or "{}")
+    except ValueError:
+        payload = {}
+    profit_month_id = str((payload or {}).get("profit_month_id") or "").strip()
+    if not profit_month_id:
+        return False
+
+    if task.task_type == "create_distribution":
+        existing = (
+            db.query(DistributionCreation.id)
+            .filter(DistributionCreation.profit_month_id == profit_month_id)
+            .first()
+        )
+        return existing is not None
+
+    existing = (
+        db.query(DistributionExecution.id)
+        .filter(
+            DistributionExecution.profit_month_id == profit_month_id,
+            DistributionExecution.status.in_(["submitted", "already_distributed"]),
+        )
+        .first()
+    )
+    return existing is not None
 
 
 @router.get(
@@ -562,6 +595,8 @@ def get_alerts(response: Response, db: Session = Depends(get_db)) -> AlertsRespo
         .all()
     )
     for t in failed:
+        if _is_failed_tx_outbox_superseded(db, t):
+            continue
         task_updated_at = _as_aware_utc(t.updated_at) or now
         items.append(
             AlertItem(
