@@ -132,7 +132,13 @@ The same proof is now exposed as public project data:
 The portal surfaces it in two places:
 
 - project detail page: `Delivery receipt`
-- `/apps/<slug>` page: compact `Delivery status` summary with a link to the full receipt
+- `/apps/<slug>` page: compact `Delivery status` summary with the latest deliverables and a link to the full receipt
+
+`/apps/<slug>` also shows a compact funding snapshot from:
+
+- `GET /api/v1/projects/<project_id>/funding`
+
+This keeps each app surface readable as a project-facing status page instead of only a UI shell.
 
 Non-goals (v1):
 
