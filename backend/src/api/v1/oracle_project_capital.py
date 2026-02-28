@@ -49,6 +49,7 @@ from src.services.marketing_fee import (
     build_marketing_fee_idempotency_key,
     calculate_marketing_fee_micro_usdc,
 )
+from src.services.project_updates import create_project_update_row
 
 router = APIRouter(prefix="/api/v1/oracle", tags=["oracle-project-capital"])
 
@@ -410,6 +411,24 @@ async def open_project_funding_round(
         unique_filter={"idempotency_key": payload.idempotency_key},
     )
     _record_oracle_audit(request, db, body_hash, request_id, payload.idempotency_key, commit=False)
+    create_project_update_row(
+        db,
+        project=project,
+        agent=None,
+        title=f"Funding round opened: {row.title or row.round_id}",
+        body_md=(
+            f"Funding round `{row.round_id}` is now open."
+            + (
+                f" Cap: {int(row.cap_micro_usdc)} micro-USDC."
+                if row.cap_micro_usdc is not None
+                else ""
+            )
+        ),
+        update_type="funding",
+        source_kind="funding_round",
+        source_ref=row.round_id,
+        idempotency_key=f"project_update:funding_round_open:{row.round_id}",
+    )
     db.commit()
     db.refresh(row)
     return ProjectFundingRoundCreateResponse(success=True, data=_funding_round_public(project.project_id, row), blocked_reason=None)
@@ -445,6 +464,17 @@ async def close_project_funding_round(
         db.add(row)
 
     _record_oracle_audit(request, db, body_hash, request_id, payload.idempotency_key, commit=False)
+    create_project_update_row(
+        db,
+        project=project,
+        agent=None,
+        title=f"Funding round closed: {row.title or row.round_id}",
+        body_md=f"Funding round `{row.round_id}` is now closed.",
+        update_type="funding",
+        source_kind="funding_round",
+        source_ref=row.round_id,
+        idempotency_key=f"project_update:funding_round_close:{row.round_id}",
+    )
     db.commit()
     db.refresh(row)
     return ProjectFundingRoundCreateResponse(success=True, data=_funding_round_public(project.project_id, row), blocked_reason=None)

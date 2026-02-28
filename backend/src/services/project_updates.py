@@ -42,12 +42,12 @@ def create_project_update_row(
         source_kind=source_kind.strip()[:32] if source_kind and source_kind.strip() else None,
         source_ref=source_ref.strip()[:128] if source_ref and source_ref.strip() else None,
     )
-    db.add(row)
     try:
-        db.flush()
+        with db.begin_nested():
+            db.add(row)
+            db.flush()
         return row, True
     except IntegrityError:
-        db.rollback()
         if not idempotency_key:
             raise
         existing = db.query(ProjectUpdate).filter(ProjectUpdate.idempotency_key == idempotency_key).first()
