@@ -220,6 +220,18 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
     return projectUpdates.filter((item) => item.source_kind && commercialKinds.has(item.source_kind)).slice(0, 5);
   }, [projectUpdates]);
 
+  const operationalUpdates = useMemo(() => {
+    const commercialKinds = new Set([
+      "crypto_invoice",
+      "crypto_invoice_paid",
+      "billing_settlement",
+      "revenue_reconciliation_ready",
+      "revenue_outflow",
+      "revenue_bounty_paid",
+    ]);
+    return projectUpdates.filter((item) => !item.source_kind || !commercialKinds.has(item.source_kind)).slice(0, 5);
+  }, [projectUpdates]);
+
   const onCreate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setCreateMessage(null);
@@ -525,6 +537,19 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
                 {commercialUpdates.map((item) => (
                   <li key={item.update_id}>
                     {item.title} ({item.source_kind}) · {formatDateTimeShort(item.created_at)}
+                  </li>
+                ))}
+              </ul>
+            </DataCard>
+          ) : null}
+
+          {operationalUpdates.length > 0 ? (
+            <DataCard title="Operational activity">
+              <p>Recent delivery, funding, capital, domain, and other non-revenue milestones.</p>
+              <ul>
+                {operationalUpdates.map((item) => (
+                  <li key={item.update_id}>
+                    {item.title} ({item.source_kind ?? item.update_type}) · {formatDateTimeShort(item.created_at)}
                   </li>
                 ))}
               </ul>
