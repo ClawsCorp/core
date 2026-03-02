@@ -25,6 +25,7 @@ from src.models.project_update import ProjectUpdate
 from src.services.project_updates import (
     build_project_update_idempotency_key,
     create_project_update_row,
+    project_update_public,
     populate_project_update_structured_refs,
 )
 
@@ -376,3 +377,144 @@ def test_populate_project_update_structured_refs_backfills_legacy_row() -> None:
         assert row.ref_kind == "project_section"
         assert row.ref_url == "/projects/prj_updates_fill#crypto-billing"
         assert row.tx_hash == "0x" + ("ef" * 32)
+
+
+def test_project_update_public_preserves_stored_ref_kind_when_only_ref_url_is_derived() -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+
+    with session_local() as db:
+        project = Project(
+            project_id="prj_updates_preserve",
+            slug="updates-preserve",
+            name="Updates Preserve",
+            description_md=None,
+            status=ProjectStatus.active,
+            proposal_id=None,
+            origin_proposal_id=None,
+            originator_agent_id=None,
+            discussion_thread_id="thr_preserve",
+            treasury_wallet_address=None,
+            treasury_address=None,
+            revenue_wallet_address=None,
+            revenue_address=None,
+            monthly_budget_micro_usdc=None,
+            created_by_agent_id=None,
+            approved_at=None,
+        )
+        db.add(project)
+        db.flush()
+        row = ProjectUpdate(
+            update_id="pup_preserve_kind",
+            idempotency_key="upd:test:preserve_kind",
+            project_id=project.id,
+            author_agent_id=None,
+            update_type="ops",
+            title="Stored ref kind only",
+            body_md="No body",
+            source_kind="manual_smoke",
+            source_ref="smoke:1",
+            ref_kind="custom_manual",
+            ref_url=None,
+            tx_hash=None,
+        )
+        db.add(row)
+        db.commit()
+
+        public = project_update_public(project, row, None)
+        assert public["ref_kind"] == "custom_manual"
+        assert public["ref_url"] == "/discussions/threads/thr_preserve"
+
+
+def test_project_updates_support_server_side_commercial_and_operational_slices() -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+
+    with session_local() as db:
+        project = Project(
+            project_id="prj_updates_slice",
+            slug="updates-slice",
+            name="Updates Slice",
+            description_md=None,
+            status=ProjectStatus.active,
+            proposal_id=None,
+            origin_proposal_id=None,
+            originator_agent_id=None,
+            discussion_thread_id=None,
+            treasury_wallet_address=None,
+            treasury_address=None,
+            revenue_wallet_address=None,
+            revenue_address=None,
+            monthly_budget_micro_usdc=None,
+            created_by_agent_id=None,
+            approved_at=None,
+        )
+        db.add(project)
+        db.flush()
+        db.add_all(
+            [
+                ProjectUpdate(
+                    update_id="pup_slice_1",
+                    idempotency_key="upd:test:slice:1",
+                    project_id=project.id,
+                    author_agent_id=None,
+                    update_type="revenue",
+                    title="Commercial row",
+                    body_md=None,
+                    source_kind="billing_settlement",
+                    source_ref="inv_1",
+                    ref_kind=None,
+                    ref_url=None,
+                    tx_hash=None,
+                ),
+                ProjectUpdate(
+                    update_id="pup_slice_2",
+                    idempotency_key="upd:test:slice:2",
+                    project_id=project.id,
+                    author_agent_id=None,
+                    update_type="funding",
+                    title="Operational row",
+                    body_md=None,
+                    source_kind="funding_round",
+                    source_ref="fr_1",
+                    ref_kind=None,
+                    ref_url=None,
+                    tx_hash=None,
+                ),
+            ]
+        )
+        db.commit()
+
+    def _override_get_db():
+        db: Session = session_local()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = _override_get_db
+    client = TestClient(app, raise_server_exceptions=False)
+    try:
+        commercial_resp = client.get("/api/v1/projects/prj_updates_slice/updates?slice=commercial")
+        assert commercial_resp.status_code == 200
+        commercial_items = commercial_resp.json()["data"]["items"]
+        assert len(commercial_items) == 1
+        assert commercial_items[0]["source_kind"] == "billing_settlement"
+
+        operational_resp = client.get("/api/v1/projects/prj_updates_slice/updates?slice=operational")
+        assert operational_resp.status_code == 200
+        operational_items = operational_resp.json()["data"]["items"]
+        assert len(operational_items) == 1
+        assert operational_items[0]["source_kind"] == "funding_round"
+    finally:
+        app.dependency_overrides.clear()

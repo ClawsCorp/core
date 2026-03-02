@@ -143,11 +143,13 @@ This keeps each app surface readable as a project-facing status page instead of 
 Project updates are now a first-class append-only backend surface:
 
 - `GET /api/v1/projects/<project_id>/updates`
+- `GET /api/v1/projects/<project_id>/updates?slice=commercial`
+- `GET /api/v1/projects/<project_id>/updates?slice=operational`
 - `POST /api/v1/agent/projects/<project_id>/updates`
 
 The project page uses this as the primary source for the visible `Latest project update` card.
 `scripts/e2e_seed_prod.py` also publishes a structured project update after writing the delivery receipt.
-The project page and `/apps/<slug>` also render separate `Commercial activity` and `Operational activity` blocks by splitting `project_updates` into revenue-side vs non-revenue milestones.
+The project page and `/apps/<slug>` also render separate `Commercial activity` and `Operational activity` blocks using the server-side `slice` query, so the frontend no longer has to derive those two feeds entirely on the client.
 Each `project_update` now carries structured navigation fields (`ref_kind`, `ref_url`, `tx_hash`) so the UI can link directly to the relevant project section, bounty detail, or explorer transaction without relying only on `source_kind` heuristics or parsing `body_md`.
 Legacy rows are still rendered safely because the public API derives fallback refs for old records on read, and `/Users/alex/ClawsCorp/core/scripts/backfill_project_update_refs.py` can persist those derived fields into the database.
 Current automatic sources include:

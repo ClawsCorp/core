@@ -72,12 +72,13 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
     setError(null);
     try {
       const agentApiKey = getAgentApiKey();
-      const [projectResult, capitalResult, fundingResult, deliveryReceiptResult, projectUpdatesResult, bountiesResult, statsResult, accountingResult, domainsResult, invoicesResult, gitOutboxResult] = await Promise.all([
+      const [projectResult, capitalResult, fundingResult, deliveryReceiptResult, commercialUpdatesResult, operationalUpdatesResult, bountiesResult, statsResult, accountingResult, domainsResult, invoicesResult, gitOutboxResult] = await Promise.all([
         api.getProject(params.id),
         api.getProjectCapitalSummary(params.id),
         api.getProjectFundingSummary(params.id).catch(() => null),
         api.getProjectDeliveryReceipt(params.id).catch(() => null),
-        api.getProjectUpdates(params.id, 10, 0).catch(() => ({ items: [], limit: 10, offset: 0, total: 0 })),
+        api.getProjectUpdates(params.id, 5, 0, "commercial").catch(() => ({ items: [], limit: 5, offset: 0, total: 0 })),
+        api.getProjectUpdates(params.id, 5, 0, "operational").catch(() => ({ items: [], limit: 5, offset: 0, total: 0 })),
         api.getBounties({ projectId: params.id }),
         api.getStats().catch(() => null),
         api.getAccountingMonths({ projectId: params.id, limit: 6, offset: 0 }).catch(() => null),
@@ -89,7 +90,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
       setCapital(capitalResult);
       setFunding(fundingResult);
       setDeliveryReceipt(deliveryReceiptResult);
-      setProjectUpdates(projectUpdatesResult.items ?? []);
+      setProjectUpdates([...(operationalUpdatesResult.items ?? []), ...(commercialUpdatesResult.items ?? [])].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)));
       setBounties(bountiesResult.items);
       setStats(statsResult);
       setAccountingMonths(accountingResult?.items ?? []);
@@ -208,29 +209,36 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
     return projectUpdates[0];
   }, [projectUpdates]);
 
-  const commercialUpdates = useMemo(() => {
-    const commercialKinds = new Set([
-      "crypto_invoice",
-      "crypto_invoice_paid",
-      "billing_settlement",
-      "revenue_reconciliation_ready",
-      "revenue_outflow",
-      "revenue_bounty_paid",
-    ]);
-    return projectUpdates.filter((item) => item.source_kind && commercialKinds.has(item.source_kind)).slice(0, 5);
-  }, [projectUpdates]);
+  const commercialUpdates = useMemo(
+    () =>
+      projectUpdates.filter((item) =>
+        [
+          "crypto_invoice",
+          "crypto_invoice_paid",
+          "billing_settlement",
+          "revenue_reconciliation_ready",
+          "revenue_outflow",
+          "revenue_bounty_paid",
+        ].includes(item.source_kind ?? ""),
+      ),
+    [projectUpdates],
+  );
 
-  const operationalUpdates = useMemo(() => {
-    const commercialKinds = new Set([
-      "crypto_invoice",
-      "crypto_invoice_paid",
-      "billing_settlement",
-      "revenue_reconciliation_ready",
-      "revenue_outflow",
-      "revenue_bounty_paid",
-    ]);
-    return projectUpdates.filter((item) => !item.source_kind || !commercialKinds.has(item.source_kind)).slice(0, 5);
-  }, [projectUpdates]);
+  const operationalUpdates = useMemo(
+    () =>
+      projectUpdates.filter(
+        (item) =>
+          ![
+            "crypto_invoice",
+            "crypto_invoice_paid",
+            "billing_settlement",
+            "revenue_reconciliation_ready",
+            "revenue_outflow",
+            "revenue_bounty_paid",
+          ].includes(item.source_kind ?? ""),
+      ),
+    [projectUpdates],
+  );
 
   const onCreate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -710,6 +718,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
             </p>
           </DataCard>
 
+          <div id="domains">
           <DataCard title="Domains (v1)">
             <p>Connect a domain by setting a DNS TXT record, then verifying.</p>
             <p>TXT record name format: <code>_clawscorp.&lt;your-domain&gt;</code></p>
@@ -744,6 +753,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
               </ul>
             )}
           </DataCard>
+          </div>
 
           <DataCard title="Fund this project (USDC)">
             {treasuryAddress ? (

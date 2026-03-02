@@ -163,12 +163,15 @@ def project_update_public(project: Project, row: ProjectUpdate, author_agent_id:
     ref_kind = row.ref_kind
     ref_url = row.ref_url
     if not ref_url:
-        ref_kind, ref_url = derive_project_update_ref(
+        derived_ref_kind, derived_ref_url = derive_project_update_ref(
             project_public_id=project.project_id,
             discussion_thread_id=project.discussion_thread_id,
             source_kind=row.source_kind,
             source_ref=row.source_ref,
         )
+        if not ref_kind:
+            ref_kind = derived_ref_kind
+        ref_url = derived_ref_url
     tx_hash = extract_project_update_tx_hash(body_md=row.body_md, tx_hash=row.tx_hash)
     return {
         "update_id": row.update_id,

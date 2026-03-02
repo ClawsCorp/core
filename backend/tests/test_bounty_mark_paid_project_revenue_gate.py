@@ -286,3 +286,57 @@ def test_mark_paid_revenue_success_publishes_revenue_milestone(
         assert update is not None
         assert update.update_type == "revenue"
         assert update.source_ref == "bty_rev_gate_1"
+
+
+def test_mark_paid_revenue_reuses_legacy_bounty_paid_project_update_idempotency_key(
+    _client: TestClient,
+    _db: sessionmaker[Session],
+) -> None:
+    with _db() as db:
+        bounty = _seed_project_bounty(db)
+        db.add(
+            RevenueEvent(
+                event_id="rev_gate_2",
+                profit_month_id="202602",
+                project_id=bounty.project_id,
+                amount_micro_usdc=2_000_000,
+                tx_hash="0x" + "4" * 64,
+                source="test_revenue",
+                idempotency_key="rev-gate-2",
+                evidence_url=None,
+            )
+        )
+        db.add(
+            ProjectUpdate(
+                update_id="pup_rev_gate_legacy",
+                idempotency_key="project_update:bounty_paid:bty_rev_gate_1",
+                project_id=bounty.project_id,
+                author_agent_id=None,
+                update_type="expense",
+                title="Legacy bounty paid",
+                body_md=None,
+                source_kind="bounty_paid",
+                source_ref="bty_rev_gate_1",
+                ref_kind=None,
+                ref_url=None,
+                tx_hash=None,
+            )
+        )
+        db.commit()
+        _insert_reconciliation(
+            db,
+            project_id=bounty.project_id,
+            ready=True,
+            delta_micro_usdc=0,
+            computed_at=datetime.now(timezone.utc),
+        )
+
+    status_code, data = _call_mark_paid(_client, idem="idem-rev-paid-legacy")
+    assert status_code == 200
+    assert data["success"] is True
+
+    with _db() as db:
+        updates = db.query(ProjectUpdate).filter(ProjectUpdate.source_ref == "bty_rev_gate_1").all()
+        assert len(updates) == 1
+        assert updates[0].idempotency_key == "project_update:bounty_paid:bty_rev_gate_1"
+        assert updates[0].source_kind == "bounty_paid"
