@@ -10,7 +10,7 @@ import { Loading } from "@/components/State";
 import { ErrorState } from "@/components/ErrorState";
 import { api, readErrorMessage } from "@/lib/api";
 import { getAgentApiKey } from "@/lib/agentKey";
-import { getExplorerBaseUrl } from "@/lib/env";
+import { getExplorerBaseUrl, getExplorerTxUrl } from "@/lib/env";
 import { formatDateTimeShort, formatMicroUsdc } from "@/lib/format";
 import type {
   AccountingMonthSummary,
@@ -380,6 +380,51 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
     }
   };
 
+  const updatePrimaryHref = useCallback(
+    (item: ProjectUpdate) => {
+      switch (item.source_kind) {
+        case "crypto_invoice":
+        case "crypto_invoice_paid":
+        case "billing_settlement":
+          return `#crypto-billing`;
+        case "revenue_reconciliation_ready":
+          return `#revenue`;
+        case "capital_reconciliation_ready":
+          return `#capital`;
+        case "revenue_outflow":
+        case "oracle_expense_event":
+          return `#project-accounting`;
+        case "revenue_bounty_paid":
+        case "bounty_paid":
+          return item.source_ref ? `/bounties/${item.source_ref}` : `/bounties?project_id=${params.id}`;
+        case "domain_create":
+        case "domain_verify":
+          return `#domains`;
+        case "delivery_receipt":
+          return `#delivery-receipt`;
+        case "funding_round_open":
+        case "funding_round_close":
+          return `#fund-project`;
+        case "project_capital_event":
+        case "project_capital_sync":
+          return `#capital`;
+        default:
+          return project?.discussion_thread_id
+            ? `/discussions/threads/${project.discussion_thread_id}`
+            : `/discussions?scope=project&project_id=${params.id}`;
+      }
+    },
+    [params.id, project?.discussion_thread_id],
+  );
+
+  const extractTxHref = useCallback((item: ProjectUpdate) => {
+    const txMatch = item.body_md?.match(/0x[a-fA-F0-9]{64}/);
+    if (!txMatch) {
+      return null;
+    }
+    return getExplorerTxUrl(txMatch[0]);
+  }, []);
+
   return (
     <PageContainer title={project ? `${project.name} (ID ${project.project_num})` : `Project ${params.id}`}>
       <AgentKeyPanel />
@@ -537,6 +582,16 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
                 {commercialUpdates.map((item) => (
                   <li key={item.update_id}>
                     {item.title} ({item.source_kind}) · {formatDateTimeShort(item.created_at)}
+                    {" · "}
+                    <Link href={updatePrimaryHref(item)}>Open ref</Link>
+                    {extractTxHref(item) ? (
+                      <>
+                        {" · "}
+                        <a href={extractTxHref(item) ?? "#"} target="_blank" rel="noreferrer">
+                          View tx
+                        </a>
+                      </>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -550,6 +605,16 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
                 {operationalUpdates.map((item) => (
                   <li key={item.update_id}>
                     {item.title} ({item.source_kind ?? item.update_type}) · {formatDateTimeShort(item.created_at)}
+                    {" · "}
+                    <Link href={updatePrimaryHref(item)}>Open ref</Link>
+                    {extractTxHref(item) ? (
+                      <>
+                        {" · "}
+                        <a href={extractTxHref(item) ?? "#"} target="_blank" rel="noreferrer">
+                          View tx
+                        </a>
+                      </>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -669,7 +734,8 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
             )}
           </DataCard>
 
-          <DataCard title="Project accounting (by month)">
+          <div id="project-accounting">
+            <DataCard title="Project accounting (by month)">
             {accountingMonths.length === 0 ? (
               <p>No accounting months yet for this project.</p>
             ) : (
@@ -685,9 +751,11 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
               Full list:{" "}
               <Link href={`/accounting?project_id=${params.id}`}>Open accounting</Link>
             </p>
-          </DataCard>
+            </DataCard>
+          </div>
 
-          <DataCard title="Capital">
+          <div id="capital">
+            <DataCard title="Capital">
             <p>balance_micro_usdc: {formatMicroUsdc(capital?.balance_micro_usdc)}</p>
             <p>events_count: {capital?.events_count ?? "—"}</p>
             <p>last_event_at: {formatDateTimeShort(capital?.last_event_at)}</p>
@@ -697,18 +765,22 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
             <p>delta: {formatMicroUsdc(reconciliation?.delta_micro_usdc)}</p>
             <p>computed_at: {formatDateTimeShort(reconciliation?.computed_at)}</p>
             <Link href="/projects/capital">Open Project Capital leaderboard</Link>
-          </DataCard>
+            </DataCard>
+          </div>
 
-          <DataCard title="Revenue">
+          <div id="revenue">
+            <DataCard title="Revenue">
             <p>balance_micro_usdc (ledger): {formatMicroUsdc(revenueReconciliation?.ledger_balance_micro_usdc)}</p>
             <h3>Reconciliation</h3>
             <p>status: {revenueReconciliationBadge}</p>
             <p>onchain_balance: {formatMicroUsdc(revenueReconciliation?.onchain_balance_micro_usdc)}</p>
             <p>delta: {formatMicroUsdc(revenueReconciliation?.delta_micro_usdc)}</p>
             <p>computed_at: {formatDateTimeShort(revenueReconciliation?.computed_at)}</p>
-          </DataCard>
+            </DataCard>
+          </div>
 
-          <DataCard title="Crypto billing (USDC)">
+          <div id="crypto-billing">
+            <DataCard title="Crypto billing (USDC)">
             <p>
               Invoices are paid by direct USDC transfers to project `revenue_address`; oracle billing sync matches transfers to pending
               invoices and marks them as `paid`.
@@ -750,7 +822,8 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
                 ))}
               </ul>
             )}
-          </DataCard>
+            </DataCard>
+          </div>
 
           <DataCard title="App surface git tasks (agent)">
             <p>Queue autonomous app-surface commits for this project.</p>

@@ -7,6 +7,7 @@ import { DataCard, PageContainer } from "@/components/Cards";
 import { ErrorState } from "@/components/ErrorState";
 import { EmptyState, Loading } from "@/components/State";
 import { api, readErrorMessage, ApiError } from "@/lib/api";
+import { getExplorerTxUrl } from "@/lib/env";
 import { formatDateTimeShort, formatMicroUsdc } from "@/lib/format";
 import { getSurface } from "@/product_surfaces";
 import { DemoSurface } from "@/product_surfaces/demo";
@@ -87,6 +88,49 @@ export default function AppBySlugPage({ params }: { params: { slug: string } }) 
     return projectUpdates.filter((item) => !item.source_kind || !commercialKinds.has(item.source_kind)).slice(0, 3);
   }, [projectUpdates]);
 
+  const updatePrimaryHref = useCallback(
+    (item: ProjectUpdate) => {
+      switch (item.source_kind) {
+        case "crypto_invoice":
+        case "crypto_invoice_paid":
+        case "billing_settlement":
+          return `/projects/${project?.project_id}#crypto-billing`;
+        case "revenue_reconciliation_ready":
+          return `/projects/${project?.project_id}#revenue`;
+        case "capital_reconciliation_ready":
+          return `/projects/${project?.project_id}#capital`;
+        case "revenue_outflow":
+        case "oracle_expense_event":
+          return `/projects/${project?.project_id}#project-accounting`;
+        case "revenue_bounty_paid":
+        case "bounty_paid":
+          return item.source_ref ? `/bounties/${item.source_ref}` : `/bounties?project_id=${project?.project_id}`;
+        case "domain_create":
+        case "domain_verify":
+          return `/projects/${project?.project_id}#domains`;
+        case "delivery_receipt":
+          return `/projects/${project?.project_id}#delivery-receipt`;
+        case "funding_round_open":
+        case "funding_round_close":
+          return `/projects/${project?.project_id}#fund-project`;
+        case "project_capital_event":
+        case "project_capital_sync":
+          return `/projects/${project?.project_id}#capital`;
+        default:
+          return `/projects/${project?.project_id}`;
+      }
+    },
+    [project?.project_id],
+  );
+
+  const extractTxHref = useCallback((item: ProjectUpdate) => {
+    const txMatch = item.body_md?.match(/0x[a-fA-F0-9]{64}/);
+    if (!txMatch) {
+      return null;
+    }
+    return getExplorerTxUrl(txMatch[0]);
+  }, []);
+
   return (
     <PageContainer title={`App / ${params.slug}`}>
       {loading ? <Loading message="Loading app surface..." /> : null}
@@ -149,6 +193,16 @@ export default function AppBySlugPage({ params }: { params: { slug: string } }) 
                 {commercialUpdates.map((item) => (
                   <li key={item.update_id}>
                     {item.title} ({item.source_kind}) · {formatDateTimeShort(item.created_at)}
+                    {" · "}
+                    <Link href={updatePrimaryHref(item)}>Open ref</Link>
+                    {extractTxHref(item) ? (
+                      <>
+                        {" · "}
+                        <a href={extractTxHref(item) ?? "#"} target="_blank" rel="noreferrer">
+                          View tx
+                        </a>
+                      </>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -164,6 +218,16 @@ export default function AppBySlugPage({ params }: { params: { slug: string } }) 
                 {operationalUpdates.map((item) => (
                   <li key={item.update_id}>
                     {item.title} ({item.source_kind ?? item.update_type}) · {formatDateTimeShort(item.created_at)}
+                    {" · "}
+                    <Link href={updatePrimaryHref(item)}>Open ref</Link>
+                    {extractTxHref(item) ? (
+                      <>
+                        {" · "}
+                        <a href={extractTxHref(item) ?? "#"} target="_blank" rel="noreferrer">
+                          View tx
+                        </a>
+                      </>
+                    ) : null}
                   </li>
                 ))}
               </ul>
