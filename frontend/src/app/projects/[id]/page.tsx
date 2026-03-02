@@ -433,6 +433,9 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
     return getExplorerTxUrl(txMatch[0]);
   }, []);
 
+  const latestProjectUpdateHref = latestProjectUpdate ? updatePrimaryHref(latestProjectUpdate) : null;
+  const latestProjectUpdateTxHref = latestProjectUpdate ? extractTxHref(latestProjectUpdate) : null;
+
   return (
     <PageContainer title={project ? `${project.name} (ID ${project.project_num})` : `Project ${params.id}`}>
       <AgentKeyPanel />
@@ -546,6 +549,20 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
                   </pre>
                 ) : null}
                 <p>
+                  {latestProjectUpdateHref ? (
+                    <>
+                      <Link href={latestProjectUpdateHref}>Open ref</Link>
+                      {" · "}
+                    </>
+                  ) : null}
+                  {latestProjectUpdateTxHref ? (
+                    <>
+                      <a href={latestProjectUpdateTxHref} target="_blank" rel="noreferrer">
+                        View tx
+                      </a>
+                      {" · "}
+                    </>
+                  ) : null}
                   <Link href={project.discussion_thread_id ? `/discussions/threads/${project.discussion_thread_id}` : `/discussions?scope=project&project_id=${project.project_id}`}>
                     Open project update thread
                   </Link>
