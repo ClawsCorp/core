@@ -22,7 +22,11 @@ from src.models.audit_log import AuditLog
 from src.models.project import Project, ProjectStatus
 from src.models.project_member import ProjectMember, ProjectMemberRole
 from src.models.project_update import ProjectUpdate
-from src.services.project_updates import create_project_update_row, build_project_update_idempotency_key
+from src.services.project_updates import (
+    build_project_update_idempotency_key,
+    create_project_update_row,
+    populate_project_update_structured_refs,
+)
 
 
 def test_project_updates_create_and_list() -> None:
@@ -245,3 +249,130 @@ def test_build_project_update_idempotency_key_caps_length() -> None:
     assert len(key) <= 255
     assert key.startswith("project_update:oracle_expense:")
     assert "sha256:" in key
+
+
+def test_project_updates_api_derives_structured_refs_for_legacy_rows() -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+
+    with session_local() as db:
+        project = Project(
+            project_id="prj_updates_legacy",
+            slug="updates-legacy",
+            name="Updates Legacy",
+            description_md=None,
+            status=ProjectStatus.active,
+            proposal_id=None,
+            origin_proposal_id=None,
+            originator_agent_id=None,
+            discussion_thread_id="thr_legacy",
+            treasury_wallet_address=None,
+            treasury_address=None,
+            revenue_wallet_address=None,
+            revenue_address=None,
+            monthly_budget_micro_usdc=None,
+            created_by_agent_id=None,
+            approved_at=None,
+        )
+        db.add(project)
+        db.flush()
+        db.add(
+            ProjectUpdate(
+                update_id="pup_legacy_ref",
+                idempotency_key="upd:test:legacy",
+                project_id=project.id,
+                author_agent_id=None,
+                update_type="expense",
+                title="Legacy payout",
+                body_md="Bounty paid in tx `0x" + ("cd" * 32) + "`.",
+                source_kind="bounty_paid",
+                source_ref="bty_legacy",
+                ref_kind=None,
+                ref_url=None,
+                tx_hash=None,
+            )
+        )
+        db.commit()
+
+    def _override_get_db():
+        db: Session = session_local()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = _override_get_db
+    client = TestClient(app, raise_server_exceptions=False)
+    try:
+        list_resp = client.get("/api/v1/projects/prj_updates_legacy/updates")
+        assert list_resp.status_code == 200
+        item = list_resp.json()["data"]["items"][0]
+        assert item["ref_kind"] == "bounty"
+        assert item["ref_url"] == "/bounties/bty_legacy"
+        assert item["tx_hash"] == "0x" + ("cd" * 32)
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_populate_project_update_structured_refs_backfills_legacy_row() -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+
+    with session_local() as db:
+        project = Project(
+            project_id="prj_updates_fill",
+            slug="updates-fill",
+            name="Updates Fill",
+            description_md=None,
+            status=ProjectStatus.active,
+            proposal_id=None,
+            origin_proposal_id=None,
+            originator_agent_id=None,
+            discussion_thread_id=None,
+            treasury_wallet_address=None,
+            treasury_address=None,
+            revenue_wallet_address=None,
+            revenue_address=None,
+            monthly_budget_micro_usdc=None,
+            created_by_agent_id=None,
+            approved_at=None,
+        )
+        db.add(project)
+        db.flush()
+        row = ProjectUpdate(
+            update_id="pup_fill_ref",
+            idempotency_key="upd:test:fill",
+            project_id=project.id,
+            author_agent_id=None,
+            update_type="billing",
+            title="Legacy invoice",
+            body_md="Settled via 0x" + ("ef" * 32),
+            source_kind="billing_settlement",
+            source_ref="inv_fill",
+            ref_kind=None,
+            ref_url=None,
+            tx_hash=None,
+        )
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+
+        changed = populate_project_update_structured_refs(
+            project_public_id=project.project_id,
+            discussion_thread_id=project.discussion_thread_id,
+            row=row,
+        )
+        assert changed is True
+        assert row.ref_kind == "project_section"
+        assert row.ref_url == "/projects/prj_updates_fill#crypto-billing"
+        assert row.tx_hash == "0x" + ("ef" * 32)

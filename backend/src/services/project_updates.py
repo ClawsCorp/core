@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import secrets
 
 from sqlalchemy.exc import IntegrityError
@@ -11,6 +12,7 @@ from src.models.project import Project
 from src.models.project_update import ProjectUpdate
 
 MAX_PROJECT_UPDATE_IDEMPOTENCY_KEY_LEN = 255
+_TX_HASH_RE = re.compile(r"0x[a-fA-F0-9]{64}")
 
 
 def build_project_update_idempotency_key(*, prefix: str, source_idempotency_key: str) -> str:
@@ -77,7 +79,97 @@ def create_project_update_row(
         return existing, False
 
 
+def derive_project_update_ref(
+    *,
+    project_public_id: str,
+    discussion_thread_id: str | None,
+    source_kind: str | None,
+    source_ref: str | None,
+) -> tuple[str | None, str | None]:
+    kind = (source_kind or "").strip()
+    if kind in {"crypto_invoice", "crypto_invoice_paid", "billing_settlement"}:
+        return "project_section", f"/projects/{project_public_id}#crypto-billing"
+    if kind == "revenue_reconciliation_ready":
+        return "project_section", f"/projects/{project_public_id}#revenue"
+    if kind in {"capital_reconciliation_ready", "project_capital_event", "project_capital_sync"}:
+        return "project_section", f"/projects/{project_public_id}#capital"
+    if kind in {"revenue_outflow", "oracle_expense_event"}:
+        return "project_section", f"/projects/{project_public_id}#project-accounting"
+    if kind in {"revenue_bounty_paid", "bounty_paid"}:
+        if source_ref:
+            return "bounty", f"/bounties/{source_ref}"
+        return "bounty_list", f"/bounties?project_id={project_public_id}"
+    if kind in {"domain_create", "domain_verify", "project_domain"}:
+        return "project_section", f"/projects/{project_public_id}#domains"
+    if kind == "delivery_receipt":
+        return "project_section", f"/projects/{project_public_id}#delivery-receipt"
+    if kind in {"funding_round_open", "funding_round_close", "funding_round"}:
+        return "project_section", f"/projects/{project_public_id}#fund-project"
+    if discussion_thread_id:
+        return "discussion_thread", f"/discussions/threads/{discussion_thread_id}"
+    return "discussion_list", f"/discussions?scope=project&project_id={project_public_id}"
+
+
+def extract_project_update_tx_hash(*, body_md: str | None, tx_hash: str | None) -> str | None:
+    if tx_hash and tx_hash.strip():
+        return tx_hash.strip()[:66]
+    if not body_md:
+        return None
+    match = _TX_HASH_RE.search(body_md)
+    if match is None:
+        return None
+    return match.group(0)
+
+
+def populate_project_update_structured_refs(
+    *,
+    project_public_id: str,
+    discussion_thread_id: str | None,
+    row: ProjectUpdate,
+) -> bool:
+    changed = False
+    if not row.ref_url:
+        ref_kind, ref_url = derive_project_update_ref(
+            project_public_id=project_public_id,
+            discussion_thread_id=discussion_thread_id,
+            source_kind=row.source_kind,
+            source_ref=row.source_ref,
+        )
+        if not row.ref_kind and ref_kind:
+            row.ref_kind = ref_kind
+            changed = True
+        if ref_url:
+            row.ref_url = ref_url[:255]
+            changed = True
+    elif not row.ref_kind:
+        ref_kind, _ = derive_project_update_ref(
+            project_public_id=project_public_id,
+            discussion_thread_id=discussion_thread_id,
+            source_kind=row.source_kind,
+            source_ref=row.source_ref,
+        )
+        if ref_kind:
+            row.ref_kind = ref_kind
+            changed = True
+
+    derived_tx_hash = extract_project_update_tx_hash(body_md=row.body_md, tx_hash=row.tx_hash)
+    if derived_tx_hash and row.tx_hash != derived_tx_hash:
+        row.tx_hash = derived_tx_hash
+        changed = True
+    return changed
+
+
 def project_update_public(project: Project, row: ProjectUpdate, author_agent_id: str | None) -> dict[str, object]:
+    ref_kind = row.ref_kind
+    ref_url = row.ref_url
+    if not ref_url:
+        ref_kind, ref_url = derive_project_update_ref(
+            project_public_id=project.project_id,
+            discussion_thread_id=project.discussion_thread_id,
+            source_kind=row.source_kind,
+            source_ref=row.source_ref,
+        )
+    tx_hash = extract_project_update_tx_hash(body_md=row.body_md, tx_hash=row.tx_hash)
     return {
         "update_id": row.update_id,
         "project_id": project.project_id,
@@ -87,8 +179,8 @@ def project_update_public(project: Project, row: ProjectUpdate, author_agent_id:
         "body_md": row.body_md,
         "source_kind": row.source_kind,
         "source_ref": row.source_ref,
-        "ref_kind": row.ref_kind,
-        "ref_url": row.ref_url,
-        "tx_hash": row.tx_hash,
+        "ref_kind": ref_kind,
+        "ref_url": ref_url,
+        "tx_hash": tx_hash,
         "created_at": row.created_at,
     }
