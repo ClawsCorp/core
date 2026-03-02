@@ -11,7 +11,7 @@ import { getExplorerTxUrl } from "@/lib/env";
 import { formatDateTimeShort, formatMicroUsdc } from "@/lib/format";
 import { getSurface } from "@/product_surfaces";
 import { DemoSurface } from "@/product_surfaces/demo";
-import type { ProjectDeliveryReceipt, ProjectDetail, ProjectFundingSummary, ProjectUpdate } from "@/types";
+import type { ProjectDeliveryReceipt, ProjectDetail, ProjectFundingSummary, ProjectUpdate, ProjectUpdatesSummary } from "@/types";
 
 export default function AppBySlugPage({ params }: { params: { slug: string } }) {
   const [loading, setLoading] = useState(true);
@@ -19,6 +19,7 @@ export default function AppBySlugPage({ params }: { params: { slug: string } }) 
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [deliveryReceipt, setDeliveryReceipt] = useState<ProjectDeliveryReceipt | null>(null);
   const [fundingSummary, setFundingSummary] = useState<ProjectFundingSummary | null>(null);
+  const [updatesSummary, setUpdatesSummary] = useState<ProjectUpdatesSummary | null>(null);
   const [projectUpdates, setProjectUpdates] = useState<ProjectUpdate[]>([]);
 
   const load = useCallback(async () => {
@@ -40,6 +41,12 @@ export default function AppBySlugPage({ params }: { params: { slug: string } }) 
         setFundingSummary(null);
       }
       try {
+        const nextSummary = await api.getProjectUpdatesSummary(nextProject.project_id);
+        setUpdatesSummary(nextSummary);
+      } catch {
+        setUpdatesSummary(null);
+      }
+      try {
         const [nextCommercial, nextOperational] = await Promise.all([
           api.getProjectUpdates(nextProject.project_id, 3, 0, "commercial"),
           api.getProjectUpdates(nextProject.project_id, 3, 0, "operational"),
@@ -57,6 +64,7 @@ export default function AppBySlugPage({ params }: { params: { slug: string } }) 
         setProject(null);
         setDeliveryReceipt(null);
         setFundingSummary(null);
+        setUpdatesSummary(null);
         setProjectUpdates([]);
       } else {
         setError(readErrorMessage(err));
@@ -187,6 +195,14 @@ export default function AppBySlugPage({ params }: { params: { slug: string } }) 
               <p>
                 <Link href={`/projects/${project.project_id}#delivery-receipt`}>Open full delivery receipt</Link>
               </p>
+            </DataCard>
+          ) : null}
+          {updatesSummary ? (
+            <DataCard title="Activity summary">
+              <p>all updates: {updatesSummary.total_count}</p>
+              <p>commercial: {updatesSummary.commercial_count}</p>
+              <p>operational: {updatesSummary.operational_count}</p>
+              <p>computed: {formatDateTimeShort(updatesSummary.computed_at)}</p>
             </DataCard>
           ) : null}
           {fundingSummary ? (

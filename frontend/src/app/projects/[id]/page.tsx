@@ -23,6 +23,7 @@ import type {
   ProjectDetail,
   ProjectDomainPublic,
   ProjectFundingSummary,
+  ProjectUpdatesSummary,
   ProjectUpdate,
   StatsData,
 } from "@/types";
@@ -34,6 +35,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
   const [capital, setCapital] = useState<ProjectCapitalSummary | null>(null);
   const [funding, setFunding] = useState<ProjectFundingSummary | null>(null);
   const [deliveryReceipt, setDeliveryReceipt] = useState<ProjectDeliveryReceipt | null>(null);
+  const [updatesSummary, setUpdatesSummary] = useState<ProjectUpdatesSummary | null>(null);
   const [projectUpdates, setProjectUpdates] = useState<ProjectUpdate[]>([]);
   const [bounties, setBounties] = useState<BountyPublic[]>([]);
   const [stats, setStats] = useState<StatsData | null>(null);
@@ -72,12 +74,12 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
     setError(null);
     try {
       const agentApiKey = getAgentApiKey();
-      const [projectResult, capitalResult, fundingResult, deliveryReceiptResult, latestProjectUpdateResult, commercialUpdatesResult, operationalUpdatesResult, bountiesResult, statsResult, accountingResult, domainsResult, invoicesResult, gitOutboxResult] = await Promise.all([
+      const [projectResult, capitalResult, fundingResult, deliveryReceiptResult, updatesSummaryResult, commercialUpdatesResult, operationalUpdatesResult, bountiesResult, statsResult, accountingResult, domainsResult, invoicesResult, gitOutboxResult] = await Promise.all([
         api.getProject(params.id),
         api.getProjectCapitalSummary(params.id),
         api.getProjectFundingSummary(params.id).catch(() => null),
         api.getProjectDeliveryReceipt(params.id).catch(() => null),
-        api.getProjectLatestUpdate(params.id).catch(() => null),
+        api.getProjectUpdatesSummary(params.id).catch(() => null),
         api.getProjectUpdates(params.id, 5, 0, "commercial").catch(() => ({ items: [], limit: 5, offset: 0, total: 0 })),
         api.getProjectUpdates(params.id, 5, 0, "operational").catch(() => ({ items: [], limit: 5, offset: 0, total: 0 })),
         api.getBounties({ projectId: params.id }),
@@ -91,12 +93,13 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
       setCapital(capitalResult);
       setFunding(fundingResult);
       setDeliveryReceipt(deliveryReceiptResult);
+      setUpdatesSummary(updatesSummaryResult);
       const timelineItems = [...(operationalUpdatesResult.items ?? []), ...(commercialUpdatesResult.items ?? [])].sort(
         (a, b) => Date.parse(b.created_at) - Date.parse(a.created_at),
       );
       setProjectUpdates(
-        latestProjectUpdateResult && !timelineItems.some((item) => item.update_id === latestProjectUpdateResult.update_id)
-          ? [latestProjectUpdateResult, ...timelineItems]
+        updatesSummaryResult?.latest && !timelineItems.some((item) => item.update_id === updatesSummaryResult.latest?.update_id)
+          ? [updatesSummaryResult.latest, ...timelineItems]
           : timelineItems,
       );
       setBounties(bountiesResult.items);
@@ -210,12 +213,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
     return deliveryReceipt.items[0];
   }, [deliveryReceipt]);
 
-  const latestProjectUpdate = useMemo(() => {
-    if (!projectUpdates.length) {
-      return null;
-    }
-    return projectUpdates[0];
-  }, [projectUpdates]);
+  const latestProjectUpdate = updatesSummary?.latest ?? projectUpdates[0] ?? null;
 
   const commercialUpdates = useMemo(
     () =>
@@ -565,6 +563,12 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
                   </pre>
                 ) : null}
                 <p>
+                  {updatesSummary ? (
+                    <>
+                      total={updatesSummary.total_count} · commercial={updatesSummary.commercial_count} · operational={updatesSummary.operational_count}
+                      {" · "}
+                    </>
+                  ) : null}
                   {latestProjectUpdateHref ? (
                     <>
                       <Link href={latestProjectUpdateHref}>Open ref</Link>

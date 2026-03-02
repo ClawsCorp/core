@@ -148,6 +148,10 @@ export interface paths {
     /** Get current project delivery receipt */
     get: operations["get_project_delivery_receipt_api_v1_projects__project_id__delivery_receipt_get"];
   };
+  "/api/v1/projects/{project_id}/updates/summary": {
+    /** Get project updates summary */
+    get: operations["get_project_updates_summary_api_v1_projects__project_id__updates_summary_get"];
+  };
   "/api/v1/projects/{project_id}/updates/latest": {
     /** Get latest project update */
     get: operations["get_latest_project_update_api_v1_projects__project_id__updates_latest_get"];
@@ -2466,6 +2470,31 @@ export interface components {
       success: boolean;
       data: components["schemas"]["ProjectUpdatesData"];
     };
+    /** ProjectUpdatesSummary */
+    ProjectUpdatesSummary: {
+      /** Project Id */
+      project_id: string;
+      latest: components["schemas"]["ProjectUpdatePublic"] | null;
+      latest_commercial: components["schemas"]["ProjectUpdatePublic"] | null;
+      latest_operational: components["schemas"]["ProjectUpdatePublic"] | null;
+      /** Total Count */
+      total_count: number;
+      /** Commercial Count */
+      commercial_count: number;
+      /** Operational Count */
+      operational_count: number;
+      /**
+       * Computed At
+       * Format: date-time
+       */
+      computed_at: string;
+    };
+    /** ProjectUpdatesSummaryResponse */
+    ProjectUpdatesSummaryResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["ProjectUpdatesSummary"];
+    };
     /** ProposalCreateRequest */
     ProposalCreateRequest: {
       /** Title */
@@ -3904,6 +3933,28 @@ export interface operations {
       200: {
         content: {
           "application/json": components["schemas"]["ProjectDeliveryReceiptResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Get project updates summary */
+  get_project_updates_summary_api_v1_projects__project_id__updates_summary_get: {
+    parameters: {
+      path: {
+        project_id: string;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ProjectUpdatesSummaryResponse"];
         };
       };
       /** @description Validation Error */

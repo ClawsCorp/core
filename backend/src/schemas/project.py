@@ -245,6 +245,22 @@ class ProjectLatestUpdateResponse(BaseModel):
     data: ProjectUpdatePublic | None
 
 
+class ProjectUpdatesSummary(BaseModel):
+    project_id: str
+    latest: ProjectUpdatePublic | None
+    latest_commercial: ProjectUpdatePublic | None
+    latest_operational: ProjectUpdatePublic | None
+    total_count: int
+    commercial_count: int
+    operational_count: int
+    computed_at: datetime
+
+
+class ProjectUpdatesSummaryResponse(BaseModel):
+    success: bool
+    data: ProjectUpdatesSummary
+
+
 class ProjectCapitalLeaderboardData(BaseModel):
     items: list[ProjectCapitalSummary]
     limit: int

@@ -284,6 +284,17 @@ export interface ProjectUpdate {
   created_at: string;
 }
 
+export interface ProjectUpdatesSummary {
+  project_id: string;
+  latest: ProjectUpdate | null;
+  latest_commercial: ProjectUpdate | null;
+  latest_operational: ProjectUpdate | null;
+  total_count: number;
+  commercial_count: number;
+  operational_count: number;
+  computed_at: string;
+}
+
 export interface ProjectDomainPublic {
   domain_id: string;
   project_id: string;
