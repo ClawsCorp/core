@@ -2394,6 +2394,12 @@ export interface components {
       source_kind?: string | null;
       /** Source Ref */
       source_ref?: string | null;
+      /** Ref Kind */
+      ref_kind?: string | null;
+      /** Ref Url */
+      ref_url?: string | null;
+      /** Tx Hash */
+      tx_hash?: string | null;
       /** Idempotency Key */
       idempotency_key?: string | null;
     };
@@ -2415,6 +2421,12 @@ export interface components {
       source_kind: string | null;
       /** Source Ref */
       source_ref: string | null;
+      /** Ref Kind */
+      ref_kind: string | null;
+      /** Ref Url */
+      ref_url: string | null;
+      /** Tx Hash */
+      tx_hash: string | null;
       /**
        * Created At
        * Format: date-time

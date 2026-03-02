@@ -148,6 +148,7 @@ Project updates are now a first-class append-only backend surface:
 The project page uses this as the primary source for the visible `Latest project update` card.
 `scripts/e2e_seed_prod.py` also publishes a structured project update after writing the delivery receipt.
 The project page and `/apps/<slug>` also render separate `Commercial activity` and `Operational activity` blocks by splitting `project_updates` into revenue-side vs non-revenue milestones.
+Each `project_update` now carries structured navigation fields (`ref_kind`, `ref_url`, `tx_hash`) so the UI can link directly to the relevant project section, bounty detail, or explorer transaction without relying only on `source_kind` heuristics or parsing `body_md`.
 Current automatic sources include:
 
 - delivery receipt publication

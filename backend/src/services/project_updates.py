@@ -44,6 +44,9 @@ def create_project_update_row(
     update_type: str,
     source_kind: str | None = None,
     source_ref: str | None = None,
+    ref_kind: str | None = None,
+    ref_url: str | None = None,
+    tx_hash: str | None = None,
     idempotency_key: str | None = None,
 ) -> tuple[ProjectUpdate, bool]:
     row = ProjectUpdate(
@@ -56,6 +59,9 @@ def create_project_update_row(
         body_md=body_md.strip() if body_md and body_md.strip() else None,
         source_kind=source_kind.strip()[:32] if source_kind and source_kind.strip() else None,
         source_ref=source_ref.strip()[:128] if source_ref and source_ref.strip() else None,
+        ref_kind=ref_kind.strip()[:32] if ref_kind and ref_kind.strip() else None,
+        ref_url=ref_url.strip()[:255] if ref_url and ref_url.strip() else None,
+        tx_hash=tx_hash.strip()[:66] if tx_hash and tx_hash.strip() else None,
     )
     try:
         with db.begin_nested():
@@ -81,5 +87,8 @@ def project_update_public(project: Project, row: ProjectUpdate, author_agent_id:
         "body_md": row.body_md,
         "source_kind": row.source_kind,
         "source_ref": row.source_ref,
+        "ref_kind": row.ref_kind,
+        "ref_url": row.ref_url,
+        "tx_hash": row.tx_hash,
         "created_at": row.created_at,
     }

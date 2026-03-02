@@ -21,4 +21,7 @@ class ProjectUpdate(Base):
     body_md: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_kind: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     source_ref: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    ref_kind: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    ref_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    tx_hash: Mapped[str | None] = mapped_column(String(66), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

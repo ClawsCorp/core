@@ -149,6 +149,9 @@ async def create_project_capital_event(
             update_type="funding",
             source_kind="project_capital_event",
             source_ref=event.event_id,
+            ref_kind="project_section",
+            ref_url=f"/projects/{project.project_id}#capital",
+            tx_hash=payload.evidence_tx_hash,
             idempotency_key=build_project_update_idempotency_key(
                 prefix="project_update:project_capital_event",
                 source_idempotency_key=event.event_id,
@@ -289,6 +292,9 @@ async def sync_project_capital_from_observed_usdc_transfers(
                     update_type="funding",
                     source_kind="project_capital_event",
                     source_ref=event.event_id,
+                    ref_kind="project_section",
+                    ref_url=f"/projects/{project_public_id}#capital",
+                    tx_hash=str(t.tx_hash),
                     idempotency_key=build_project_update_idempotency_key(
                         prefix="project_update:project_capital_sync",
                         source_idempotency_key=event.event_id,
@@ -455,6 +461,8 @@ async def open_project_funding_round(
         update_type="funding",
         source_kind="funding_round",
         source_ref=row.round_id,
+        ref_kind="project_section",
+        ref_url=f"/projects/{project.project_id}#fund-project",
         idempotency_key=build_project_update_idempotency_key(
             prefix="project_update:funding_round_open",
             source_idempotency_key=row.round_id,
@@ -504,6 +512,8 @@ async def close_project_funding_round(
         update_type="funding",
         source_kind="funding_round",
         source_ref=row.round_id,
+        ref_kind="project_section",
+        ref_url=f"/projects/{project.project_id}#fund-project",
         idempotency_key=build_project_update_idempotency_key(
             prefix="project_update:funding_round_close",
             source_idempotency_key=row.round_id,
@@ -645,6 +655,8 @@ async def reconcile_project_capital(
             update_type="funding",
             source_kind="capital_reconciliation_ready",
             source_ref=ready_source_ref,
+            ref_kind="project_section",
+            ref_url=f"/projects/{project.project_id}#capital",
             idempotency_key=build_project_update_idempotency_key(
                 prefix="project_update:project_capital_reconciliation_ready",
                 source_idempotency_key=ready_source_ref,

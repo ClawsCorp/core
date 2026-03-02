@@ -210,6 +210,9 @@ async def sync_billing(
                 update_type="revenue",
                 source_kind="crypto_invoice_paid",
                 source_ref=invoice.invoice_id,
+                ref_kind="project_section",
+                ref_url=f"/projects/{project_public_id}#crypto-billing",
+                tx_hash=str(t.tx_hash),
                 idempotency_key=build_project_update_idempotency_key(
                     prefix="project_update:crypto_invoice_paid",
                     source_idempotency_key=invoice.invoice_id,
@@ -228,6 +231,9 @@ async def sync_billing(
                 update_type="revenue",
                 source_kind="billing_settlement",
                 source_ref=invoice.invoice_id,
+                ref_kind="project_section",
+                ref_url=f"/projects/{project_public_id}#crypto-billing",
+                tx_hash=str(t.tx_hash),
                 idempotency_key=build_project_update_idempotency_key(
                     prefix="project_update:billing_settlement",
                     source_idempotency_key=invoice.invoice_id,

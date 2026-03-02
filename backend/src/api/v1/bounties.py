@@ -566,6 +566,9 @@ async def mark_paid(
                 update_type="revenue" if is_revenue_payout else "expense",
                 source_kind="revenue_bounty_paid" if is_revenue_payout else "bounty_paid",
                 source_ref=bounty.bounty_id,
+                ref_kind="bounty",
+                ref_url=f"/bounties/{bounty.bounty_id}",
+                tx_hash=payload.paid_tx_hash,
                 idempotency_key=build_project_update_idempotency_key(
                     prefix="project_update:revenue_bounty_paid" if is_revenue_payout else "project_update:bounty_paid",
                     source_idempotency_key=bounty.bounty_id,

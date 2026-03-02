@@ -97,6 +97,9 @@ def test_project_updates_create_and_list() -> None:
                 "update_type": "delivery",
                 "source_kind": "delivery_receipt",
                 "source_ref": "receipt:prj_updates_1",
+                "ref_kind": "project_section",
+                "ref_url": "/projects/prj_updates_1#delivery-receipt",
+                "tx_hash": "0x" + ("ab" * 32),
                 "idempotency_key": "upd:test:1",
             },
             headers={"X-Request-Id": "req-upd-1"},
@@ -106,6 +109,9 @@ def test_project_updates_create_and_list() -> None:
         assert create_data["project_id"] == "prj_updates_1"
         assert create_data["author_agent_id"] == "ag_updates_1"
         assert create_data["title"] == "Delivery completed"
+        assert create_data["ref_kind"] == "project_section"
+        assert create_data["ref_url"] == "/projects/prj_updates_1#delivery-receipt"
+        assert create_data["tx_hash"] == "0x" + ("ab" * 32)
 
         second_resp = client.post(
             "/api/v1/agent/projects/prj_updates_1/updates",
@@ -115,6 +121,9 @@ def test_project_updates_create_and_list() -> None:
                 "update_type": "delivery",
                 "source_kind": "delivery_receipt",
                 "source_ref": "receipt:prj_updates_1",
+                "ref_kind": "project_section",
+                "ref_url": "/projects/prj_updates_1#delivery-receipt",
+                "tx_hash": "0x" + ("ab" * 32),
                 "idempotency_key": "upd:test:1",
             },
             headers={"X-Request-Id": "req-upd-2"},
@@ -131,6 +140,9 @@ def test_project_updates_create_and_list() -> None:
         assert item["title"] == "Delivery completed"
         assert item["source_kind"] == "delivery_receipt"
         assert item["source_ref"] == "receipt:prj_updates_1"
+        assert item["ref_kind"] == "project_section"
+        assert item["ref_url"] == "/projects/prj_updates_1#delivery-receipt"
+        assert item["tx_hash"] == "0x" + ("ab" * 32)
     finally:
         app.dependency_overrides.clear()
 
