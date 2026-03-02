@@ -240,6 +240,11 @@ class ProjectUpdateResponse(BaseModel):
     data: ProjectUpdatePublic
 
 
+class ProjectLatestUpdateResponse(BaseModel):
+    success: bool
+    data: ProjectUpdatePublic | None
+
+
 class ProjectCapitalLeaderboardData(BaseModel):
     items: list[ProjectCapitalSummary]
     limit: int

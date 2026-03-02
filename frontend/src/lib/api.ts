@@ -312,6 +312,10 @@ export const api = {
     const payload = await fetchJSON<Envelope<ProjectDeliveryReceipt | null>>(`/api/v1/projects/${projectId}/delivery-receipt`);
     return payload.data;
   },
+  getProjectLatestUpdate: async (projectId: string) => {
+    const payload = await fetchJSON<Envelope<ProjectUpdate | null>>(`/api/v1/projects/${projectId}/updates/latest`);
+    return payload.data;
+  },
   getProjectUpdates: async (projectId: string, limit = 10, offset = 0, slice?: "commercial" | "operational") => {
     const params = new URLSearchParams({
       limit: String(limit),

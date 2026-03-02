@@ -148,6 +148,10 @@ export interface paths {
     /** Get current project delivery receipt */
     get: operations["get_project_delivery_receipt_api_v1_projects__project_id__delivery_receipt_get"];
   };
+  "/api/v1/projects/{project_id}/updates/latest": {
+    /** Get latest project update */
+    get: operations["get_latest_project_update_api_v1_projects__project_id__updates_latest_get"];
+  };
   "/api/v1/projects/{project_id}/updates": {
     /** List project updates */
     get: operations["list_project_updates_api_v1_projects__project_id__updates_get"];
@@ -2148,6 +2152,12 @@ export interface components {
       success: boolean;
       data: components["schemas"]["ProjectFundingSummary"];
     };
+    /** ProjectLatestUpdateResponse */
+    ProjectLatestUpdateResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["ProjectUpdatePublic"] | null;
+    };
     /** ProjectListData */
     ProjectListData: {
       /** Items */
@@ -3894,6 +3904,28 @@ export interface operations {
       200: {
         content: {
           "application/json": components["schemas"]["ProjectDeliveryReceiptResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Get latest project update */
+  get_latest_project_update_api_v1_projects__project_id__updates_latest_get: {
+    parameters: {
+      path: {
+        project_id: string;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ProjectLatestUpdateResponse"];
         };
       };
       /** @description Validation Error */

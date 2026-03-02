@@ -518,3 +518,93 @@ def test_project_updates_support_server_side_commercial_and_operational_slices()
         assert operational_items[0]["source_kind"] == "funding_round"
     finally:
         app.dependency_overrides.clear()
+
+
+def test_project_updates_latest_endpoint_returns_newest_item_or_null() -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+
+    with session_local() as db:
+        project = Project(
+            project_id="prj_updates_latest",
+            slug="updates-latest",
+            name="Updates Latest",
+            description_md=None,
+            status=ProjectStatus.active,
+            proposal_id=None,
+            origin_proposal_id=None,
+            originator_agent_id=None,
+            discussion_thread_id=None,
+            treasury_wallet_address=None,
+            treasury_address=None,
+            revenue_wallet_address=None,
+            revenue_address=None,
+            monthly_budget_micro_usdc=None,
+            created_by_agent_id=None,
+            approved_at=None,
+        )
+        db.add(project)
+        db.commit()
+
+    def _override_get_db():
+        db: Session = session_local()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = _override_get_db
+    client = TestClient(app, raise_server_exceptions=False)
+    try:
+        empty_resp = client.get("/api/v1/projects/prj_updates_latest/updates/latest")
+        assert empty_resp.status_code == 200
+        assert empty_resp.json()["data"] is None
+
+        with session_local() as db:
+            project = db.query(Project).filter(Project.project_id == "prj_updates_latest").one()
+            db.add(
+                ProjectUpdate(
+                    update_id="pup_latest_1",
+                    idempotency_key="upd:test:latest:1",
+                    project_id=project.id,
+                    author_agent_id=None,
+                    update_type="ops",
+                    title="Older",
+                    body_md=None,
+                    source_kind="funding_round",
+                    source_ref="fr_1",
+                    ref_kind=None,
+                    ref_url=None,
+                    tx_hash=None,
+                )
+            )
+            db.add(
+                ProjectUpdate(
+                    update_id="pup_latest_2",
+                    idempotency_key="upd:test:latest:2",
+                    project_id=project.id,
+                    author_agent_id=None,
+                    update_type="revenue",
+                    title="Newest",
+                    body_md=None,
+                    source_kind="billing_settlement",
+                    source_ref="inv_2",
+                    ref_kind=None,
+                    ref_url=None,
+                    tx_hash=None,
+                )
+            )
+            db.commit()
+
+        latest_resp = client.get("/api/v1/projects/prj_updates_latest/updates/latest")
+        assert latest_resp.status_code == 200
+        payload = latest_resp.json()
+        assert payload["data"]["title"] == "Newest"
+        assert payload["data"]["source_kind"] == "billing_settlement"
+    finally:
+        app.dependency_overrides.clear()
