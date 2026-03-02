@@ -3908,6 +3908,7 @@ export interface operations {
   list_project_updates_api_v1_projects__project_id__updates_get: {
     parameters: {
       query?: {
+        slice?: string | null;
         limit?: number;
         offset?: number;
       };
