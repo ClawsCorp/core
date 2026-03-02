@@ -103,6 +103,7 @@ def _client(_db: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch) -> Test
 
 def test_billing_sync_creates_billing_and_revenue_events(_client: TestClient, _db: sessionmaker[Session]) -> None:
     revenue_addr = "0x00000000000000000000000000000000000000aa"
+    expected_month = datetime.now(timezone.utc).strftime("%Y%m")
 
     db = _db()
     try:
@@ -177,7 +178,7 @@ def test_billing_sync_creates_billing_and_revenue_events(_client: TestClient, _d
         assert db.query(BillingEvent).count() == 1
         rev = db.query(RevenueEvent).first()
         assert rev is not None
-        assert rev.profit_month_id == "202602"
+        assert rev.profit_month_id == expected_month
         assert rev.amount_micro_usdc == 1234
         inv = db.query(ProjectCryptoInvoice).filter(ProjectCryptoInvoice.invoice_id == "inv_test_1").first()
         assert inv is not None

@@ -102,6 +102,7 @@ def _client(_db: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch) -> Test
 
 def test_project_capital_sync_creates_capital_events(_client: TestClient, _db: sessionmaker[Session]) -> None:
     treasury = "0x00000000000000000000000000000000000000aa"
+    expected_month = datetime.now(timezone.utc).strftime("%Y%m")
 
     with _db() as db:
         project = Project(
@@ -155,7 +156,7 @@ def test_project_capital_sync_creates_capital_events(_client: TestClient, _db: s
         assert db.query(ProjectUpdate).count() == 1
         evt = db.query(ProjectCapitalEvent).first()
         assert evt is not None
-        assert evt.profit_month_id == "202602"
+        assert evt.profit_month_id == expected_month
         assert evt.delta_micro_usdc == 1234
         assert evt.source == "treasury_usdc_deposit"
         mfee = db.query(MarketingFeeAccrualEvent).first()
