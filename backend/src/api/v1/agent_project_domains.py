@@ -96,6 +96,8 @@ async def create_domain(
         update_type="domain",
         source_kind="project_domain",
         source_ref=row.domain_id,
+        ref_kind="project_section",
+        ref_url=f"/projects/{project.project_id}#domains",
         idempotency_key=build_project_update_idempotency_key(
             prefix="project_update:domain_create",
             source_idempotency_key=row.domain_id,
@@ -156,6 +158,8 @@ async def verify_domain_endpoint(
         update_type="domain",
         source_kind="project_domain",
         source_ref=row.domain_id,
+        ref_kind="project_section",
+        ref_url=f"/projects/{project.project_id}#domains",
         idempotency_key=build_project_update_idempotency_key(
             prefix="project_update:domain_verify",
             source_idempotency_key=row.domain_id,

@@ -202,6 +202,9 @@ class ProjectUpdateCreateRequest(BaseModel):
     update_type: str = Field(default="delivery", min_length=1, max_length=32)
     source_kind: str | None = Field(default=None, max_length=32)
     source_ref: str | None = Field(default=None, max_length=128)
+    ref_kind: str | None = Field(default=None, max_length=32)
+    ref_url: str | None = Field(default=None, max_length=255)
+    tx_hash: str | None = Field(default=None, max_length=66)
     idempotency_key: str | None = Field(default=None, min_length=1, max_length=255)
 
 
@@ -214,6 +217,9 @@ class ProjectUpdatePublic(BaseModel):
     body_md: str | None
     source_kind: str | None
     source_ref: str | None
+    ref_kind: str | None
+    ref_url: str | None
+    tx_hash: str | None
     created_at: datetime
 
 

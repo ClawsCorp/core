@@ -67,6 +67,9 @@ async def create_project_update(
         update_type=payload.update_type,
         source_kind=payload.source_kind,
         source_ref=payload.source_ref,
+        ref_kind=payload.ref_kind,
+        ref_url=payload.ref_url,
+        tx_hash=payload.tx_hash,
         idempotency_key=idempotency_key,
     )
     record_audit(

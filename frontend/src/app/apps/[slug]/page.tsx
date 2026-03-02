@@ -90,6 +90,9 @@ export default function AppBySlugPage({ params }: { params: { slug: string } }) 
 
   const updatePrimaryHref = useCallback(
     (item: ProjectUpdate) => {
+      if (item.ref_url) {
+        return item.ref_url;
+      }
       switch (item.source_kind) {
         case "crypto_invoice":
         case "crypto_invoice_paid":
@@ -107,11 +110,13 @@ export default function AppBySlugPage({ params }: { params: { slug: string } }) 
           return item.source_ref ? `/bounties/${item.source_ref}` : `/bounties?project_id=${project?.project_id}`;
         case "domain_create":
         case "domain_verify":
+        case "project_domain":
           return `/projects/${project?.project_id}#domains`;
         case "delivery_receipt":
           return `/projects/${project?.project_id}#delivery-receipt`;
         case "funding_round_open":
         case "funding_round_close":
+        case "funding_round":
           return `/projects/${project?.project_id}#fund-project`;
         case "project_capital_event":
         case "project_capital_sync":
@@ -124,6 +129,9 @@ export default function AppBySlugPage({ params }: { params: { slug: string } }) 
   );
 
   const extractTxHref = useCallback((item: ProjectUpdate) => {
+    if (item.tx_hash) {
+      return getExplorerTxUrl(item.tx_hash);
+    }
     const txMatch = item.body_md?.match(/0x[a-fA-F0-9]{64}/);
     if (!txMatch) {
       return null;
@@ -193,8 +201,12 @@ export default function AppBySlugPage({ params }: { params: { slug: string } }) 
                 {commercialUpdates.map((item) => (
                   <li key={item.update_id}>
                     {item.title} ({item.source_kind}) · {formatDateTimeShort(item.created_at)}
-                    {" · "}
-                    <Link href={updatePrimaryHref(item)}>Open ref</Link>
+                    {updatePrimaryHref(item) ? (
+                      <>
+                        {" · "}
+                        <Link href={updatePrimaryHref(item)}>Open ref</Link>
+                      </>
+                    ) : null}
                     {extractTxHref(item) ? (
                       <>
                         {" · "}
@@ -218,8 +230,12 @@ export default function AppBySlugPage({ params }: { params: { slug: string } }) 
                 {operationalUpdates.map((item) => (
                   <li key={item.update_id}>
                     {item.title} ({item.source_kind ?? item.update_type}) · {formatDateTimeShort(item.created_at)}
-                    {" · "}
-                    <Link href={updatePrimaryHref(item)}>Open ref</Link>
+                    {updatePrimaryHref(item) ? (
+                      <>
+                        {" · "}
+                        <Link href={updatePrimaryHref(item)}>Open ref</Link>
+                      </>
+                    ) : null}
                     {extractTxHref(item) ? (
                       <>
                         {" · "}

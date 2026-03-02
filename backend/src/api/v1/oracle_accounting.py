@@ -144,6 +144,9 @@ async def create_expense_event(
                 update_type="revenue" if is_revenue_outflow else "expense",
                 source_kind="revenue_outflow" if is_revenue_outflow else "oracle_expense_event",
                 source_ref=payload.idempotency_key,
+                ref_kind="project_section",
+                ref_url=f"/projects/{project.project_id}#project-accounting",
+                tx_hash=payload.tx_hash,
                 idempotency_key=build_project_update_idempotency_key(
                     prefix="project_update:revenue_outflow" if is_revenue_outflow else "project_update:oracle_expense",
                     source_idempotency_key=payload.idempotency_key,

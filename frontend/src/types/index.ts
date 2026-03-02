@@ -278,6 +278,9 @@ export interface ProjectUpdate {
   body_md: string | null;
   source_kind: string | null;
   source_ref: string | null;
+  ref_kind: string | null;
+  ref_url: string | null;
+  tx_hash: string | null;
   created_at: string;
 }
 

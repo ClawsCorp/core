@@ -154,6 +154,8 @@ async def reconcile_project_revenue(
             update_type="revenue",
             source_kind="revenue_reconciliation_ready",
             source_ref=ready_source_ref,
+            ref_kind="project_section",
+            ref_url=f"/projects/{project.project_id}#revenue",
             idempotency_key=build_project_update_idempotency_key(
                 prefix="project_update:project_revenue_reconciliation_ready",
                 source_idempotency_key=ready_source_ref,

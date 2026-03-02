@@ -182,6 +182,8 @@ async def create_project_crypto_invoice(
         update_type="billing",
         source_kind="crypto_invoice",
         source_ref=invoice.invoice_id,
+        ref_kind="project_section",
+        ref_url=f"/projects/{project.project_id}#crypto-billing",
         idempotency_key=build_project_update_idempotency_key(
             prefix="project_update:crypto_invoice",
             source_idempotency_key=invoice.invoice_id,
