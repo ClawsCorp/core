@@ -312,9 +312,16 @@ export const api = {
     const payload = await fetchJSON<Envelope<ProjectDeliveryReceipt | null>>(`/api/v1/projects/${projectId}/delivery-receipt`);
     return payload.data;
   },
-  getProjectUpdates: async (projectId: string, limit = 10, offset = 0) => {
+  getProjectUpdates: async (projectId: string, limit = 10, offset = 0, slice?: "commercial" | "operational") => {
+    const params = new URLSearchParams({
+      limit: String(limit),
+      offset: String(offset),
+    });
+    if (slice) {
+      params.set("slice", slice);
+    }
     const payload = await fetchJSON<Envelope<ListData<ProjectUpdate>>>(
-      `/api/v1/projects/${projectId}/updates?limit=${limit}&offset=${offset}`,
+      `/api/v1/projects/${projectId}/updates?${params.toString()}`,
     );
     return payload.data;
   },

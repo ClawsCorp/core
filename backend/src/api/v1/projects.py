@@ -59,6 +59,15 @@ from src.services.project_updates import project_update_public
 
 router = APIRouter(prefix="/api/v1/projects", tags=["public-projects", "projects"])
 
+COMMERCIAL_PROJECT_UPDATE_KINDS = {
+    "crypto_invoice",
+    "crypto_invoice_paid",
+    "billing_settlement",
+    "revenue_reconciliation_ready",
+    "revenue_outflow",
+    "revenue_bounty_paid",
+}
+
 
 @router.get("/capital/leaderboard", response_model=ProjectCapitalLeaderboardResponse, summary="Project capital leaderboard")
 def project_capital_leaderboard(
@@ -422,6 +431,7 @@ def get_project_delivery_receipt(
 )
 def list_project_updates(
     project_id: str,
+    slice: str | None = Query(default=None, pattern="^(commercial|operational)$"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
@@ -431,6 +441,12 @@ def list_project_updates(
         raise HTTPException(status_code=404, detail="Project not found")
 
     base_query = db.query(ProjectUpdate).filter(ProjectUpdate.project_id == project.id)
+    if slice == "commercial":
+        base_query = base_query.filter(ProjectUpdate.source_kind.in_(COMMERCIAL_PROJECT_UPDATE_KINDS))
+    elif slice == "operational":
+        base_query = base_query.filter(
+            (~ProjectUpdate.source_kind.in_(COMMERCIAL_PROJECT_UPDATE_KINDS)) | ProjectUpdate.source_kind.is_(None)
+        )
     total = base_query.count()
     rows = (
         base_query.order_by(ProjectUpdate.created_at.desc(), ProjectUpdate.id.desc())

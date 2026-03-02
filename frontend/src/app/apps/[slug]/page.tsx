@@ -40,8 +40,15 @@ export default function AppBySlugPage({ params }: { params: { slug: string } }) 
         setFundingSummary(null);
       }
       try {
-        const nextUpdates = await api.getProjectUpdates(nextProject.project_id, 10, 0);
-        setProjectUpdates(nextUpdates.items ?? []);
+        const [nextCommercial, nextOperational] = await Promise.all([
+          api.getProjectUpdates(nextProject.project_id, 3, 0, "commercial"),
+          api.getProjectUpdates(nextProject.project_id, 3, 0, "operational"),
+        ]);
+        setProjectUpdates(
+          [...(nextOperational.items ?? []), ...(nextCommercial.items ?? [])].sort(
+            (a, b) => Date.parse(b.created_at) - Date.parse(a.created_at),
+          ),
+        );
       } catch {
         setProjectUpdates([]);
       }
