@@ -35,6 +35,8 @@ from src.schemas.project import (
     ProjectDeliveryReceiptItem,
     ProjectDeliveryReceiptResponse,
     ProjectLatestUpdateResponse,
+    ProjectUpdatesSummary,
+    ProjectUpdatesSummaryResponse,
     ProjectUpdatePublic,
     ProjectUpdatesData,
     ProjectUpdatesResponse,
@@ -421,6 +423,94 @@ def get_project_delivery_receipt(
             items_ready=ready_count,
             computed_at=latest_updated_at,
             items=items,
+        ),
+    )
+
+
+@router.get(
+    "/{project_id}/updates/summary",
+    response_model=ProjectUpdatesSummaryResponse,
+    summary="Get project updates summary",
+)
+def get_project_updates_summary(
+    project_id: str,
+    db: Session = Depends(get_db),
+) -> ProjectUpdatesSummaryResponse:
+    project = _find_project_by_identifier(db, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    total_count = int(
+        db.query(func.count(ProjectUpdate.id))
+        .filter(ProjectUpdate.project_id == project.id)
+        .scalar()
+        or 0
+    )
+    commercial_count = int(
+        db.query(func.count(ProjectUpdate.id))
+        .filter(
+            ProjectUpdate.project_id == project.id,
+            ProjectUpdate.source_kind.in_(COMMERCIAL_PROJECT_UPDATE_KINDS),
+        )
+        .scalar()
+        or 0
+    )
+    operational_count = total_count - commercial_count
+
+    latest_row = (
+        db.query(ProjectUpdate)
+        .filter(ProjectUpdate.project_id == project.id)
+        .order_by(ProjectUpdate.created_at.desc(), ProjectUpdate.id.desc())
+        .first()
+    )
+    latest_commercial_row = (
+        db.query(ProjectUpdate)
+        .filter(
+            ProjectUpdate.project_id == project.id,
+            ProjectUpdate.source_kind.in_(COMMERCIAL_PROJECT_UPDATE_KINDS),
+        )
+        .order_by(ProjectUpdate.created_at.desc(), ProjectUpdate.id.desc())
+        .first()
+    )
+    latest_operational_row = (
+        db.query(ProjectUpdate)
+        .filter(
+            ProjectUpdate.project_id == project.id,
+            ((~ProjectUpdate.source_kind.in_(COMMERCIAL_PROJECT_UPDATE_KINDS)) | ProjectUpdate.source_kind.is_(None)),
+        )
+        .order_by(ProjectUpdate.created_at.desc(), ProjectUpdate.id.desc())
+        .first()
+    )
+
+    author_ids = {
+        int(row.author_agent_id)
+        for row in [latest_row, latest_commercial_row, latest_operational_row]
+        if row is not None and row.author_agent_id is not None
+    }
+    authors: dict[int, str] = {}
+    if author_ids:
+        authors = {
+            int(agent.id): str(agent.agent_id)
+            for agent in db.query(Agent).filter(Agent.id.in_(author_ids)).all()
+        }
+
+    def _to_public(row: ProjectUpdate | None) -> ProjectUpdatePublic | None:
+        if row is None:
+            return None
+        author_agent_id = authors.get(int(row.author_agent_id)) if row.author_agent_id is not None else None
+        return _project_update_public(project, row, author_agent_id)
+
+    return ProjectUpdatesSummaryResponse(
+        success=True,
+        data=ProjectUpdatesSummary(
+            project_id=project.project_id,
+            latest=_to_public(latest_row),
+            latest_commercial=_to_public(latest_commercial_row),
+            latest_operational=_to_public(latest_operational_row),
+            total_count=total_count,
+            commercial_count=commercial_count,
+            operational_count=operational_count,
+            computed_at=datetime.now(timezone.utc),
         ),
     )
 
