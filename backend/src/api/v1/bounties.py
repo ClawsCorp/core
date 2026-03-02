@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from sqlalchemy import case
 from sqlalchemy.orm import Session
 
 from src.api.v1.dependencies import require_agent_auth, require_oracle_hmac
@@ -18,6 +19,7 @@ from src.models.bounty import Bounty, BountyFundingSource, BountyStatus
 from src.models.expense_event import ExpenseEvent
 from src.models.git_outbox import GitOutbox
 from src.models.project_capital_event import ProjectCapitalEvent
+from src.models.project_update import ProjectUpdate
 from src.models.milestone import Milestone
 from src.models.proposal import Proposal
 from src.models.project import Project
@@ -62,6 +64,37 @@ REQUIRED_CHECKS = [
     "dependency-review",
     "secrets-scan",
 ]
+
+
+def _select_bounty_paid_project_update_idempotency_key(
+    db: Session,
+    *,
+    bounty_id: str,
+    is_revenue_payout: bool,
+) -> str:
+    default_key = build_project_update_idempotency_key(
+        prefix="project_update:bounty_paid",
+        source_idempotency_key=bounty_id,
+    )
+    if not is_revenue_payout:
+        return default_key
+
+    revenue_key = build_project_update_idempotency_key(
+        prefix="project_update:revenue_bounty_paid",
+        source_idempotency_key=bounty_id,
+    )
+    existing = (
+        db.query(ProjectUpdate.idempotency_key)
+        .filter(ProjectUpdate.idempotency_key.in_([revenue_key, default_key]))
+        .order_by(
+            case((ProjectUpdate.idempotency_key == revenue_key, 0), else_=1),
+            ProjectUpdate.id.asc(),
+        )
+        .first()
+    )
+    if existing and existing[0]:
+        return str(existing[0])
+    return default_key
 
 
 @router.get(
@@ -569,9 +602,10 @@ async def mark_paid(
                 ref_kind="bounty",
                 ref_url=f"/bounties/{bounty.bounty_id}",
                 tx_hash=payload.paid_tx_hash,
-                idempotency_key=build_project_update_idempotency_key(
-                    prefix="project_update:bounty_paid",
-                    source_idempotency_key=bounty.bounty_id,
+                idempotency_key=_select_bounty_paid_project_update_idempotency_key(
+                    db,
+                    bounty_id=bounty.bounty_id,
+                    is_revenue_payout=is_revenue_payout,
                 ),
             )
 

@@ -34,6 +34,7 @@ from src.schemas.project import (
     ProjectDeliveryReceipt,
     ProjectDeliveryReceiptItem,
     ProjectDeliveryReceiptResponse,
+    ProjectLatestUpdateResponse,
     ProjectUpdatePublic,
     ProjectUpdatesData,
     ProjectUpdatesResponse,
@@ -421,6 +422,38 @@ def get_project_delivery_receipt(
             computed_at=latest_updated_at,
             items=items,
         ),
+    )
+
+
+@router.get(
+    "/{project_id}/updates/latest",
+    response_model=ProjectLatestUpdateResponse,
+    summary="Get latest project update",
+)
+def get_latest_project_update(
+    project_id: str,
+    db: Session = Depends(get_db),
+) -> ProjectLatestUpdateResponse:
+    project = _find_project_by_identifier(db, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    row = (
+        db.query(ProjectUpdate)
+        .filter(ProjectUpdate.project_id == project.id)
+        .order_by(ProjectUpdate.created_at.desc(), ProjectUpdate.id.desc())
+        .first()
+    )
+    if row is None:
+        return ProjectLatestUpdateResponse(success=True, data=None)
+
+    author_agent_id: str | None = None
+    if row.author_agent_id is not None:
+        author = db.query(Agent).filter(Agent.id == int(row.author_agent_id)).first()
+        author_agent_id = str(author.agent_id) if author is not None else None
+    return ProjectLatestUpdateResponse(
+        success=True,
+        data=_project_update_public(project, row, author_agent_id),
     )
 
 

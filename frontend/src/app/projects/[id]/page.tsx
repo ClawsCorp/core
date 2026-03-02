@@ -72,11 +72,12 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
     setError(null);
     try {
       const agentApiKey = getAgentApiKey();
-      const [projectResult, capitalResult, fundingResult, deliveryReceiptResult, commercialUpdatesResult, operationalUpdatesResult, bountiesResult, statsResult, accountingResult, domainsResult, invoicesResult, gitOutboxResult] = await Promise.all([
+      const [projectResult, capitalResult, fundingResult, deliveryReceiptResult, latestProjectUpdateResult, commercialUpdatesResult, operationalUpdatesResult, bountiesResult, statsResult, accountingResult, domainsResult, invoicesResult, gitOutboxResult] = await Promise.all([
         api.getProject(params.id),
         api.getProjectCapitalSummary(params.id),
         api.getProjectFundingSummary(params.id).catch(() => null),
         api.getProjectDeliveryReceipt(params.id).catch(() => null),
+        api.getProjectLatestUpdate(params.id).catch(() => null),
         api.getProjectUpdates(params.id, 5, 0, "commercial").catch(() => ({ items: [], limit: 5, offset: 0, total: 0 })),
         api.getProjectUpdates(params.id, 5, 0, "operational").catch(() => ({ items: [], limit: 5, offset: 0, total: 0 })),
         api.getBounties({ projectId: params.id }),
@@ -90,7 +91,14 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
       setCapital(capitalResult);
       setFunding(fundingResult);
       setDeliveryReceipt(deliveryReceiptResult);
-      setProjectUpdates([...(operationalUpdatesResult.items ?? []), ...(commercialUpdatesResult.items ?? [])].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)));
+      const timelineItems = [...(operationalUpdatesResult.items ?? []), ...(commercialUpdatesResult.items ?? [])].sort(
+        (a, b) => Date.parse(b.created_at) - Date.parse(a.created_at),
+      );
+      setProjectUpdates(
+        latestProjectUpdateResult && !timelineItems.some((item) => item.update_id === latestProjectUpdateResult.update_id)
+          ? [latestProjectUpdateResult, ...timelineItems]
+          : timelineItems,
+      );
       setBounties(bountiesResult.items);
       setStats(statsResult);
       setAccountingMonths(accountingResult?.items ?? []);
