@@ -59,6 +59,13 @@ interface RequestOptions {
   idempotencyKey?: string;
 }
 
+type ProjectUpdatesSummaryCacheEntry = {
+  etag: string;
+  data: ProjectUpdatesSummary;
+};
+
+const projectUpdatesSummaryCache = new Map<string, ProjectUpdatesSummaryCacheEntry>();
+
 async function requestJSON<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const headers: Record<string, string> = {
     Accept: "application/json",
@@ -118,6 +125,54 @@ export function readErrorMessage(error: unknown): string {
     return error.message;
   }
   return "Something went wrong. Please retry.";
+}
+
+async function fetchProjectUpdatesSummaryWithEtag(projectId: string): Promise<ProjectUpdatesSummary> {
+  const path = `/api/v1/projects/${projectId}/updates/summary`;
+  const cached = projectUpdatesSummaryCache.get(projectId);
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+  };
+  if (cached?.etag) {
+    headers["If-None-Match"] = cached.etag;
+  }
+
+  const response = await fetch(`${ensureApiBaseUrl()}${path}`, {
+    method: "GET",
+    headers,
+    cache: "no-store",
+  });
+
+  if (response.status === 304 && cached) {
+    return cached.data;
+  }
+
+  if (!response.ok) {
+    let message = `Request failed (${response.status})`;
+    try {
+      const payload = (await response.json()) as ApiErrorShape;
+      if (payload?.detail) {
+        message = payload.detail;
+      }
+    } catch {
+      const bodyText = await response.text().catch(() => "");
+      if (bodyText) {
+        message = bodyText;
+      } else if (response.statusText) {
+        message = response.statusText;
+      }
+    }
+    throw new ApiError(message, response.status);
+  }
+
+  const payload = (await response.json()) as Envelope<ProjectUpdatesSummary>;
+  const etag = response.headers.get("ETag");
+  if (etag) {
+    projectUpdatesSummaryCache.set(projectId, { etag, data: payload.data });
+  } else {
+    projectUpdatesSummaryCache.delete(projectId);
+  }
+  return payload.data;
 }
 
 export const api = {
@@ -318,8 +373,7 @@ export const api = {
     return payload.data;
   },
   getProjectUpdatesSummary: async (projectId: string) => {
-    const payload = await fetchJSON<Envelope<ProjectUpdatesSummary>>(`/api/v1/projects/${projectId}/updates/summary`);
-    return payload.data;
+    return fetchProjectUpdatesSummaryWithEtag(projectId);
   },
   getProjectUpdates: async (projectId: string, limit = 10, offset = 0, slice?: "commercial" | "operational") => {
     const params = new URLSearchParams({
