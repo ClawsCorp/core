@@ -36,7 +36,7 @@ scripts/check.sh
 
 - [x] Backend `/api/v1/health` is green (`status=ok`, `db=ok`).
 - [x] Frontend root and `/apps` reachable from public internet.
-- [ ] Railway migrations apply cleanly from scratch and from latest prod revision.
+- [x] Railway migrations apply cleanly from scratch and from latest prod revision.
 
 Commands:
 
@@ -131,12 +131,20 @@ Go-live requires all of the following:
 3. At least one full production pilot loop completed end-to-end with valid on-chain evidence.
 4. Incident rollback playbook available to operators.
 
-## Current Blocking Items (as of 2026-03-03)
+## Current Blocking Items (as of 2026-03-04)
 
-- Railway migration confidence still needs a clean “latest prod -> migrate -> green” verification pass against a scratch clone of production data.
-- Safe custody is in place, but hosted production still needs a final operating policy for who runs the local Safe execution worker and where the local owner key file is stored.
 - Funding contributor/cap-table can still lag when the indexer falls behind free-tier RPC limits; this remains an operational limitation until the indexer path is hardened further.
-- Launch readiness still needs one explicit go/no-go snapshot recorded from `prod_preflight` + `ops_smoke` after the last deployment wave.
+
+Latest verification snapshot:
+
+- `migration rehearsal` completed successfully against a scratch clone of current production data:
+  - production dump restored into an isolated temporary rehearsal database
+  - `alembic upgrade head` completed cleanly
+  - schema revision stayed at `0044`
+- `prod_preflight --run-ops-smoke --fail-on-warning` passed on `2026-03-03T22:54:18Z` with:
+  - `alerts`: `critical_count=0`, `warning_count=0`
+  - `ops_smoke`: passed
+  - backend + portal reachable
 
 Local Safe execution verification:
 

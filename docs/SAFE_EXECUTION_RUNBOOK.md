@@ -25,6 +25,14 @@ Hosted production behavior remains:
 
 ## Local Operator Machine
 
+Current operating policy (pilot / pre-production):
+
+- One designated operator machine is allowed to run the local Safe executor.
+- The designated operator is the deployment custodian for the current environment.
+- Hosted services may enqueue owner-only tasks, but they must not hold Safe owner keys.
+- The local operator machine is the only place where `SAFE_OWNER_KEYS_FILE` may exist in plaintext form.
+- If the designated operator machine changes, re-run preflight before the next owner-only execution cycle.
+
 Required local-only inputs:
 
 - `BASE_SEPOLIA_RPC_URL`
@@ -39,6 +47,18 @@ Recommended storage:
 - keep `SAFE_OWNER_KEYS_FILE` outside the repo
 - file permissions should be `0600`
 - keep it on a single operator machine or encrypted local secret store
+- keep `ORACLE_HMAC_SECRET` in a local env file or local secret manager, not in shell history
+
+Operational responsibility split:
+
+- Railway / hosted backend:
+  - computes settlement state
+  - enqueues owner-only tasks
+  - records tx state
+- Local Safe executor:
+  - runs preflight
+  - executes owner-only Safe transactions
+  - stops immediately on preflight failure or unexpected Safe mismatch
 
 ## Preflight (Must Pass Before Running Local Safe Execution)
 
