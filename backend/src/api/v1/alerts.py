@@ -327,6 +327,31 @@ def get_alerts(response: Response, db: Session = Depends(get_db)) -> AlertsRespo
                     },
                 )
             )
+        elif (
+            cursor.degraded_since is not None
+            and cursor.last_scan_window_blocks is not None
+            and int(cursor.last_scan_window_blocks) < int(settings.indexer_lookback_blocks or 500)
+        ):
+            degraded_since = _as_aware_utc(cursor.degraded_since) or now
+            degraded_age_seconds = int((now - degraded_since).total_seconds())
+            if degraded_age_seconds > int(settings.indexer_degraded_max_age_seconds):
+                items.append(
+                    AlertItem(
+                        alert_type="usdc_indexer_degraded",
+                        severity="warning",
+                        message="USDC indexer is running with a reduced scan window for too long.",
+                        ref="usdc_transfers",
+                        observed_at=now,
+                        data={
+                            "last_scan_window_blocks": int(cursor.last_scan_window_blocks),
+                            "configured_lookback_blocks": int(settings.indexer_lookback_blocks or 500),
+                            "degraded_since": degraded_since.isoformat(),
+                            "degraded_age_seconds": degraded_age_seconds,
+                            "degraded_max_age_seconds": int(settings.indexer_degraded_max_age_seconds),
+                            "last_error_hint": cursor.last_error_hint,
+                        },
+                    )
+                )
 
     # Latest per project (simple loop; small data).
     projects = db.query(Project).order_by(Project.project_id.asc()).all()

@@ -77,7 +77,10 @@ class Settings:
     tx_outbox_processing_max_age_seconds: int
     git_outbox_pending_max_age_seconds: int
     git_outbox_processing_max_age_seconds: int
+    indexer_lookback_blocks: int
+    indexer_min_lookback_blocks: int
     indexer_cursor_max_age_seconds: int
+    indexer_degraded_max_age_seconds: int
     discussions_create_thread_max_per_minute: int
     discussions_create_post_max_per_minute: int
     discussions_create_thread_max_per_day: int
@@ -140,7 +143,10 @@ def get_settings() -> Settings:
     tx_outbox_processing_max_age_seconds = int(os.getenv("TX_OUTBOX_PROCESSING_MAX_AGE_SECONDS", "900"))
     git_outbox_pending_max_age_seconds = int(os.getenv("GIT_OUTBOX_PENDING_MAX_AGE_SECONDS", "1800"))
     git_outbox_processing_max_age_seconds = int(os.getenv("GIT_OUTBOX_PROCESSING_MAX_AGE_SECONDS", "1800"))
+    indexer_lookback_blocks = int(os.getenv("INDEXER_LOOKBACK_BLOCKS", "500"))
+    indexer_min_lookback_blocks = int(os.getenv("INDEXER_MIN_LOOKBACK_BLOCKS", "5"))
     indexer_cursor_max_age_seconds = int(os.getenv("INDEXER_CURSOR_MAX_AGE_SECONDS", "300"))
+    indexer_degraded_max_age_seconds = int(os.getenv("INDEXER_DEGRADED_MAX_AGE_SECONDS", "900"))
     discussions_create_thread_max_per_minute = int(
         os.getenv("DISCUSSIONS_CREATE_THREAD_MAX_PER_MINUTE", "5")
     )
@@ -189,7 +195,10 @@ def get_settings() -> Settings:
         tx_outbox_processing_max_age_seconds=tx_outbox_processing_max_age_seconds,
         git_outbox_pending_max_age_seconds=git_outbox_pending_max_age_seconds,
         git_outbox_processing_max_age_seconds=git_outbox_processing_max_age_seconds,
+        indexer_lookback_blocks=indexer_lookback_blocks,
+        indexer_min_lookback_blocks=indexer_min_lookback_blocks,
         indexer_cursor_max_age_seconds=indexer_cursor_max_age_seconds,
+        indexer_degraded_max_age_seconds=indexer_degraded_max_age_seconds,
         discussions_create_thread_max_per_minute=discussions_create_thread_max_per_minute,
         discussions_create_post_max_per_minute=discussions_create_post_max_per_minute,
         discussions_create_thread_max_per_day=discussions_create_thread_max_per_day,

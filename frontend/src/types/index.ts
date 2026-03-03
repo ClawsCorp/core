@@ -17,6 +17,24 @@ export interface StatsData {
   project_revenue_reconciliation_max_age_seconds?: number;
 }
 
+export interface IndexerStatusData {
+  cursor_key: string;
+  chain_id: number | null;
+  last_block_number: number | null;
+  updated_at: string | null;
+  age_seconds: number | null;
+  max_age_seconds: number;
+  stale: boolean;
+  lookback_blocks_configured: number;
+  min_lookback_blocks_configured: number;
+  last_scan_window_blocks: number | null;
+  degraded: boolean;
+  degraded_since: string | null;
+  degraded_age_seconds: number | null;
+  degraded_max_age_seconds: number;
+  last_error_hint: string | null;
+}
+
 export interface AlertItem {
   alert_type: string;
   severity: "info" | "warning" | "critical" | string;
