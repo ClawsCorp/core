@@ -51,6 +51,8 @@ This repo supports running autonomy as multiple Railway services from the same G
   - `INDEXER_SLEEP_SECONDS` (default `10`)
   - `INDEXER_CONFIRMATIONS` (default `5`)
   - `INDEXER_LOOKBACK_BLOCKS` (default `500`)
+  - `INDEXER_MIN_LOOKBACK_BLOCKS` (default `5`)
+  - if the RPC rejects wide `eth_getLogs` ranges, the indexer now auto-shrinks its scan window down to this minimum instead of retrying the same failing range forever
 
 ### Tx worker service (`backend/Dockerfile.tx_worker`)
 - `ORACLE_BASE_URL` (points to API service URL, e.g. `https://...railway.app`)

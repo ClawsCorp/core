@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -22,6 +23,16 @@ TRANSFER_TOPIC0 = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df52
 
 class IndexerError(Exception):
     pass
+
+
+def _next_adaptive_span(*, current_span: int, min_span: int, error: Exception) -> int:
+    current = max(1, int(current_span))
+    minimum = max(1, int(min_span))
+    if current <= minimum:
+        return current
+    if "eth_getLogs" not in str(error):
+        return current
+    return max(minimum, current // 2)
 
 
 def _rpc_call(rpc_url: str, method: str, params: list[object]) -> object:
@@ -283,7 +294,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--cursor-key", default="usdc_transfers", help="DB cursor key")
     parser.add_argument("--from-block", type=int, default=None)
     parser.add_argument("--to-block", type=int, default=None)
-    parser.add_argument("--lookback-blocks", type=int, default=500)
+    parser.add_argument("--lookback-blocks", type=int, default=int(os.getenv("INDEXER_LOOKBACK_BLOCKS", "500")))
+    parser.add_argument(
+        "--min-lookback-blocks",
+        type=int,
+        default=int(os.getenv("INDEXER_MIN_LOOKBACK_BLOCKS", "5")),
+        help="Minimum adaptive block span after eth_getLogs range errors.",
+    )
     parser.add_argument("--confirmations", type=int, default=5)
     parser.add_argument("--loop", action="store_true", help="Run continuously until interrupted.")
     parser.add_argument("--sleep-seconds", type=int, default=10, help="Sleep time between loop iterations.")
@@ -301,6 +318,9 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("DB SessionLocal is not configured")
 
     sleep_seconds = max(1, int(args.sleep_seconds))
+    configured_span = max(1, int(args.lookback_blocks))
+    min_span = max(1, int(args.min_lookback_blocks))
+    current_span = max(configured_span, min_span)
     while True:
         try:
             with SessionLocal() as db:
@@ -326,7 +346,7 @@ def main(argv: list[str] | None = None) -> int:
                 # Max block span per `eth_getLogs` call. This is both:
                 # - a correctness guard (avoid genesis..tip scans)
                 # - an operational guard (some RPC tiers cap `eth_getLogs` block range)
-                max_span = max(1, int(args.lookback_blocks))
+                max_span = current_span
 
                 if args.from_block is not None:
                     from_block = int(args.from_block)
@@ -366,6 +386,7 @@ def main(argv: list[str] | None = None) -> int:
                             "from_block": result.from_block,
                             "to_block": result.to_block,
                             "cursor_key": result.cursor_key,
+                            "lookback_blocks_used": current_span,
                             "transfers_seen": result.transfers_seen,
                             "transfers_inserted": result.transfers_inserted,
                         },
@@ -374,14 +395,25 @@ def main(argv: list[str] | None = None) -> int:
                     sort_keys=True,
                 )
             )
+            if current_span < configured_span:
+                current_span = min(configured_span, current_span + 1)
         except IndexerError as exc:
+            next_span = _next_adaptive_span(current_span=current_span, min_span=min_span, error=exc)
+            reduced = next_span < current_span
             print(
                 json.dumps(
-                    {"success": False, "error": str(exc)},
+                    {
+                        "success": False,
+                        "error": str(exc),
+                        "lookback_blocks_used": current_span,
+                        "next_lookback_blocks": next_span if reduced else current_span,
+                        "adaptive_reduced": reduced,
+                    },
                     separators=(",", ":"),
                     sort_keys=True,
                 )
             )
+            current_span = next_span
             if not args.loop:
                 return 1
 
