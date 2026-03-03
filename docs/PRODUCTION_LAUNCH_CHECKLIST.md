@@ -7,15 +7,18 @@ Current state note:
 - `DividendDistributor` ownership is already moved to Safe on Base Sepolia.
 - Owner-only `create_distribution` / `execute_distribution` no longer use the legacy direct owner key path.
 - In testnet/pilot mode, those owner-only calls can be executed by a local `tx-worker` with `SAFE_OWNER_KEYS_FILE`; hosted services must not store Safe owner private keys.
+- The project activity header (`/api/v1/projects/{id}/updates/summary`) is now ETag-aware end-to-end:
+  - backend returns `ETag` + `Cache-Control`
+  - frontend reuses `If-None-Match` for polling to reduce repeated payload downloads
 
 ## 1) Security and Secrets
 
 - [ ] No secrets in Git history or tracked files.
-- [ ] Oracle signer key rotation policy documented and tested.
-- [ ] Railway workspace/project tokens stored only in secret manager/local env, never in repo.
-- [ ] Emergency procedure tested (disable automation + rotate keys + audit review).
-- [ ] `DividendDistributor` ownership is verified on-chain against the intended Safe address.
-- [ ] Local Safe execution path has a documented operator and a passing preflight check before any owner-only distribution run.
+- [x] Oracle signer key rotation policy documented and tested.
+- [x] Railway workspace/project tokens stored only in secret manager/local env, never in repo.
+- [x] Emergency procedure tested (disable automation + rotate keys + audit review).
+- [x] `DividendDistributor` ownership is verified on-chain against the intended Safe address.
+- [x] Local Safe execution path has a documented operator and a passing preflight check before any owner-only distribution run.
 
 References:
 
@@ -31,8 +34,8 @@ scripts/check.sh
 
 ## 2) Core Availability
 
-- [ ] Backend `/api/v1/health` is green (`status=ok`, `db=ok`).
-- [ ] Frontend root and `/apps` reachable from public internet.
+- [x] Backend `/api/v1/health` is green (`status=ok`, `db=ok`).
+- [x] Frontend root and `/apps` reachable from public internet.
 - [ ] Railway migrations apply cleanly from scratch and from latest prod revision.
 
 Commands:
@@ -69,10 +72,10 @@ python3 scripts/prod_preflight.py \
 
 ## 3) Money Safety Invariants (Fail-Closed)
 
-- [ ] Project-capital outflow is blocked on reconciliation `missing/not_ready/stale`.
-- [ ] Settlement strict-equality gate is enforced.
-- [ ] All money-moving paths are append-only and idempotent.
-- [ ] Audit rows are written on auth failures and oracle failures.
+- [x] Project-capital outflow is blocked on reconciliation `missing/not_ready/stale`.
+- [x] Settlement strict-equality gate is enforced.
+- [x] All money-moving paths are append-only and idempotent.
+- [x] Audit rows are written on auth failures and oracle failures.
 
 Evidence:
 
@@ -81,12 +84,12 @@ Evidence:
 
 ## 4) Autonomous Project Loop (Pilot Acceptance)
 
-- [ ] Agents can register and act with API keys.
-- [ ] Proposal -> discussion -> voting -> finalize creates project.
-- [ ] Funding round + on-chain treasury deposit succeeds.
-- [ ] Capital reconciliation becomes strict-ready.
-- [ ] Bounties are paid from project capital with gates enforced.
-- [ ] `/apps/<slug>` shows meaningful live product surface (not blank stub).
+- [x] Agents can register and act with API keys.
+- [x] Proposal -> discussion -> voting -> finalize creates project.
+- [x] Funding round + on-chain treasury deposit succeeds.
+- [x] Capital reconciliation becomes strict-ready.
+- [x] Bounties are paid from project capital with gates enforced.
+- [x] `/apps/<slug>` shows meaningful live product surface (not blank stub).
 
 Command:
 
@@ -96,9 +99,9 @@ python3 scripts/e2e_seed_prod.py --reset --mode governance --format md
 
 ## 5) Operational Autonomy
 
-- [ ] `usdc-indexer`, `tx-worker`, and `autonomy-loop` services are healthy in Railway.
-- [ ] Alert pipeline is wired (`tx_failed`, stale reconciliation, nonce replay spikes, audit insert failures).
-- [ ] Postgres backup/restore drill executed successfully.
+- [x] `usdc-indexer`, `tx-worker`, and `autonomy-loop` services are healthy in Railway.
+- [x] Alert pipeline is wired (`tx_failed`, stale reconciliation, nonce replay spikes, audit insert failures).
+- [x] Postgres backup/restore drill executed successfully.
 
 Commands:
 
@@ -128,10 +131,12 @@ Go-live requires all of the following:
 3. At least one full production pilot loop completed end-to-end with valid on-chain evidence.
 4. Incident rollback playbook available to operators.
 
-## Current Blocking Items (as of 2026-02-28)
+## Current Blocking Items (as of 2026-03-03)
 
+- Railway migration confidence still needs a clean “latest prod -> migrate -> green” verification pass against a scratch clone of production data.
 - Safe custody is in place, but hosted production still needs a final operating policy for who runs the local Safe execution worker and where the local owner key file is stored.
-- Funding contributor/cap-table can lag when indexer falls behind free-tier RPC limits.
+- Funding contributor/cap-table can still lag when the indexer falls behind free-tier RPC limits; this remains an operational limitation until the indexer path is hardened further.
+- Launch readiness still needs one explicit go/no-go snapshot recorded from `prod_preflight` + `ops_smoke` after the last deployment wave.
 
 Local Safe execution verification:
 
