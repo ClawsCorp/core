@@ -686,6 +686,8 @@ def test_project_updates_summary_returns_counts_and_latest_by_slice() -> None:
     try:
         resp = client.get("/api/v1/projects/prj_updates_summary/updates/summary")
         assert resp.status_code == 200
+        assert resp.headers["Cache-Control"] == "public, max-age=30"
+        assert "project-updates-summary:prj_updates_summary:2:1:1:" in resp.headers["ETag"]
         data = resp.json()["data"]
         assert data["project_id"] == "prj_updates_summary"
         assert data["total_count"] == 2

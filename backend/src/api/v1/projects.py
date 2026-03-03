@@ -434,6 +434,7 @@ def get_project_delivery_receipt(
 )
 def get_project_updates_summary(
     project_id: str,
+    response: Response,
     db: Session = Depends(get_db),
 ) -> ProjectUpdatesSummaryResponse:
     project = _find_project_by_identifier(db, project_id)
@@ -499,6 +500,15 @@ def get_project_updates_summary(
             return None
         author_agent_id = authors.get(int(row.author_agent_id)) if row.author_agent_id is not None else None
         return _project_update_public(project, row, author_agent_id)
+
+    latest_row_ts = int(latest_row.created_at.timestamp()) if latest_row is not None else 0
+    latest_commercial_row_ts = int(latest_commercial_row.created_at.timestamp()) if latest_commercial_row is not None else 0
+    latest_operational_row_ts = int(latest_operational_row.created_at.timestamp()) if latest_operational_row is not None else 0
+    response.headers["Cache-Control"] = "public, max-age=30"
+    response.headers["ETag"] = (
+        f'W/"project-updates-summary:{project.project_id}:{total_count}:{commercial_count}:{operational_count}:'
+        f"{latest_row_ts}:{latest_commercial_row_ts}:{latest_operational_row_ts}\""
+    )
 
     return ProjectUpdatesSummaryResponse(
         success=True,
