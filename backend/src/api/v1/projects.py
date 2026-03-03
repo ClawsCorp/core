@@ -434,6 +434,7 @@ def get_project_delivery_receipt(
 )
 def get_project_updates_summary(
     project_id: str,
+    request: Request,
     response: Response,
     db: Session = Depends(get_db),
 ) -> ProjectUpdatesSummaryResponse:
@@ -504,11 +505,14 @@ def get_project_updates_summary(
     latest_row_ts = int(latest_row.created_at.timestamp()) if latest_row is not None else 0
     latest_commercial_row_ts = int(latest_commercial_row.created_at.timestamp()) if latest_commercial_row is not None else 0
     latest_operational_row_ts = int(latest_operational_row.created_at.timestamp()) if latest_operational_row is not None else 0
-    response.headers["Cache-Control"] = "public, max-age=30"
-    response.headers["ETag"] = (
+    etag = (
         f'W/"project-updates-summary:{project.project_id}:{total_count}:{commercial_count}:{operational_count}:'
         f"{latest_row_ts}:{latest_commercial_row_ts}:{latest_operational_row_ts}\""
     )
+    response.headers["Cache-Control"] = "public, max-age=30"
+    response.headers["ETag"] = etag
+    if request.headers.get("If-None-Match") == etag:
+        return Response(status_code=304, headers={"Cache-Control": "public, max-age=30", "ETag": etag})
 
     return ProjectUpdatesSummaryResponse(
         success=True,

@@ -696,5 +696,13 @@ def test_project_updates_summary_returns_counts_and_latest_by_slice() -> None:
         assert data["latest"]["title"] == "Commercial summary item"
         assert data["latest_commercial"]["title"] == "Commercial summary item"
         assert data["latest_operational"]["title"] == "Operational summary item"
+
+        cached_resp = client.get(
+            "/api/v1/projects/prj_updates_summary/updates/summary",
+            headers={"If-None-Match": resp.headers["ETag"]},
+        )
+        assert cached_resp.status_code == 304
+        assert cached_resp.headers["Cache-Control"] == "public, max-age=30"
+        assert cached_resp.headers["ETag"] == resp.headers["ETag"]
     finally:
         app.dependency_overrides.clear()
