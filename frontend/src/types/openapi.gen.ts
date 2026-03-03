@@ -259,6 +259,13 @@ export interface paths {
      */
     get: operations["get_stats_api_v1_stats_get"];
   };
+  "/api/v1/indexer/status": {
+    /**
+     * Public indexer runtime status
+     * @description Portal-safe runtime status for the USDC transfer indexer, including adaptive lookback degradation.
+     */
+    get: operations["get_indexer_status_api_v1_indexer_status_get"];
+  };
   "/api/v1/oracle/revenue-events": {
     /** Create Revenue Event */
     post: operations["create_revenue_event_api_v1_oracle_revenue_events_post"];
@@ -1431,6 +1438,45 @@ export interface components {
     HTTPValidationError: {
       /** Detail */
       detail?: components["schemas"]["ValidationError"][];
+    };
+    /** IndexerStatusData */
+    IndexerStatusData: {
+      /** Cursor Key */
+      cursor_key: string;
+      /** Chain Id */
+      chain_id: number | null;
+      /** Last Block Number */
+      last_block_number: number | null;
+      /** Updated At */
+      updated_at: string | null;
+      /** Age Seconds */
+      age_seconds: number | null;
+      /** Max Age Seconds */
+      max_age_seconds: number;
+      /** Stale */
+      stale: boolean;
+      /** Lookback Blocks Configured */
+      lookback_blocks_configured: number;
+      /** Min Lookback Blocks Configured */
+      min_lookback_blocks_configured: number;
+      /** Last Scan Window Blocks */
+      last_scan_window_blocks: number | null;
+      /** Degraded */
+      degraded: boolean;
+      /** Degraded Since */
+      degraded_since: string | null;
+      /** Degraded Age Seconds */
+      degraded_age_seconds: number | null;
+      /** Degraded Max Age Seconds */
+      degraded_max_age_seconds: number;
+      /** Last Error Hint */
+      last_error_hint: string | null;
+    };
+    /** IndexerStatusResponse */
+    IndexerStatusResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["IndexerStatusData"];
     };
     /** MarketingFeeDepositData */
     MarketingFeeDepositData: {
@@ -4588,6 +4634,20 @@ export interface operations {
       200: {
         content: {
           "application/json": components["schemas"]["StatsResponse"];
+        };
+      };
+    };
+  };
+  /**
+   * Public indexer runtime status
+   * @description Portal-safe runtime status for the USDC transfer indexer, including adaptive lookback degradation.
+   */
+  get_indexer_status_api_v1_indexer_status_get: {
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["IndexerStatusResponse"];
         };
       };
     };

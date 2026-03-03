@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -25,6 +25,7 @@ from src.models.marketing_fee_accrual_event import MarketingFeeAccrualEvent
 from src.models.reconciliation_report import ReconciliationReport
 from src.models.distribution_execution import DistributionExecution
 from src.models.tx_outbox import TxOutbox
+from src.models.indexer_cursor import IndexerCursor
 
 
 def test_alerts_endpoint_returns_envelope() -> None:
@@ -349,6 +350,57 @@ def test_alerts_hide_failed_deposit_profit_when_month_no_longer_needs_deposit() 
         assert "platform_profit_deposit_failed" not in alert_types
     finally:
         app.dependency_overrides.clear()
+
+
+def test_alerts_warn_when_indexer_stays_in_degraded_mode(monkeypatch) -> None:
+    monkeypatch.setenv("INDEXER_LOOKBACK_BLOCKS", "9")
+    monkeypatch.setenv("INDEXER_DEGRADED_MAX_AGE_SECONDS", "60")
+    get_settings.cache_clear()
+
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+
+    degraded_since = datetime.now(timezone.utc).replace(microsecond=0) - timedelta(seconds=90)
+    with session_local() as db:
+        db.add(
+            IndexerCursor(
+                cursor_key="usdc_transfers",
+                chain_id=84532,
+                last_block_number=123,
+                last_scan_window_blocks=5,
+                last_error_hint="eth_getLogs_range",
+                degraded_since=degraded_since,
+                updated_at=datetime.now(timezone.utc),
+            )
+        )
+        db.commit()
+
+    def _override_get_db():
+        db: Session = session_local()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = _override_get_db
+    client = TestClient(app, raise_server_exceptions=False)
+    try:
+        resp = client.get("/api/v1/alerts")
+        assert resp.status_code == 200
+        items = [x for x in resp.json()["data"]["items"] if isinstance(x, dict)]
+        degraded = [x for x in items if str(x.get("alert_type")) == "usdc_indexer_degraded"]
+        assert len(degraded) == 1
+        assert degraded[0]["severity"] == "warning"
+        assert degraded[0]["data"]["last_scan_window_blocks"] == 5
+        assert degraded[0]["data"]["configured_lookback_blocks"] == 9
+    finally:
+        app.dependency_overrides.clear()
+        get_settings.cache_clear()
 
 
 def test_alerts_include_git_outbox_stale_and_failed(monkeypatch) -> None:

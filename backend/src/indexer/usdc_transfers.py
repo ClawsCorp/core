@@ -150,6 +150,37 @@ def _get_or_create_cursor(db: Session, *, cursor_key: str, chain_id: int) -> Ind
     return row
 
 
+def _update_cursor_runtime_state(
+    db: Session,
+    *,
+    cursor_key: str,
+    chain_id: int,
+    configured_span: int,
+    active_span: int,
+    error_hint: str | None,
+    last_block_number: int | None,
+    touch_updated_at: bool,
+) -> IndexerCursor:
+    row = _get_or_create_cursor(db, cursor_key=cursor_key, chain_id=chain_id)
+    now = datetime.now(timezone.utc)
+    if last_block_number is not None:
+        row.last_block_number = max(int(row.last_block_number or 0), int(last_block_number))
+    row.last_scan_window_blocks = max(1, int(active_span))
+    row.last_error_hint = error_hint
+    is_degraded = int(active_span) < max(1, int(configured_span))
+    if is_degraded:
+        if row.degraded_since is None:
+            row.degraded_since = now
+    else:
+        row.degraded_since = None
+    if touch_updated_at:
+        row.updated_at = now
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
 def _insert_transfer_idempotent(db: Session, row: ObservedUsdcTransfer) -> bool:
     db.add(row)
     try:
@@ -179,6 +210,8 @@ def index_usdc_transfers(
     from_block: int,
     to_block: int,
     watched_addresses: list[str],
+    scan_window_blocks: int,
+    configured_lookback_blocks: int,
 ) -> IndexRunResult:
     chain_hex = _rpc_call(rpc_url, "eth_chainId", [])
     chain_id = _parse_hex_int(chain_hex) if isinstance(chain_hex, str) else None
@@ -249,11 +282,16 @@ def index_usdc_transfers(
                 inserted += 1
 
     # Update cursor to the highest block successfully scanned.
-    cursor = _get_or_create_cursor(db, cursor_key=cursor_key, chain_id=chain_id)
-    cursor.last_block_number = max(int(cursor.last_block_number or 0), int(to_block))
-    cursor.updated_at = datetime.now(timezone.utc)
-    db.add(cursor)
-    db.commit()
+    _update_cursor_runtime_state(
+        db,
+        cursor_key=cursor_key,
+        chain_id=chain_id,
+        configured_span=configured_lookback_blocks,
+        active_span=scan_window_blocks,
+        error_hint=None,
+        last_block_number=to_block,
+        touch_updated_at=True,
+    )
 
     return IndexRunResult(
         chain_id=chain_id,
@@ -322,6 +360,7 @@ def main(argv: list[str] | None = None) -> int:
     min_span = max(1, int(args.min_lookback_blocks))
     current_span = max(configured_span, min_span)
     while True:
+        chain_id: int | None = None
         try:
             with SessionLocal() as db:
                 watched = _resolve_watched_addresses(db)
@@ -375,6 +414,8 @@ def main(argv: list[str] | None = None) -> int:
                     from_block=from_block,
                     to_block=to_block,
                     watched_addresses=watched,
+                    scan_window_blocks=current_span,
+                    configured_lookback_blocks=configured_span,
                 )
 
             print(
@@ -400,6 +441,18 @@ def main(argv: list[str] | None = None) -> int:
         except IndexerError as exc:
             next_span = _next_adaptive_span(current_span=current_span, min_span=min_span, error=exc)
             reduced = next_span < current_span
+            if chain_id is not None:
+                with SessionLocal() as db:
+                    _update_cursor_runtime_state(
+                        db,
+                        cursor_key=args.cursor_key,
+                        chain_id=chain_id,
+                        configured_span=configured_span,
+                        active_span=next_span,
+                        error_hint="eth_getLogs_range" if "eth_getLogs" in str(exc) else "rpc_error",
+                        last_block_number=None,
+                        touch_updated_at=False,
+                    )
             print(
                 json.dumps(
                     {

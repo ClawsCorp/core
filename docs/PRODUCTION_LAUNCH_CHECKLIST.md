@@ -135,6 +135,12 @@ Go-live requires all of the following:
 
 - Funding contributor/cap-table can still lag when the indexer falls behind free-tier RPC limits; this remains an operational limitation until the indexer path is hardened further.
 
+Current mitigation in place:
+
+- The indexer now auto-reduces its `eth_getLogs` scan window after range failures instead of retrying the same invalid span forever.
+- Runtime state is exposed via `GET /api/v1/indexer/status`.
+- Prolonged degraded mode is surfaced as an autonomy alert.
+
 Latest verification snapshot:
 
 - `migration rehearsal` completed successfully against a scratch clone of current production data:

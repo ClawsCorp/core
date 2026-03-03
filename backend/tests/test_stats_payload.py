@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,7 @@ from src.core.database import Base, get_db
 from src.main import app
 
 import src.models  # noqa: F401
+from src.models.indexer_cursor import IndexerCursor
 
 
 @pytest.fixture(autouse=True)
@@ -82,3 +84,38 @@ def test_stats_includes_project_capital_reconciliation_max_age_seconds(
     assert etag2 is not None
     assert etag2 != etag1
 
+
+def test_indexer_status_reports_degraded_runtime_state(
+    _client: TestClient,
+    _db: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("INDEXER_LOOKBACK_BLOCKS", "9")
+    monkeypatch.setenv("INDEXER_MIN_LOOKBACK_BLOCKS", "5")
+    monkeypatch.setenv("INDEXER_CURSOR_MAX_AGE_SECONDS", "300")
+    monkeypatch.setenv("INDEXER_DEGRADED_MAX_AGE_SECONDS", "900")
+    get_settings.cache_clear()
+
+    with _db() as db:
+        db.add(
+            IndexerCursor(
+                cursor_key="usdc_transfers",
+                chain_id=84532,
+                last_block_number=123,
+                last_scan_window_blocks=5,
+                last_error_hint="eth_getLogs_range",
+                degraded_since=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc),
+            )
+        )
+        db.commit()
+
+    resp = _client.get("/api/v1/indexer/status")
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["success"] is True
+    assert payload["data"]["cursor_key"] == "usdc_transfers"
+    assert payload["data"]["degraded"] is True
+    assert payload["data"]["lookback_blocks_configured"] == 9
+    assert payload["data"]["min_lookback_blocks_configured"] == 5
+    assert payload["data"]["last_scan_window_blocks"] == 5

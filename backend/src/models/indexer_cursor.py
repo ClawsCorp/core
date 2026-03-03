@@ -19,5 +19,7 @@ class IndexerCursor(Base):
     cursor_key: Mapped[str] = mapped_column(String(64), nullable=False)
     chain_id: Mapped[int] = mapped_column(Integer, nullable=False)
     last_block_number: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    last_scan_window_blocks: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    degraded_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error_hint: Mapped[str | None] = mapped_column(String(64), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-

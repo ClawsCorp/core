@@ -57,6 +57,13 @@ Operational hardening:
 - In loop mode, `eth_getLogs` range failures now trigger adaptive span reduction.
 - The worker halves its scan window until it reaches `--min-lookback-blocks`, then keeps retrying at that safer span.
 - This prevents infinite retries at an RPC-invalid range on free-tier providers with strict `eth_getLogs` limits.
+- Runtime state is now persisted on `indexer_cursors`:
+  - `last_scan_window_blocks`
+  - `degraded_since`
+  - `last_error_hint`
+- Public status endpoint:
+  - `GET /api/v1/indexer/status`
+- Degraded mode is now visible in alerts when the indexer stays below the configured scan span for too long.
 
 Requirements:
 

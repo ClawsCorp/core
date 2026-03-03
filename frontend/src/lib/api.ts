@@ -27,6 +27,7 @@ import type {
   SettlementDetailData,
   SettlementMonthSummary,
   StatsData,
+  IndexerStatusData,
   DiscussionPost,
   DiscussionScope,
   DiscussionThreadDetail,
@@ -184,6 +185,17 @@ export const api = {
   getStats: async () => {
     try {
       const payload = await fetchJSON<Envelope<StatsData>>("/api/v1/stats");
+      return payload.data;
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) {
+        return null;
+      }
+      throw error;
+    }
+  },
+  getIndexerStatus: async () => {
+    try {
+      const payload = await fetchJSON<Envelope<IndexerStatusData>>("/api/v1/indexer/status");
       return payload.data;
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) {
