@@ -48,11 +48,17 @@ As of 2026-02-14:
   - `PYTHONPATH=src python -m src.indexer.usdc_transfers`
   - Optional flags:
     - `--lookback-blocks 500`
+    - `--min-lookback-blocks 5`
     - `--confirmations 5`
     - `--from-block N --to-block M` (manual range)
+
+Operational hardening:
+
+- In loop mode, `eth_getLogs` range failures now trigger adaptive span reduction.
+- The worker halves its scan window until it reaches `--min-lookback-blocks`, then keeps retrying at that safer span.
+- This prevents infinite retries at an RPC-invalid range on free-tier providers with strict `eth_getLogs` limits.
 
 Requirements:
 
 - `DATABASE_URL` (Postgres) to write observed rows
 - `BASE_SEPOLIA_RPC_URL` + `USDC_ADDRESS`
-

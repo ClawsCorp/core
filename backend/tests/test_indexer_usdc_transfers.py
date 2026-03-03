@@ -13,7 +13,11 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from src.core.database import Base
-from src.indexer.usdc_transfers import _parse_log_transfer, _insert_transfer_idempotent
+from src.indexer.usdc_transfers import (
+    _insert_transfer_idempotent,
+    _next_adaptive_span,
+    _parse_log_transfer,
+)
 
 # Ensure tables are registered on Base.metadata
 from src.models.indexer_cursor import IndexerCursor  # noqa: F401
@@ -83,3 +87,13 @@ def test_insert_transfer_idempotent() -> None:
         count = db.query(ObservedUsdcTransfer).count()
         assert count == 1
 
+
+def test_next_adaptive_span_shrinks_for_eth_get_logs_errors() -> None:
+    err = Exception("RPC error: method=eth_getLogs")
+    assert _next_adaptive_span(current_span=500, min_span=5, error=err) == 250
+    assert _next_adaptive_span(current_span=9, min_span=5, error=err) == 5
+
+
+def test_next_adaptive_span_keeps_span_for_non_range_errors() -> None:
+    err = Exception("RPC request failed: method=eth_blockNumber")
+    assert _next_adaptive_span(current_span=500, min_span=5, error=err) == 500
