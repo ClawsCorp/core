@@ -77,6 +77,26 @@ def _fetch_dividend_distributor_owner(settings) -> tuple[str | None, str | None]
 
 
 def _is_failed_tx_outbox_superseded(db: Session, task: TxOutbox) -> bool:
+    if task.task_type == "deposit_profit":
+        try:
+            payload = json.loads(task.payload_json or "{}")
+        except ValueError:
+            payload = {}
+        profit_month_id = str((payload or {}).get("profit_month_id") or "").strip()
+        if not profit_month_id:
+            return False
+        latest_report = (
+            db.query(ReconciliationReport)
+            .filter(ReconciliationReport.profit_month_id == profit_month_id)
+            .order_by(ReconciliationReport.computed_at.desc(), ReconciliationReport.id.desc())
+            .first()
+        )
+        if latest_report is None:
+            return False
+        delta = int(latest_report.delta_micro_usdc or 0)
+        profit_sum = int(latest_report.profit_sum_micro_usdc or 0)
+        return bool(latest_report.ready) or profit_sum <= 0 or delta >= 0
+
     if task.task_type not in {"create_distribution", "execute_distribution"}:
         return False
 

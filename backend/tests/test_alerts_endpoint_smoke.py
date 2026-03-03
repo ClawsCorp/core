@@ -289,6 +289,68 @@ def test_alerts_treat_zero_profit_positive_delta_as_carryover_info() -> None:
         get_settings.cache_clear()
 
 
+def test_alerts_hide_failed_deposit_profit_when_month_no_longer_needs_deposit() -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+
+    with session_local() as db:
+        db.add(
+            ReconciliationReport(
+                profit_month_id="202604",
+                revenue_sum_micro_usdc=20_000_000,
+                expense_sum_micro_usdc=20_000_000,
+                profit_sum_micro_usdc=0,
+                distributor_balance_micro_usdc=0,
+                delta_micro_usdc=0,
+                ready=True,
+                blocked_reason=None,
+                rpc_chain_id=84532,
+                rpc_url_name="base_sepolia",
+            )
+        )
+        db.add(
+            TxOutbox(
+                task_id="txo_failed_deposit",
+                idempotency_key="deposit_profit:202604:20000000",
+                task_type="deposit_profit",
+                payload_json='{"amount_micro_usdc":20000000,"profit_month_id":"202604","to_address":"0xabc"}',
+                tx_hash=None,
+                result_json='{"stage":"failed","error_hint":"tx_error"}',
+                status="failed",
+                attempts=1,
+                last_error_hint="tx_error",
+                locked_at=datetime.now(timezone.utc),
+                locked_by="oracle_runner",
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc),
+            )
+        )
+        db.commit()
+
+    def _override_get_db():
+        db: Session = session_local()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = _override_get_db
+    client = TestClient(app, raise_server_exceptions=False)
+    try:
+        resp = client.get("/api/v1/alerts")
+        assert resp.status_code == 200
+        alert_types = [str(x.get("alert_type")) for x in resp.json()["data"]["items"] if isinstance(x, dict)]
+        assert "tx_outbox_failed" not in alert_types
+        assert "platform_profit_deposit_failed" not in alert_types
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_alerts_include_git_outbox_stale_and_failed(monkeypatch) -> None:
     monkeypatch.setenv("GIT_OUTBOX_PENDING_MAX_AGE_SECONDS", "1")
     monkeypatch.setenv("GIT_OUTBOX_PROCESSING_MAX_AGE_SECONDS", "1")
