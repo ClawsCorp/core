@@ -75,6 +75,7 @@ python3 scripts/prod_preflight.py \
 ## 3) Money Safety Invariants (Fail-Closed)
 
 - [x] Project-capital outflow is blocked on reconciliation `missing/not_ready/stale`.
+- [x] Platform-treasury outflow is blocked on platform capital reconciliation `missing/not_ready/stale`.
 - [x] Settlement strict-equality gate is enforced.
 - [x] All money-moving paths are append-only and idempotent.
 - [x] Audit rows are written on auth failures and oracle failures.

@@ -132,6 +132,9 @@ echo "[ops-smoke] billing-sync" >&2
 echo "[ops-smoke] sync-project-capital" >&2
 "$PY_BIN" -m src.oracle_runner sync-project-capital --json
 
+echo "[ops-smoke] sync-platform-capital" >&2
+"$PY_BIN" -m src.oracle_runner sync-platform-capital --json
+
 echo "[ops-smoke] tx-worker" >&2
 "$PY_BIN" -m src.oracle_runner tx-worker --max-tasks "$TX_TASKS" --json
 
@@ -156,6 +159,29 @@ if not ready:
         raise SystemExit(0)
     detail = blocked or "unknown_not_ready"
     print(f"[ops-smoke] reconcile not ready (blocked_reason={detail})", file=sys.stderr)
+    raise SystemExit(1)
+PY
+
+echo "[ops-smoke] reconcile-platform-capital" >&2
+PLAT_RECON_JSON="$("$PY_BIN" -m src.oracle_runner reconcile-platform-capital --json)"
+echo "$PLAT_RECON_JSON"
+PLAT_RECON_JSON="$PLAT_RECON_JSON" ALLOW_REASONS_CSV="$ALLOW_REASONS_CSV" "$PY_BIN" - <<'PY'
+import json
+import os
+import sys
+
+payload = json.loads(os.environ["PLAT_RECON_JSON"])
+blocked = str(payload.get("blocked_reason") or "").strip()
+ready = bool(payload.get("ready"))
+
+allowed = {x.strip() for x in (os.environ.get("ALLOW_REASONS_CSV") or "").split(",") if x.strip()}
+
+if not ready:
+    if blocked and blocked in allowed:
+        print(f"[ops-smoke] platform reconcile blocked_reason={blocked} allowed by policy", file=sys.stderr)
+        raise SystemExit(0)
+    detail = blocked or "unknown_not_ready"
+    print(f"[ops-smoke] platform reconcile not ready (blocked_reason={detail})", file=sys.stderr)
     raise SystemExit(1)
 PY
 

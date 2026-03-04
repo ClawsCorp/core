@@ -1,9 +1,10 @@
 # Ops Smoke Runbook
 
 One-command smoke check for the autonomous runtime path:
-- indexer ingestion (`billing-sync`, `project-capital-events/sync`)
+- indexer ingestion (`billing-sync`, `project-capital-events/sync`, `platform-capital-events/sync`)
 - tx worker execution (`tx-worker`)
 - platform reconciliation (`reconcile`)
+- platform capital reconciliation (`reconcile-platform-capital`)
 - final alert gate (`/api/v1/alerts`)
 
 ## Command
@@ -14,6 +15,7 @@ scripts/ops_smoke.sh --env-file /Users/alex/.oracle.env --month auto --tx-max-ta
 
 Default behavior is fail-closed:
 - if `reconcile` returns `ready=false`, smoke exits non-zero.
+- if `reconcile-platform-capital` returns `ready=false`, smoke exits non-zero.
 - if any runner step fails, smoke exits non-zero.
 - if `--month auto` is used, smoke resolves it from `/api/v1/settlement/months` preferring the latest strict-ready month (`ready=true`, `delta=0`), fallback to the latest month, then to literal `auto`.
 

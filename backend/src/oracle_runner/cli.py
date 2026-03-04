@@ -391,6 +391,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sync_project_capital.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
 
+    sync_platform_capital = subparsers.add_parser(
+        "sync-platform-capital",
+        help="Sync observed USDC FundingPool deposits into append-only platform capital events (oracle HMAC protected).",
+    )
+    sync_platform_capital.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
+
+    reconcile_platform_capital = subparsers.add_parser(
+        "reconcile-platform-capital",
+        help="Run platform capital on-chain vs ledger reconciliation.",
+    )
+    reconcile_platform_capital.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
+
     sync_platform_investor_reputation = subparsers.add_parser(
         "sync-platform-investor-reputation",
         help="Sync investor reputation from observed FundingPool inflows (oracle HMAC protected).",
@@ -984,6 +996,25 @@ def run(argv: list[str] | None = None) -> int:
                 _print_json(data)
             else:
                 _print_fields(data, ["projects_with_treasury_count", "transfers_seen", "capital_events_inserted"])
+            return 0
+
+        if args.command == "sync-platform-capital":
+            data = _post_action(client, "/api/v1/oracle/platform-capital-events/sync", b"")
+            if json_mode:
+                _print_json(data)
+            else:
+                _print_fields(data, ["transfers_seen", "capital_events_inserted", "marketing_fee_events_inserted"])
+            return 0
+
+        if args.command == "reconcile-platform-capital":
+            data = _post_action(client, "/api/v1/oracle/platform-capital/reconciliation", b"")
+            if json_mode:
+                _print_json(data)
+            else:
+                _print_fields(
+                    data,
+                    ["ready", "blocked_reason", "delta_micro_usdc", "onchain_balance_micro_usdc", "ledger_balance_micro_usdc", "computed_at"],
+                )
             return 0
 
         if args.command == "sync-platform-investor-reputation":
