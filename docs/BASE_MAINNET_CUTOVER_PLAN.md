@@ -187,6 +187,7 @@ That means:
 5. Run local Safe preflight against mainnet values.
 6. Perform the mainnet environment cutover using:
    - `docs/BASE_MAINNET_ENV_CUTOVER_RUNBOOK.md`
+7. Verify the live Railway env still matches the validated deployment manifest after cutover.
 
 ### Phase C: Internal Financial Smoke Test
 
