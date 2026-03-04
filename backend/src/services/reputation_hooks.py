@@ -81,18 +81,8 @@ def emit_project_investor_reputation_for_wallet(
     project_id: str,
     funding_deposit_id: str,
 ) -> None:
-    normalized = (wallet_address or "").strip().lower()
-    if not normalized:
-        return
-
-    matches = (
-        db.query(Agent)
-        .filter(func.lower(Agent.wallet_address) == normalized, Agent.revoked_at.is_(None))
-        .order_by(Agent.id.asc())
-        .limit(2)
-        .all()
-    )
-    if len(matches) != 1:
+    match = _match_single_active_agent_by_wallet(db, wallet_address)
+    if match is None:
         return
 
     try:
@@ -102,7 +92,7 @@ def emit_project_investor_reputation_for_wallet(
 
     emit_reputation_event(
         db,
-        agent_id=matches[0].agent_id,
+        agent_id=match.agent_id,
         delta_points=delta_points,
         source="project_capital_contributed",
         ref_type="funding_deposit",
@@ -110,3 +100,51 @@ def emit_project_investor_reputation_for_wallet(
         idempotency_key=f"rep:project_capital_contributed:{funding_deposit_id}",
         note=f"project:{project_id};amount:{int(amount_micro_usdc)}",
     )
+
+
+def emit_platform_investor_reputation_for_wallet(
+    db: Session,
+    *,
+    wallet_address: str | None,
+    amount_micro_usdc: int,
+    chain_id: int,
+    tx_hash: str,
+    log_index: int,
+) -> None:
+    match = _match_single_active_agent_by_wallet(db, wallet_address)
+    if match is None:
+        return
+
+    try:
+        delta_points = calculate_project_investor_points(amount_micro_usdc)
+    except ValueError:
+        return
+
+    ref_id = f"{int(chain_id)}:{str(tx_hash).lower()}:{int(log_index)}"
+    emit_reputation_event(
+        db,
+        agent_id=match.agent_id,
+        delta_points=delta_points,
+        source="platform_capital_contributed",
+        ref_type="funding_pool_deposit",
+        ref_id=ref_id,
+        idempotency_key=f"rep:platform_capital_contributed:{ref_id}",
+        note=f"amount:{int(amount_micro_usdc)}",
+    )
+
+
+def _match_single_active_agent_by_wallet(db: Session, wallet_address: str | None) -> Agent | None:
+    normalized = (wallet_address or "").strip().lower()
+    if not normalized:
+        return None
+
+    matches = (
+        db.query(Agent)
+        .filter(func.lower(Agent.wallet_address) == normalized, Agent.revoked_at.is_(None))
+        .order_by(Agent.id.asc())
+        .limit(2)
+        .all()
+    )
+    if len(matches) != 1:
+        return None
+    return matches[0]
