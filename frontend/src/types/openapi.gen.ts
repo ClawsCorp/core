@@ -1858,11 +1858,8 @@ export interface components {
       payer_address?: string | null;
       /** Description */
       description?: string | null;
-      /**
-       * Chain Id
-       * @default 84532
-       */
-      chain_id?: number;
+      /** Chain Id */
+      chain_id?: number | null;
       /** Idempotency Key */
       idempotency_key?: string | null;
     };
