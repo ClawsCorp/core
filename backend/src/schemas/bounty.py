@@ -62,6 +62,10 @@ class BountyMarkPaidRequest(BaseModel):
 
 
 class BountyMarkPaidBlockedReason(str, Enum):
+    insufficient_platform_capital = "insufficient_platform_capital"
+    platform_capital_reconciliation_missing = "platform_capital_reconciliation_missing"
+    platform_capital_not_reconciled = "platform_capital_not_reconciled"
+    platform_capital_reconciliation_stale = "platform_capital_reconciliation_stale"
     insufficient_project_capital = "insufficient_project_capital"
     project_capital_reconciliation_missing = "project_capital_reconciliation_missing"
     project_capital_not_reconciled = "project_capital_not_reconciled"

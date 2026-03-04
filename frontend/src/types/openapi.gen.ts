@@ -378,6 +378,26 @@ export interface paths {
     /** Reconcile Project Capital */
     post: operations["reconcile_project_capital_api_v1_oracle_projects__project_id__capital_reconciliation_post"];
   };
+  "/api/v1/oracle/platform-capital-events": {
+    /** Create Platform Capital Event */
+    post: operations["create_platform_capital_event_api_v1_oracle_platform_capital_events_post"];
+  };
+  "/api/v1/oracle/platform-capital-events/sync": {
+    /** Sync Platform Capital From Observed Usdc Transfers */
+    post: operations["sync_platform_capital_from_observed_usdc_transfers_api_v1_oracle_platform_capital_events_sync_post"];
+  };
+  "/api/v1/oracle/platform-capital/reconciliation": {
+    /** Reconcile Platform Capital */
+    post: operations["reconcile_platform_capital_api_v1_oracle_platform_capital_reconciliation_post"];
+  };
+  "/api/v1/platform-capital/reconciliation/latest": {
+    /** Get Latest Platform Capital Reconciliation Report */
+    get: operations["get_latest_platform_capital_reconciliation_report_api_v1_platform_capital_reconciliation_latest_get"];
+  };
+  "/api/v1/platform-capital/summary": {
+    /** Get Platform Capital Summary */
+    get: operations["get_platform_capital_summary_api_v1_platform_capital_summary_get"];
+  };
   "/api/v1/oracle/projects/{project_id}/revenue/address": {
     /** Set Project Revenue Address */
     post: operations["set_project_revenue_address_api_v1_oracle_projects__project_id__revenue_address_post"];
@@ -834,7 +854,7 @@ export interface components {
      * BountyMarkPaidBlockedReason
      * @enum {string}
      */
-    BountyMarkPaidBlockedReason: "insufficient_project_capital" | "project_capital_reconciliation_missing" | "project_capital_not_reconciled" | "project_capital_reconciliation_stale" | "insufficient_project_revenue" | "project_revenue_reconciliation_missing" | "project_revenue_not_reconciled" | "project_revenue_reconciliation_stale";
+    BountyMarkPaidBlockedReason: "insufficient_platform_capital" | "platform_capital_reconciliation_missing" | "platform_capital_not_reconciled" | "platform_capital_reconciliation_stale" | "insufficient_project_capital" | "project_capital_reconciliation_missing" | "project_capital_not_reconciled" | "project_capital_reconciliation_stale" | "insufficient_project_revenue" | "project_revenue_reconciliation_missing" | "project_revenue_not_reconciled" | "project_revenue_reconciliation_stale";
     /** BountyMarkPaidRequest */
     BountyMarkPaidRequest: {
       /** Paid Tx Hash */
@@ -1675,6 +1695,112 @@ export interface components {
       /** Success */
       success: boolean;
       data: components["schemas"]["PayoutTriggerData"];
+    };
+    /** PlatformCapitalEventCreateRequest */
+    PlatformCapitalEventCreateRequest: {
+      /** Idempotency Key */
+      idempotency_key: string;
+      /** Profit Month Id */
+      profit_month_id?: string | null;
+      /** Delta Micro Usdc */
+      delta_micro_usdc: number;
+      /** Source */
+      source: string;
+      /** Evidence Tx Hash */
+      evidence_tx_hash?: string | null;
+      /** Evidence Url */
+      evidence_url?: string | null;
+    };
+    /** PlatformCapitalEventDetailResponse */
+    PlatformCapitalEventDetailResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["PlatformCapitalEventPublic"] | null;
+      /** Blocked Reason */
+      blocked_reason?: string | null;
+    };
+    /** PlatformCapitalEventPublic */
+    PlatformCapitalEventPublic: {
+      /** Event Id */
+      event_id: string;
+      /** Idempotency Key */
+      idempotency_key: string;
+      /** Profit Month Id */
+      profit_month_id: string | null;
+      /** Delta Micro Usdc */
+      delta_micro_usdc: number;
+      /** Source */
+      source: string;
+      /** Evidence Tx Hash */
+      evidence_tx_hash: string | null;
+      /** Evidence Url */
+      evidence_url: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+    };
+    /** PlatformCapitalReconciliationReportPublic */
+    PlatformCapitalReconciliationReportPublic: {
+      /** Funding Pool Address */
+      funding_pool_address: string;
+      /** Ledger Balance Micro Usdc */
+      ledger_balance_micro_usdc: number | null;
+      /** Onchain Balance Micro Usdc */
+      onchain_balance_micro_usdc: number | null;
+      /** Delta Micro Usdc */
+      delta_micro_usdc: number | null;
+      /** Ready */
+      ready: boolean;
+      /** Blocked Reason */
+      blocked_reason: string | null;
+      /**
+       * Computed At
+       * Format: date-time
+       */
+      computed_at: string;
+    };
+    /** PlatformCapitalReconciliationRunResponse */
+    PlatformCapitalReconciliationRunResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["PlatformCapitalReconciliationReportPublic"];
+    };
+    /** PlatformCapitalSummaryData */
+    PlatformCapitalSummaryData: {
+      /** Funding Pool Address */
+      funding_pool_address: string | null;
+      /** Ledger Balance Micro Usdc */
+      ledger_balance_micro_usdc: number;
+      /** Spendable Balance Micro Usdc */
+      spendable_balance_micro_usdc: number;
+      latest_reconciliation: components["schemas"]["PlatformCapitalReconciliationReportPublic"] | null;
+      /** Blocked Reason */
+      blocked_reason?: string | null;
+    };
+    /** PlatformCapitalSummaryResponse */
+    PlatformCapitalSummaryResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["PlatformCapitalSummaryData"];
+    };
+    /** PlatformCapitalSyncData */
+    PlatformCapitalSyncData: {
+      /** Transfers Seen */
+      transfers_seen: number;
+      /** Capital Events Inserted */
+      capital_events_inserted: number;
+      /** Marketing Fee Events Inserted */
+      marketing_fee_events_inserted: number;
+      /** Marketing Fee Total Micro Usdc */
+      marketing_fee_total_micro_usdc: number;
+    };
+    /** PlatformCapitalSyncResponse */
+    PlatformCapitalSyncResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["PlatformCapitalSyncData"];
     };
     /** PlatformInvestorReputationSyncData */
     PlatformInvestorReputationSyncData: {
@@ -5265,6 +5391,72 @@ export interface operations {
       422: {
         content: {
           "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Create Platform Capital Event */
+  create_platform_capital_event_api_v1_oracle_platform_capital_events_post: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PlatformCapitalEventCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["PlatformCapitalEventDetailResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Sync Platform Capital From Observed Usdc Transfers */
+  sync_platform_capital_from_observed_usdc_transfers_api_v1_oracle_platform_capital_events_sync_post: {
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["PlatformCapitalSyncResponse"];
+        };
+      };
+    };
+  };
+  /** Reconcile Platform Capital */
+  reconcile_platform_capital_api_v1_oracle_platform_capital_reconciliation_post: {
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["PlatformCapitalReconciliationRunResponse"];
+        };
+      };
+    };
+  };
+  /** Get Latest Platform Capital Reconciliation Report */
+  get_latest_platform_capital_reconciliation_report_api_v1_platform_capital_reconciliation_latest_get: {
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["PlatformCapitalReconciliationRunResponse"];
+        };
+      };
+    };
+  };
+  /** Get Platform Capital Summary */
+  get_platform_capital_summary_api_v1_platform_capital_summary_get: {
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["PlatformCapitalSummaryResponse"];
         };
       };
     };

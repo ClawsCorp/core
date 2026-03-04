@@ -612,6 +612,11 @@ Funding policy (autonomy-first, fail-closed):
   - latest project capital reconciliation must exist, or `blocked_reason="project_capital_reconciliation_missing"`
   - latest reconciliation must satisfy strict equality (`ready=true` and `delta_micro_usdc=0`), or `blocked_reason="project_capital_not_reconciled"`
   - latest reconciliation must be fresh (`computed_at >= now - PROJECT_CAPITAL_RECONCILIATION_MAX_AGE_SECONDS`, default `3600`), or `blocked_reason="project_capital_reconciliation_stale"`
+- For platform bounties funded by `platform_treasury`, payout attempts are reconciliation-gated against the platform capital ledger:
+  - latest platform capital reconciliation must exist, or `blocked_reason="platform_capital_reconciliation_missing"`
+  - latest reconciliation must satisfy strict equality (`ready=true` and `delta_micro_usdc=0`), or `blocked_reason="platform_capital_not_reconciled"`
+  - latest reconciliation must be fresh (`computed_at >= now - PLATFORM_CAPITAL_RECONCILIATION_MAX_AGE_SECONDS`, default `3600`), or `blocked_reason="platform_capital_reconciliation_stale"`
+- After passing the platform reconciliation gate, payout attempts are still blocked when spendable platform capital balance is insufficient with `blocked_reason="insufficient_platform_capital"`.
 - After passing the reconciliation gate, payout attempts are still blocked when capital balance is insufficient with `blocked_reason="insufficient_project_capital"`.
 - Every mark-paid attempt writes an audit log entry, including blocked outcomes (with `blocked_reason` captured in audit metadata).
 
@@ -1092,7 +1097,64 @@ Semantics:
 - Fail-closed outflow gate: when `delta_micro_usdc < 0`, the latest project capital reconciliation must exist, be strict-ready, and be fresh:
   - missing reconciliation ⇒ `success=false`, `blocked_reason="project_capital_reconciliation_missing"`
   - not strict-ready (`ready!=true` or `delta_micro_usdc!=0`) ⇒ `success=false`, `blocked_reason="project_capital_not_reconciled"`
-  - stale (`computed_at < now - PROJECT_CAPITAL_RECONCILIATION_MAX_AGE_SECONDS`) ⇒ `success=false`, `blocked_reason="project_capital_reconciliation_stale"`
+- stale (`computed_at < now - PROJECT_CAPITAL_RECONCILIATION_MAX_AGE_SECONDS`) ⇒ `success=false`, `blocked_reason="project_capital_reconciliation_stale"`
+
+## Oracle platform capital events
+
+`POST /api/v1/oracle/platform-capital-events` appends platform capital deltas (HMAC required).
+
+Request body:
+
+```json
+{
+  "idempotency_key": "platcap:seed:001",
+  "profit_month_id": "202603",
+  "delta_micro_usdc": 5000000,
+  "source": "platform_stake_deposit",
+  "evidence_tx_hash": "0xabc123",
+  "evidence_url": "https://..."
+}
+```
+
+Semantics:
+
+- `delta_micro_usdc` must be non-zero (`+` deposit, `-` spend/withdraw)
+- `idempotency_key` is unique; duplicates return existing event
+- Positive inflows accrue marketing reserve in `marketing_fee_accrual_events` with `bucket=platform_capital`
+- Fail-closed outflow gate: when `delta_micro_usdc < 0`, the latest platform capital reconciliation must exist, be strict-ready, and be fresh:
+  - missing reconciliation ⇒ `success=false`, `blocked_reason="platform_capital_reconciliation_missing"`
+  - not strict-ready (`ready!=true` or `delta_micro_usdc!=0`) ⇒ `success=false`, `blocked_reason="platform_capital_not_reconciled"`
+  - stale (`computed_at < now - PLATFORM_CAPITAL_RECONCILIATION_MAX_AGE_SECONDS`) ⇒ `success=false`, `blocked_reason="platform_capital_reconciliation_stale"`
+
+`POST /api/v1/oracle/platform-capital-events/sync` turns observed USDC transfers into `FUNDING_POOL_CONTRACT_ADDRESS`
+into append-only `platform_capital_events` (HMAC required).
+
+Semantics:
+
+- Reads recent `observed_usdc_transfers` where `to_address == FUNDING_POOL_CONTRACT_ADDRESS`
+- Writes deterministic inflow events (`source=funding_pool_usdc_deposit`)
+- Safe to re-run: idempotent by `(chain_id, tx_hash, log_index)`
+- Positive inflows also accrue marketing reserve with `bucket=platform_capital`
+
+`POST /api/v1/oracle/platform-capital/reconciliation` computes and appends the latest platform capital
+reconciliation report (HMAC required).
+
+Strict readiness definition:
+
+- `ready=true` **iff** `onchain_balance_micro_usdc - ledger_balance_micro_usdc == 0` and `ledger_balance_micro_usdc >= 0`.
+
+Blocked reasons:
+
+- `funding_pool_not_configured`
+- `funding_pool_invalid`
+- `rpc_not_configured`
+- `rpc_error`
+- `balance_mismatch`
+
+Public reads:
+
+- `GET /api/v1/platform-capital/summary`
+- `GET /api/v1/platform-capital/reconciliation/latest`
 
 ## Oracle project treasury and capital reconciliation
 
@@ -1160,6 +1222,17 @@ Project-capital outflow semantics:
   - response returns `success=false`, `blocked_reason="insufficient_project_capital"`
   - no capital outflow event is written
 - Re-running paid transition is idempotent and does not double-insert expense/capital events.
+
+Platform-treasury outflow semantics:
+
+- For `funding_source=platform_treasury`, backend writes one deterministic platform capital outflow event:
+  - idempotency key: `platcap:bounty_paid:{bounty_id}`
+  - `delta_micro_usdc = -bounty.amount_micro_usdc`
+  - `source=bounty_paid`
+- If spendable platform capital balance is below bounty amount, payout is fail-closed:
+  - bounty status remains unchanged (not moved to `paid`)
+  - response returns `success=false`, `blocked_reason="insufficient_platform_capital"`
+  - no platform capital outflow event is written
 
 ## Product Surfaces: `/apps/<slug>`
 

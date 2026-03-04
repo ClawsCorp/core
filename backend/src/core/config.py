@@ -74,6 +74,7 @@ class Settings:
     governance_discussion_minutes: int | None
     governance_voting_minutes: int | None
     project_capital_reconciliation_max_age_seconds: int
+    platform_capital_reconciliation_max_age_seconds: int
     project_revenue_reconciliation_max_age_seconds: int
     tx_outbox_lock_ttl_seconds: int
     tx_outbox_pending_max_age_seconds: int
@@ -145,6 +146,9 @@ def get_settings() -> Settings:
     project_capital_reconciliation_max_age_seconds = int(
         os.getenv("PROJECT_CAPITAL_RECONCILIATION_MAX_AGE_SECONDS", "3600")
     )
+    platform_capital_reconciliation_max_age_seconds = int(
+        os.getenv("PLATFORM_CAPITAL_RECONCILIATION_MAX_AGE_SECONDS", "3600")
+    )
     project_revenue_reconciliation_max_age_seconds = int(
         os.getenv("PROJECT_REVENUE_RECONCILIATION_MAX_AGE_SECONDS", "3600")
     )
@@ -202,6 +206,7 @@ def get_settings() -> Settings:
         governance_discussion_minutes=governance_discussion_minutes,
         governance_voting_minutes=governance_voting_minutes,
         project_capital_reconciliation_max_age_seconds=project_capital_reconciliation_max_age_seconds,
+        platform_capital_reconciliation_max_age_seconds=platform_capital_reconciliation_max_age_seconds,
         project_revenue_reconciliation_max_age_seconds=project_revenue_reconciliation_max_age_seconds,
         tx_outbox_lock_ttl_seconds=tx_outbox_lock_ttl_seconds,
         tx_outbox_pending_max_age_seconds=tx_outbox_pending_max_age_seconds,

@@ -85,6 +85,18 @@ def get_project_marketing_fee_reserve_micro_usdc(db: Session, project_id: int, *
     return int(total or 0)
 
 
+def get_platform_marketing_fee_reserve_micro_usdc(db: Session, *, bucket: str) -> int:
+    total = (
+        db.query(func.coalesce(func.sum(MarketingFeeAccrualEvent.fee_amount_micro_usdc), 0))
+        .filter(
+            MarketingFeeAccrualEvent.project_id.is_(None),
+            MarketingFeeAccrualEvent.bucket == bucket,
+        )
+        .scalar()
+    )
+    return int(total or 0)
+
+
 def get_total_marketing_fee_accrued_micro_usdc(db: Session) -> int:
     total = db.query(func.coalesce(func.sum(MarketingFeeAccrualEvent.fee_amount_micro_usdc), 0)).scalar()
     return int(total or 0)

@@ -18,6 +18,8 @@ from src.models.observed_usdc_transfer import ObservedUsdcTransfer
 from src.models.project import Project, ProjectStatus
 from src.models.project_capital_event import ProjectCapitalEvent
 from src.models.project_capital_reconciliation_report import ProjectCapitalReconciliationReport
+from src.models.platform_capital_event import PlatformCapitalEvent
+from src.models.platform_capital_reconciliation_report import PlatformCapitalReconciliationReport
 from src.models.project_revenue_reconciliation_report import ProjectRevenueReconciliationReport
 from src.models.project_spend_policy import ProjectSpendPolicy
 from src.models.reconciliation_report import ReconciliationReport
@@ -61,6 +63,8 @@ __all__ = [
     "Project",
     "ProjectCapitalEvent",
     "ProjectCapitalReconciliationReport",
+    "PlatformCapitalEvent",
+    "PlatformCapitalReconciliationReport",
     "ProjectRevenueReconciliationReport",
     "ProjectSpendPolicy",
     "ReconciliationReport",
