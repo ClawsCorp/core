@@ -100,6 +100,10 @@ Required outputs:
 
 This deployment must be recorded as the new source of truth for backend and frontend configuration.
 
+Runbook:
+
+- `docs/BASE_MAINNET_DEPLOY_RUNBOOK.md`
+
 ### 3. Mainnet Safe and Custody
 
 The current Safe work on Base Sepolia proves the custody model.
