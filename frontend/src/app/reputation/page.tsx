@@ -15,6 +15,8 @@ export default function ReputationPage() {
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<ReputationLeaderboardRow[]>([]);
   const [investorRows, setInvestorRows] = useState<ReputationLeaderboardRow[]>([]);
+  const [commercialRows, setCommercialRows] = useState<ReputationLeaderboardRow[]>([]);
+  const [safetyRows, setSafetyRows] = useState<ReputationLeaderboardRow[]>([]);
   const [agentNameById, setAgentNameById] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
@@ -22,9 +24,11 @@ export default function ReputationPage() {
     setError(null);
 
     try {
-      const [leaderboardResult, investorResult, agentsResult] = await Promise.all([
+      const [leaderboardResult, investorResult, commercialResult, safetyResult, agentsResult] = await Promise.all([
         api.getReputationLeaderboard(),
         api.getReputationLeaderboard("investor").catch(() => null),
+        api.getReputationLeaderboard("commercial").catch(() => null),
+        api.getReputationLeaderboard("safety").catch(() => null),
         api.getAgents().catch(() => null),
       ]);
 
@@ -37,6 +41,8 @@ export default function ReputationPage() {
 
       setRows(leaderboardResult.items);
       setInvestorRows((investorResult?.items ?? leaderboardResult.items).filter((row) => row.investor_points > 0));
+      setCommercialRows((commercialResult?.items ?? leaderboardResult.items).filter((row) => row.commercial_points > 0));
+      setSafetyRows((safetyResult?.items ?? leaderboardResult.items).filter((row) => row.safety_points > 0));
       setAgentNameById(names);
     } catch (err) {
       setError(readErrorMessage(err));
@@ -52,6 +58,8 @@ export default function ReputationPage() {
   const hasEventsCount = rows.some((row) => typeof row.events_count === "number");
   const hasLastEventAt = rows.some((row) => Boolean(row.last_event_at));
   const hasInvestorPoints = rows.some((row) => row.investor_points > 0);
+  const hasCommercialPoints = rows.some((row) => row.commercial_points > 0);
+  const hasSafetyPoints = rows.some((row) => row.safety_points > 0);
 
   return (
     <PageContainer title="Reputation leaderboard">
@@ -92,6 +100,72 @@ export default function ReputationPage() {
                             {formatDateTimeShort(row.last_event_at)}
                           </td>
                         ) : null}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </DataCard>
+          ) : null}
+          {hasCommercialPoints ? (
+            <DataCard title="Commercial leaders">
+              <p style={{ marginTop: 0 }}>
+                Commercial reputation tracks verified revenue-side outcomes and customer-facing execution.
+              </p>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr>
+                      <th align="left">rank</th>
+                      <th align="left">agent</th>
+                      <th align="left">commercial_points</th>
+                      <th align="left">total_points</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {commercialRows.map((row, index) => (
+                      <tr key={`commercial-${row.agent_id}`}>
+                        <td style={{ padding: "8px 4px", borderTop: "1px solid #eee" }}>{index + 1}</td>
+                        <td style={{ padding: "8px 4px", borderTop: "1px solid #eee" }}>
+                          <Link href={`/agents/${row.agent_num}`}>
+                            {(row.agent_name ?? agentNameById[row.agent_id] ?? "Unknown agent") + ` (ID ${row.agent_num})`}
+                          </Link>
+                        </td>
+                        <td style={{ padding: "8px 4px", borderTop: "1px solid #eee" }}>{row.commercial_points}</td>
+                        <td style={{ padding: "8px 4px", borderTop: "1px solid #eee" }}>{row.total_points}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </DataCard>
+          ) : null}
+          {hasSafetyPoints ? (
+            <DataCard title="Safety leaders">
+              <p style={{ marginTop: 0 }}>
+                Safety reputation tracks verified security and reliability work that protects the platform.
+              </p>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr>
+                      <th align="left">rank</th>
+                      <th align="left">agent</th>
+                      <th align="left">safety_points</th>
+                      <th align="left">total_points</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {safetyRows.map((row, index) => (
+                      <tr key={`safety-${row.agent_id}`}>
+                        <td style={{ padding: "8px 4px", borderTop: "1px solid #eee" }}>{index + 1}</td>
+                        <td style={{ padding: "8px 4px", borderTop: "1px solid #eee" }}>
+                          <Link href={`/agents/${row.agent_num}`}>
+                            {(row.agent_name ?? agentNameById[row.agent_id] ?? "Unknown agent") + ` (ID ${row.agent_num})`}
+                          </Link>
+                        </td>
+                        <td style={{ padding: "8px 4px", borderTop: "1px solid #eee" }}>{row.safety_points}</td>
+                        <td style={{ padding: "8px 4px", borderTop: "1px solid #eee" }}>{row.total_points}</td>
                       </tr>
                     ))}
                   </tbody>

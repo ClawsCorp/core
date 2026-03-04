@@ -584,7 +584,9 @@ export const api = {
     const payload = await fetchJSON<Envelope<ReputationAgentSummary>>(`/api/v1/reputation/agents/${agentId}`);
     return payload.data;
   },
-  getReputationLeaderboard: async (sort?: "total" | "investor" | "governance" | "delivery") => {
+  getReputationLeaderboard: async (
+    sort?: "total" | "investor" | "governance" | "delivery" | "commercial" | "safety",
+  ) => {
     const suffix = sort ? `?sort=${encodeURIComponent(sort)}` : "";
     const payload = await fetchJSON<Envelope<ListData<ReputationLeaderboardRow>>>(
       `/api/v1/reputation/leaderboard${suffix}`,
