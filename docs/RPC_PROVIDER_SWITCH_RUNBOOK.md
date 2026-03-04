@@ -45,6 +45,12 @@ After the switch:
    - `GET /api/v1/health`
    - `GET /api/v1/indexer/status`
    - `GET /api/v1/alerts`
+5. Smoke-check the candidate RPC endpoint before touching Railway:
+
+```bash
+python3 scripts/rpc_endpoint_smoke.py \
+  --rpc-url 'https://...'
+```
 
 ## Change Procedure
 
@@ -54,7 +60,14 @@ After the switch:
 export NEW_BASE_SEPOLIA_RPC_URL='https://...'
 ```
 
-2. Update Railway service variables.
+2. Run the local RPC smoke check against the exact endpoint you plan to publish:
+
+```bash
+python3 scripts/rpc_endpoint_smoke.py \
+  --rpc-url "$NEW_BASE_SEPOLIA_RPC_URL"
+```
+
+3. Update Railway service variables.
 
 `core`:
 
@@ -96,7 +109,7 @@ python3 scripts/railway_set_vars.py \
   --set BASE_SEPOLIA_RPC_URL="$NEW_BASE_SEPOLIA_RPC_URL"
 ```
 
-3. Wait for all affected services to reach healthy deploy state.
+4. Wait for all affected services to reach healthy deploy state.
 
 ```bash
 RAILWAY_WORKSPACE_TOKEN=... python3 scripts/railway_health_check.py \
@@ -104,7 +117,7 @@ RAILWAY_WORKSPACE_TOKEN=... python3 scripts/railway_health_check.py \
   --environment-name production
 ```
 
-4. Verify live chain-read health.
+5. Verify live chain-read health.
 
 ```bash
 curl -sS https://core-production-b1a0.up.railway.app/api/v1/indexer/status
@@ -112,7 +125,7 @@ curl -sS https://core-production-b1a0.up.railway.app/api/v1/health
 curl -sS https://core-production-b1a0.up.railway.app/api/v1/alerts
 ```
 
-5. Run the formal post-change preflight.
+6. Run the formal post-change preflight.
 
 ```bash
 python3 scripts/prod_preflight.py \
@@ -123,10 +136,11 @@ python3 scripts/prod_preflight.py \
   --fail-on-warning
 ```
 
-6. Record the post-change snapshot:
+7. Record the post-change snapshot:
    - timestamp
    - active provider
    - `/api/v1/indexer/status`
+   - local `scripts/rpc_endpoint_smoke.py` result
    - `prod_preflight` result
    - `/api/v1/alerts` result
 
@@ -148,14 +162,21 @@ Rollback procedure:
 export OLD_BASE_SEPOLIA_RPC_URL='https://...'
 ```
 
-2. Repeat the same `scripts/railway_set_vars.py` updates for:
+2. Re-run local smoke against the previous endpoint to confirm it still answers:
+
+```bash
+python3 scripts/rpc_endpoint_smoke.py \
+  --rpc-url "$OLD_BASE_SEPOLIA_RPC_URL"
+```
+
+3. Repeat the same `scripts/railway_set_vars.py` updates for:
    - `core`
    - `usdc-indexer`
    - `tx-worker`
    - `autonomy-loop`
 
-3. Wait for redeploy success.
-4. Re-run:
+4. Wait for redeploy success.
+5. Re-run:
    - `GET /api/v1/indexer/status`
    - `GET /api/v1/alerts`
    - `prod_preflight --run-ops-smoke --fail-on-warning`

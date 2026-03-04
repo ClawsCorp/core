@@ -163,19 +163,21 @@ Latest verification snapshot:
 Pre-release cutover to production RPC tier:
 
 1. Provision the paid/stable Base Sepolia RPC endpoint.
-2. Update `BASE_SEPOLIA_RPC_URL` on:
+2. Run local candidate verification:
+   - `python3 scripts/rpc_endpoint_smoke.py --rpc-url 'https://...'`
+3. Update `BASE_SEPOLIA_RPC_URL` on:
    - `core`
    - `usdc-indexer`
    - `tx-worker`
    - `autonomy-loop`
-3. Wait for healthy redeploys.
-4. Verify:
+4. Wait for healthy redeploys.
+5. Verify:
    - `/api/v1/indexer/status`
    - `/api/v1/alerts`
    - `/api/v1/health`
-5. Re-run:
+6. Re-run:
    - `prod_preflight --run-ops-smoke --fail-on-warning`
-6. Record the final go/no-go snapshot.
+7. Record the final go/no-go snapshot.
 
 See:
 
