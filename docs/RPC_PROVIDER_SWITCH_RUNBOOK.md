@@ -1,6 +1,6 @@
 # RPC Provider Switch Runbook
 
-Purpose: switch Base Sepolia RPC access from the current limited tier to the paid/stable provider tier immediately before external production launch, with a clear rollback path.
+Purpose: switch the current production-chain RPC access from the limited tier to the paid/stable provider tier immediately before external production launch, with a clear rollback path.
 
 Current state:
 
@@ -25,7 +25,7 @@ Without `--apply`, the script stays in dry-run mode and only validates the candi
 
 ## Scope
 
-Services that must use the same Base Sepolia RPC endpoint:
+Services that must use the same current production-chain RPC endpoint:
 
 - `core`
 - `usdc-indexer`
@@ -49,7 +49,7 @@ After the switch:
 ## Pre-Change Checklist
 
 1. Provision the new RPC endpoint/key with the target provider or Alchemy paid tier.
-2. Confirm the new endpoint responds for Base Sepolia.
+2. Confirm the new endpoint responds for the currently configured chain.
 3. Keep the previous working RPC URL available for rollback.
 4. Confirm current production state is stable before the change:
    - `GET /api/v1/health`
@@ -62,6 +62,14 @@ python3 scripts/rpc_endpoint_smoke.py \
   --rpc-url 'https://...'
 ```
 
+If the cutover target differs from the current `DEFAULT_CHAIN_ID`, pass the target explicitly:
+
+```bash
+python3 scripts/rpc_endpoint_smoke.py \
+  --rpc-url 'https://...' \
+  --expected-chain-id 8453
+```
+
 ## Change Procedure
 
 Preferred one-command cutover:
@@ -72,19 +80,21 @@ python3 scripts/rpc_cutover.py \
   --apply
 ```
 
+If the target chain differs from the current `DEFAULT_CHAIN_ID`, pass `--expected-chain-id`.
+
 Manual equivalent:
 
 1. Export the new endpoint only in the local operator shell:
 
 ```bash
-export NEW_BASE_SEPOLIA_RPC_URL='https://...'
+export NEW_RPC_URL='https://...'
 ```
 
 2. Run the local RPC smoke check against the exact endpoint you plan to publish:
 
 ```bash
 python3 scripts/rpc_endpoint_smoke.py \
-  --rpc-url "$NEW_BASE_SEPOLIA_RPC_URL"
+  --rpc-url "$NEW_RPC_URL"
 ```
 
 3. Update Railway service variables.
@@ -96,7 +106,7 @@ python3 scripts/railway_set_vars.py \
   --project-id cd76995a-d819-4b36-808b-422de3ff430e \
   --environment-name production \
   --service core \
-  --set BASE_SEPOLIA_RPC_URL="$NEW_BASE_SEPOLIA_RPC_URL"
+  --set BASE_SEPOLIA_RPC_URL="$NEW_RPC_URL"
 ```
 
 `usdc-indexer`:
@@ -106,7 +116,7 @@ python3 scripts/railway_set_vars.py \
   --project-id cd76995a-d819-4b36-808b-422de3ff430e \
   --environment-name production \
   --service usdc-indexer \
-  --set BASE_SEPOLIA_RPC_URL="$NEW_BASE_SEPOLIA_RPC_URL"
+  --set BASE_SEPOLIA_RPC_URL="$NEW_RPC_URL"
 ```
 
 `tx-worker`:
@@ -116,7 +126,7 @@ python3 scripts/railway_set_vars.py \
   --project-id cd76995a-d819-4b36-808b-422de3ff430e \
   --environment-name production \
   --service tx-worker \
-  --set BASE_SEPOLIA_RPC_URL="$NEW_BASE_SEPOLIA_RPC_URL"
+  --set BASE_SEPOLIA_RPC_URL="$NEW_RPC_URL"
 ```
 
 `autonomy-loop`:
@@ -126,7 +136,7 @@ python3 scripts/railway_set_vars.py \
   --project-id cd76995a-d819-4b36-808b-422de3ff430e \
   --environment-name production \
   --service autonomy-loop \
-  --set BASE_SEPOLIA_RPC_URL="$NEW_BASE_SEPOLIA_RPC_URL"
+  --set BASE_SEPOLIA_RPC_URL="$NEW_RPC_URL"
 ```
 
 4. Wait for all affected services to reach healthy deploy state.

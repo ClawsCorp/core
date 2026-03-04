@@ -62,7 +62,13 @@ def main() -> int:
     parser.add_argument(
         "--new-rpc-url",
         required=True,
-        help="Candidate Base Sepolia RPC URL to validate and publish.",
+        help="Candidate RPC URL to validate and publish.",
+    )
+    parser.add_argument(
+        "--expected-chain-id",
+        type=int,
+        default=None,
+        help="Optional expected chain id passed to rpc_endpoint_smoke.py. Defaults to DEFAULT_CHAIN_ID/its fallback.",
     )
     parser.add_argument(
         "--project-id",
@@ -119,10 +125,10 @@ def main() -> int:
     }
     steps: dict[str, object] = result["steps"]  # type: ignore[assignment]
 
-    smoke = _run(
-        [sys.executable, str(smoke_script), "--rpc-url", args.new_rpc_url],
-        cwd=repo_root,
-    )
+    smoke_cmd = [sys.executable, str(smoke_script), "--rpc-url", args.new_rpc_url]
+    if args.expected_chain_id is not None:
+        smoke_cmd.extend(["--expected-chain-id", str(int(args.expected_chain_id))])
+    smoke = _run(smoke_cmd, cwd=repo_root)
     steps["candidate_rpc_smoke"] = _completed_payload(smoke)
     if smoke.returncode != 0:
         print(json.dumps(result))

@@ -9,7 +9,7 @@ import urllib.error
 import urllib.request
 
 
-BASE_SEPOLIA_CHAIN_ID = 84532
+DEFAULT_CHAIN_ID_FALLBACK = 84532
 
 
 def _json_rpc(url: str, method: str, params: list[object]) -> object:
@@ -65,8 +65,25 @@ def _normalize_address(value: str | None) -> str | None:
 
 
 def main() -> int:
+    env_default_chain_id_raw = os.getenv("DEFAULT_CHAIN_ID", "").strip()
+    try:
+        env_default_chain_id = (
+            int(env_default_chain_id_raw) if env_default_chain_id_raw else DEFAULT_CHAIN_ID_FALLBACK
+        )
+    except ValueError:
+        print(
+            json.dumps(
+                {
+                    "success": False,
+                    "error": "invalid_default_chain_id",
+                    "hint": "DEFAULT_CHAIN_ID must be an integer.",
+                }
+            )
+        )
+        return 2
+
     parser = argparse.ArgumentParser(
-        description="Smoke-check a candidate Base Sepolia RPC endpoint before production cutover."
+        description="Smoke-check a candidate EVM RPC endpoint before cutover."
     )
     parser.add_argument(
         "--rpc-url",
@@ -76,8 +93,8 @@ def main() -> int:
     parser.add_argument(
         "--expected-chain-id",
         type=int,
-        default=BASE_SEPOLIA_CHAIN_ID,
-        help="Expected chain id (default: 84532 for Base Sepolia).",
+        default=env_default_chain_id,
+        help="Expected chain id (defaults to DEFAULT_CHAIN_ID, or 84532 if unset).",
     )
     parser.add_argument(
         "--usdc-address",
