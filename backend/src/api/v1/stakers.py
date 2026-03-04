@@ -366,6 +366,13 @@ async def sync_platform_funding_deposits(
     )
 
     inserted = 0
+    before_rep_count = int(
+        db.query(func.count(ReputationEvent.id))
+        .filter(ReputationEvent.source == "platform_capital_contributed")
+        .scalar()
+        or 0
+    )
+    recognized = 0
     for transfer in transfers:
         row = PlatformFundingDeposit(
             deposit_id=f"pfdp_{secrets.token_hex(8)}",
@@ -388,7 +395,49 @@ async def sync_platform_funding_deposits(
         )
         if created:
             inserted += 1
+        previous_rep_count = int(
+            db.query(func.count(ReputationEvent.id))
+            .filter(
+                ReputationEvent.source == "platform_capital_contributed",
+                ReputationEvent.idempotency_key
+                == (
+                    f"rep:platform_capital_contributed:{int(transfer.chain_id)}:"
+                    f"{str(transfer.tx_hash).lower()}:{int(transfer.log_index)}"
+                ),
+            )
+            .scalar()
+            or 0
+        )
+        emit_platform_investor_reputation_for_wallet(
+            db,
+            wallet_address=str(transfer.from_address).lower(),
+            amount_micro_usdc=int(transfer.amount_micro_usdc),
+            chain_id=int(transfer.chain_id),
+            tx_hash=str(transfer.tx_hash).lower(),
+            log_index=int(transfer.log_index),
+        )
+        current_rep_count = int(
+            db.query(func.count(ReputationEvent.id))
+            .filter(
+                ReputationEvent.source == "platform_capital_contributed",
+                ReputationEvent.idempotency_key
+                == (
+                    f"rep:platform_capital_contributed:{int(transfer.chain_id)}:"
+                    f"{str(transfer.tx_hash).lower()}:{int(transfer.log_index)}"
+                ),
+            )
+            .scalar()
+            or 0
+        )
+        if current_rep_count > previous_rep_count:
+            recognized += 1
 
+    after_rep_count = int(
+        db.query(func.count(ReputationEvent.id))
+        .filter(ReputationEvent.source == "platform_capital_contributed")
+        .scalar()
+        or 0
+    )
     _record_oracle_audit(request, db, body_hash, request_id, sync_idem, commit=False)
     db.commit()
     return PlatformFundingSyncResponse(
@@ -397,6 +446,8 @@ async def sync_platform_funding_deposits(
             funding_pool_address=pool_addr,
             transfers_seen=len(transfers),
             deposits_inserted=int(inserted),
+            reputation_events_created=max(after_rep_count - before_rep_count, 0),
+            recognized_investor_transfers=int(recognized),
             open_round_id=(str(open_round.round_id) if open_round is not None else None),
         ),
         blocked_reason=None,

@@ -91,6 +91,8 @@ class PlatformFundingSyncData(BaseModel):
     funding_pool_address: str
     transfers_seen: int = Field(..., ge=0)
     deposits_inserted: int = Field(..., ge=0)
+    reputation_events_created: int = Field(default=0, ge=0)
+    recognized_investor_transfers: int = Field(default=0, ge=0)
     open_round_id: str | None = None
 
 
