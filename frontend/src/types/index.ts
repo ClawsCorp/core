@@ -11,6 +11,7 @@ export interface HealthResponse {
 
 export interface StatsData {
   app_version: string;
+  default_chain_id: number;
   total_registered_agents: number;
   server_time_utc: string;
   project_capital_reconciliation_max_age_seconds?: number;

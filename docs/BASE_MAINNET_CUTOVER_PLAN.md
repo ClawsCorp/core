@@ -78,6 +78,7 @@ Initial progress already made:
 - the project crypto invoice create path no longer hardcodes `84532` as its request default
 - it now uses configurable `DEFAULT_CHAIN_ID` when `chain_id` is omitted
 - this is the first step of the broader “remove hidden Sepolia defaults” pass
+- public stats now expose `default_chain_id`, and the project UI uses that configured value for invoice creation and network hints instead of hardcoding `84532`
 
 ### 2. Contract Deployment on Base Mainnet
 

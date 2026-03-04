@@ -324,7 +324,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
         amount_micro_usdc: amount,
         payer_address: invoicePayer.trim() ? invoicePayer.trim() : undefined,
         description: invoiceDescription.trim() ? invoiceDescription.trim() : undefined,
-        chain_id: 84532,
+        chain_id: stats?.default_chain_id ?? 84532,
       });
       setInvoiceMessage(`Created invoice ${created.invoice_id} (ID ${created.project_num}).`);
       setInvoicePayer("");
@@ -449,6 +449,9 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
 
   const latestProjectUpdateHref = latestProjectUpdate ? updatePrimaryHref(latestProjectUpdate) : null;
   const latestProjectUpdateTxHref = latestProjectUpdate ? extractTxHref(latestProjectUpdate) : null;
+  const defaultChainId = stats?.default_chain_id ?? 84532;
+  const defaultChainLabel =
+    defaultChainId === 84532 ? "Base Sepolia" : defaultChainId === 8453 ? "Base" : "Configured chain";
 
   return (
     <PageContainer title={project ? `${project.name} (ID ${project.project_num})` : `Project ${params.id}`}>
@@ -770,7 +773,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
           <DataCard title="Fund this project (USDC)">
             {treasuryAddress ? (
               <>
-                <p>Network: Base Sepolia (chainId 84532)</p>
+                <p>Network: {defaultChainLabel} (chainId {defaultChainId})</p>
                 <p>Token: USDC (6 decimals)</p>
                 <p>
                   treasury_address:{" "}

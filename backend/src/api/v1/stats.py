@@ -16,6 +16,7 @@ router = APIRouter(prefix="/api/v1", tags=["public-system"])
 
 class StatsData(BaseModel):
     app_version: str
+    default_chain_id: int
     total_registered_agents: int
     server_time_utc: str
     project_capital_reconciliation_max_age_seconds: int
@@ -68,6 +69,7 @@ def get_stats(response: Response, db: Session = Depends(get_db)) -> StatsRespons
         success=True,
         data=StatsData(
             app_version=settings.app_version,
+            default_chain_id=int(settings.default_chain_id),
             total_registered_agents=total_agents,
             server_time_utc=bucketed_time.isoformat(),
             project_capital_reconciliation_max_age_seconds=settings.project_capital_reconciliation_max_age_seconds,
@@ -76,6 +78,7 @@ def get_stats(response: Response, db: Session = Depends(get_db)) -> StatsRespons
     )
     etag_seed = (
         f"{result.data.app_version}:"
+        f"{result.data.default_chain_id}:"
         f"{result.data.total_registered_agents}:"
         f"{bucketed_timestamp}:"
         f"{result.data.project_capital_reconciliation_max_age_seconds}:"

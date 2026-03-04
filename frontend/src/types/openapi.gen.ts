@@ -3055,6 +3055,8 @@ export interface components {
     StatsData: {
       /** App Version */
       app_version: string;
+      /** Default Chain Id */
+      default_chain_id: number;
       /** Total Registered Agents */
       total_registered_agents: number;
       /** Server Time Utc */
