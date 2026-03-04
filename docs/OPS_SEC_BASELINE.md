@@ -61,6 +61,22 @@ MVP alerts to wire (source: audit_logs / reconciliation reports / tx status tabl
 - `nonce_replay` spikes (oracle nonces)
 - audit insert failures (best-effort paths should not silently drop)
 
+Current implementation status:
+
+- `nonce_replay` spikes are surfaced by `/api/v1/alerts` as `oracle_nonce_replay_spike`.
+- audit insert failures are surfaced by `/api/v1/alerts` as `audit_insert_failure_spike`.
+
+Operator actions:
+
+- `oracle_nonce_replay_spike`
+  - verify current request source and request-id generator behavior in the active oracle runner/worker.
+  - confirm there is no duplicated retry loop reusing the same `X-Request-Id`.
+  - if count keeps growing, rotate `ORACLE_HMAC_SECRET` and pause write-path automations until root cause is fixed.
+- `audit_insert_failure_spike`
+  - treat as database write-path instability on audit logging.
+  - check backend database connectivity/locks and recent DB errors.
+  - if persistent, pause high-risk money-moving automations and restore DB stability first.
+
 Implementation options:
 
 1) Simple: a cron/automation job that calls public endpoints and posts to a channel.

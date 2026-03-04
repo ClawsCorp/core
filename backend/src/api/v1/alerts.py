@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib import error as urlerror
 from urllib import request as urlrequest
 
@@ -9,8 +9,10 @@ from fastapi import APIRouter, Depends, Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from src.core.audit_health import get_recent_audit_insert_failures
 from src.core.config import get_settings
 from src.core.database import get_db
+from src.models.audit_log import AuditLog
 from src.models.indexer_cursor import IndexerCursor
 from src.models.bounty import Bounty, BountyStatus
 from src.models.git_outbox import GitOutbox
@@ -178,6 +180,70 @@ def get_alerts(response: Response, db: Session = Depends(get_db)) -> AlertsRespo
     now = datetime.now(timezone.utc)
 
     items: list[AlertItem] = []
+
+    replay_window = max(1, int(settings.oracle_nonce_replay_window_seconds or 300))
+    replay_threshold = max(1, int(settings.oracle_nonce_replay_spike_threshold or 5))
+    replay_since = now - timedelta(seconds=replay_window)
+    replay_count = int(
+        db.query(func.count(AuditLog.id))
+        .filter(
+            AuditLog.actor_type == "oracle",
+            AuditLog.signature_status == "replay",
+            AuditLog.error_hint == "replayed_request_id",
+            AuditLog.created_at >= replay_since,
+        )
+        .scalar()
+        or 0
+    )
+    if replay_count >= replay_threshold:
+        replay_severity = "critical" if replay_count >= replay_threshold * 3 else "warning"
+        items.append(
+            AlertItem(
+                alert_type="oracle_nonce_replay_spike",
+                severity=replay_severity,
+                message="Oracle nonce replay failures spiked in the recent window.",
+                ref=None,
+                observed_at=now,
+                data={
+                    "count": replay_count,
+                    "window_seconds": replay_window,
+                    "threshold": replay_threshold,
+                },
+            )
+        )
+
+    audit_failure_window = max(1, int(settings.audit_insert_failure_window_seconds or 900))
+    audit_failure_threshold = max(1, int(settings.audit_insert_failure_spike_threshold or 1))
+    recent_audit_failures = get_recent_audit_insert_failures(window_seconds=audit_failure_window, now=now)
+    if len(recent_audit_failures) >= audit_failure_threshold:
+        last = recent_audit_failures[-1]
+        top_reasons: dict[str, int] = {}
+        for event in recent_audit_failures:
+            key = (event.error_hint or "unknown").strip()[:64] or "unknown"
+            top_reasons[key] = top_reasons.get(key, 0) + 1
+        top_sorted = sorted(top_reasons.items(), key=lambda kv: (-kv[1], kv[0]))[:5]
+        items.append(
+            AlertItem(
+                alert_type="audit_insert_failure_spike",
+                severity="critical",
+                message="Audit insert failures observed in recent window.",
+                ref=last.path,
+                observed_at=now,
+                data={
+                    "count": len(recent_audit_failures),
+                    "window_seconds": audit_failure_window,
+                    "threshold": audit_failure_threshold,
+                    "last_actor_type": last.actor_type,
+                    "last_path": last.path,
+                    "last_error_hint": last.error_hint,
+                    "last_observed_at": last.observed_at.isoformat(),
+                    "top_error_hints": [
+                        {"error_hint": hint, "count": count}
+                        for hint, count in top_sorted
+                    ],
+                },
+            )
+        )
 
     if not (settings.funding_pool_contract_address or "").strip():
         items.append(

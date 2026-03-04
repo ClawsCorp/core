@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
+from src.core.audit_health import note_audit_insert_failure
 from src.models.audit_log import AuditLog
 
 
@@ -37,10 +38,18 @@ def record_audit(
         tx_hash=tx_hash,
         error_hint=error_hint,
     )
-    db.add(audit_log)
-    if commit:
-        db.commit()
-        db.refresh(audit_log)
-    else:
-        db.flush()
+    try:
+        db.add(audit_log)
+        if commit:
+            db.commit()
+            db.refresh(audit_log)
+        else:
+            db.flush()
+    except Exception as exc:
+        note_audit_insert_failure(
+            actor_type=actor_type,
+            path=path,
+            error_hint=str(type(exc).__name__),
+        )
+        raise
     return audit_log
