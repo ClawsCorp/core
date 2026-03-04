@@ -97,6 +97,7 @@ class Settings:
     oracle_nonce_replay_spike_threshold: int
     audit_insert_failure_window_seconds: int
     audit_insert_failure_spike_threshold: int
+    require_blockchain_rpc_url: bool
 
 
 @lru_cache
@@ -113,7 +114,15 @@ def get_settings() -> Settings:
     default_chain_id = int(os.getenv("DEFAULT_CHAIN_ID", "84532"))
     blockchain_rpc_env_name = "BLOCKCHAIN_RPC_URL"
     blockchain_rpc_url_value = os.getenv("BLOCKCHAIN_RPC_URL", "").strip()
+    require_blockchain_rpc_url = os.getenv("REQUIRE_BLOCKCHAIN_RPC_URL", "false").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
     if not blockchain_rpc_url_value:
+        if require_blockchain_rpc_url:
+            raise ValueError("REQUIRE_BLOCKCHAIN_RPC_URL=true but BLOCKCHAIN_RPC_URL is not set")
         blockchain_rpc_env_name = "BASE_SEPOLIA_RPC_URL"
         blockchain_rpc_url_value = os.getenv("BASE_SEPOLIA_RPC_URL", "").strip()
     blockchain_rpc_url = blockchain_rpc_url_value if blockchain_rpc_url_value else None
@@ -237,4 +246,5 @@ def get_settings() -> Settings:
         oracle_nonce_replay_spike_threshold=oracle_nonce_replay_spike_threshold,
         audit_insert_failure_window_seconds=audit_insert_failure_window_seconds,
         audit_insert_failure_spike_threshold=audit_insert_failure_spike_threshold,
+        require_blockchain_rpc_url=require_blockchain_rpc_url,
     )

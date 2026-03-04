@@ -162,6 +162,18 @@ def test_settings_prefers_blockchain_rpc_url_alias(
     assert settings.blockchain_rpc_env_name == "BLOCKCHAIN_RPC_URL"
 
 
+def test_settings_require_preferred_blockchain_rpc_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("BLOCKCHAIN_RPC_URL", raising=False)
+    monkeypatch.setenv("BASE_SEPOLIA_RPC_URL", "https://legacy.example.invalid")
+    monkeypatch.setenv("REQUIRE_BLOCKCHAIN_RPC_URL", "true")
+    get_settings.cache_clear()
+
+    with pytest.raises(ValueError, match="REQUIRE_BLOCKCHAIN_RPC_URL=true"):
+        _ = get_settings()
+
+
 def test_indexer_status_reports_degraded_runtime_state(
     _client: TestClient,
     _db: sessionmaker[Session],
