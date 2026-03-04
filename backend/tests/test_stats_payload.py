@@ -69,6 +69,7 @@ def test_stats_includes_project_capital_reconciliation_max_age_seconds(
     assert r1.status_code == 200
     payload1 = r1.json()
     assert payload1["success"] is True
+    assert payload1["data"]["default_chain_id"] == 84532
     assert payload1["data"]["project_capital_reconciliation_max_age_seconds"] == 3600
     etag1 = r1.headers.get("ETag")
     assert etag1 is not None
@@ -83,6 +84,20 @@ def test_stats_includes_project_capital_reconciliation_max_age_seconds(
     etag2 = r2.headers.get("ETag")
     assert etag2 is not None
     assert etag2 != etag1
+
+
+def test_stats_includes_configured_default_chain_id(
+    _client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DEFAULT_CHAIN_ID", "8453")
+    get_settings.cache_clear()
+
+    response = _client.get("/api/v1/stats")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["success"] is True
+    assert payload["data"]["default_chain_id"] == 8453
 
 
 def test_indexer_status_reports_degraded_runtime_state(
