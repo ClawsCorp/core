@@ -73,6 +73,12 @@ Before mainnet cutover:
   - Safe owner address
   - explorer base URL
 
+Initial progress already made:
+
+- the project crypto invoice create path no longer hardcodes `84532` as its request default
+- it now uses configurable `DEFAULT_CHAIN_ID` when `chain_id` is omitted
+- this is the first step of the broader “remove hidden Sepolia defaults” pass
+
 ### 2. Contract Deployment on Base Mainnet
 
 We need a dedicated mainnet contract deployment step.

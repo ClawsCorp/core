@@ -11,7 +11,7 @@ class ProjectCryptoInvoiceCreateRequest(BaseModel):
     amount_micro_usdc: int = Field(..., ge=1)
     payer_address: str | None = Field(default=None, min_length=1, max_length=42)
     description: str | None = Field(default=None, max_length=2000)
-    chain_id: int = Field(default=84532, ge=1)
+    chain_id: int | None = Field(default=None, ge=1)
     idempotency_key: str | None = Field(default=None, min_length=1, max_length=255)
 
 

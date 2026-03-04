@@ -119,10 +119,12 @@ async def create_project_crypto_invoice(
     request_id = request.headers.get("X-Request-Id") or request.headers.get("X-Request-ID") or str(uuid4())
     body_hash = hash_body(await request.body())
 
+    settings = get_settings()
+    effective_chain_id = int(payload.chain_id or settings.default_chain_id)
     deterministic_seed = "|".join(
         [
             project.project_id,
-            str(int(payload.chain_id)),
+            str(effective_chain_id),
             str(int(payload.amount_micro_usdc)),
             _normalize_address(payload.payer_address) or "",
             (payload.description or "").strip(),
@@ -131,14 +133,13 @@ async def create_project_crypto_invoice(
     deterministic = f"project_crypto_invoice:{hashlib.sha256(deterministic_seed.encode('utf-8')).hexdigest()}"
     idempotency_key = request.headers.get("Idempotency-Key") or payload.idempotency_key or deterministic
 
-    settings = get_settings()
     token_address = _normalize_address(settings.usdc_address)
     invoice = ProjectCryptoInvoice(
         invoice_id=_new_invoice_id(db),
         idempotency_key=idempotency_key,
         project_id=project.id,
         creator_agent_id=agent.id,
-        chain_id=int(payload.chain_id),
+        chain_id=effective_chain_id,
         token_address=token_address,
         payment_address=revenue_address,
         payer_address=_normalize_address(payload.payer_address),
