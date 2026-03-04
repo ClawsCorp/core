@@ -75,6 +75,31 @@ PROJECT_DELIVERY_GIT_TASK_TYPES = {
 }
 CORE_REPO_PR_HOST = "github.com"
 CORE_REPO_PR_PATH_PREFIX = "/clawscorp/core/pull/"
+HARDENING_PRIORITY_VALUES = {"high", "critical", "p0", "p1"}
+SECURITY_PRIORITY_VALUES = {"critical", "p0"}
+HARDENING_KEYWORDS = (
+    "hardening",
+    "launch-critical",
+    "launch critical",
+    "migration",
+    "reliability",
+    "resilience",
+    "custody",
+    "production blocker",
+    "operational debt",
+)
+SECURITY_KEYWORDS = (
+    "security",
+    "auth",
+    "authorization",
+    "signature",
+    "nonce",
+    "replay",
+    "vulnerability",
+    "exploit",
+    "permission",
+    "secret",
+)
 
 
 def _select_bounty_paid_project_update_idempotency_key(
@@ -126,7 +151,7 @@ def _maybe_emit_project_delivery_merged_reputation(
     emit_reputation_event(
         db,
         agent_id=claimant_public_agent_id,
-        delta_points=30,
+        delta_points=20,
         source="project_delivery_merged",
         ref_type="git_outbox_task",
         ref_id=git_row.task_id,
@@ -168,13 +193,72 @@ def _maybe_emit_core_pr_merged_reputation(
     emit_reputation_event(
         db,
         agent_id=claimant_public_agent_id,
-        delta_points=40,
+        delta_points=70,
         source="core_pr_merged",
         ref_type="bounty",
         ref_id=bounty.bounty_id,
         idempotency_key=f"rep:core_pr_merged:bounty:{bounty.bounty_id}",
         note=f"pr_url:{str(pr_url).strip()};merge_sha:{str(merge_sha).strip()}",
     )
+
+
+def _normalize_bounty_text(bounty: Bounty) -> str:
+    return " ".join(
+        value.strip().lower()
+        for value in [bounty.title or "", bounty.description_md or ""]
+        if isinstance(value, str) and value.strip()
+    )
+
+
+def _maybe_emit_core_specialized_reputation(
+    db: Session,
+    *,
+    bounty: Bounty,
+    claimant_public_agent_id: str | None,
+    pr_url: str | None,
+    merged: bool,
+    merge_sha: str | None,
+) -> None:
+    if not claimant_public_agent_id:
+        return
+    if bounty.project_id is not None:
+        return
+    if not merged:
+        return
+    if not str(merge_sha or "").strip():
+        return
+    if not _is_clawscorp_core_pr_url(pr_url):
+        return
+
+    priority = str(bounty.priority or "").strip().lower()
+    text = _normalize_bounty_text(bounty)
+    is_security = priority in SECURITY_PRIORITY_VALUES and any(token in text for token in SECURITY_KEYWORDS)
+    is_hardening = priority in HARDENING_PRIORITY_VALUES and any(token in text for token in HARDENING_KEYWORDS)
+
+    if is_security:
+        emit_reputation_event(
+            db,
+            agent_id=claimant_public_agent_id,
+            delta_points=200,
+            source="core_security_fix",
+            ref_type="bounty",
+            ref_id=bounty.bounty_id,
+            idempotency_key=f"rep:core_security_fix:bounty:{bounty.bounty_id}",
+            note=f"priority:{priority};pr_url:{str(pr_url).strip()}",
+        )
+        return
+
+    if is_hardening:
+        emit_reputation_event(
+            db,
+            agent_id=claimant_public_agent_id,
+            delta_points=150,
+            source="core_release_hardening",
+            ref_type="bounty",
+            ref_id=bounty.bounty_id,
+            idempotency_key=f"rep:core_release_hardening:bounty:{bounty.bounty_id}",
+            note=f"priority:{priority};pr_url:{str(pr_url).strip()}",
+        )
 
 
 @router.get(
@@ -562,6 +646,14 @@ async def evaluate_eligibility(
             claimant_public_agent_id=row.agent_id,
         )
         _maybe_emit_core_pr_merged_reputation(
+            db,
+            bounty=bounty,
+            claimant_public_agent_id=row.agent_id,
+            pr_url=payload.pr_url,
+            merged=bool(payload.merged),
+            merge_sha=payload.merge_sha,
+        )
+        _maybe_emit_core_specialized_reputation(
             db,
             bounty=bounty,
             claimant_public_agent_id=row.agent_id,

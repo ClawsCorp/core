@@ -198,7 +198,7 @@ def test_full_bounty_cycle_happy_path_with_reconciliation_gate(
         )
         assert project_delivery_merge_event is not None
         assert project_delivery_merge_event.source == "project_delivery_merged"
-        assert project_delivery_merge_event.delta_points == 30
+        assert project_delivery_merge_event.delta_points == 20
 
     # 4) Oracle evaluates eligibility (all checks success).
     eligibility_path = f"/api/v1/bounties/{bounty_id}/evaluate-eligibility"
@@ -368,4 +368,140 @@ def test_platform_bounty_eligible_awards_core_pr_merged_for_verified_core_pr(
         )
         assert core_merge_event is not None
         assert core_merge_event.source == "core_pr_merged"
-        assert core_merge_event.delta_points == 40
+        assert core_merge_event.delta_points == 70
+
+
+def test_platform_bounty_eligible_awards_core_release_hardening_for_launch_critical_core_pr(
+    _client: TestClient,
+    _db: sessionmaker[Session],
+) -> None:
+    with _db() as db:
+        api_key = _seed_agent_and_project(db)
+
+    resp = _client.post(
+        "/api/v1/agent/bounties",
+        headers={"X-API-Key": api_key, "Idempotency-Key": "bounty:create:platform:hardening:1"},
+        json={
+            "project_id": None,
+            "funding_source": "platform_treasury",
+            "title": "Launch-critical custody hardening",
+            "description_md": "Close migration and operational debt before release.",
+            "amount_micro_usdc": 500_000,
+            "priority": "critical",
+        },
+    )
+    assert resp.status_code == 200
+    bounty_id = resp.json()["data"]["bounty_id"]
+
+    _client.post(f"/api/v1/bounties/{bounty_id}/claim", headers={"X-API-Key": api_key}, json={})
+    _client.post(
+        f"/api/v1/bounties/{bounty_id}/submit",
+        headers={"X-API-Key": api_key},
+        json={"pr_url": "https://github.com/ClawsCorp/core/pull/2001", "merge_sha": "feedface"},
+    )
+
+    eligibility_path = f"/api/v1/bounties/{bounty_id}/evaluate-eligibility"
+    eligibility_body = json.dumps(
+        {
+            "pr_url": "https://github.com/ClawsCorp/core/pull/2001",
+            "merged": True,
+            "merge_sha": "feedface",
+            "required_approvals": 1,
+            "required_checks": [
+                {"name": "backend", "status": "success"},
+                {"name": "frontend", "status": "success"},
+                {"name": "contracts", "status": "success"},
+                {"name": "dependency-review", "status": "success"},
+                {"name": "secrets-scan", "status": "success"},
+            ],
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    resp = _client.post(
+        eligibility_path,
+        content=eligibility_body,
+        headers=_oracle_headers(eligibility_path, eligibility_body, "req-hardening-elig", idem="idem-hardening-elig"),
+    )
+    assert resp.status_code == 200
+
+    with _db() as db:
+        hardening_event = (
+            db.query(ReputationEvent)
+            .filter(ReputationEvent.idempotency_key == f"rep:core_release_hardening:bounty:{bounty_id}")
+            .first()
+        )
+        assert hardening_event is not None
+        assert hardening_event.source == "core_release_hardening"
+        assert hardening_event.delta_points == 150
+
+
+def test_platform_bounty_eligible_awards_core_security_fix_for_security_core_pr(
+    _client: TestClient,
+    _db: sessionmaker[Session],
+) -> None:
+    with _db() as db:
+        api_key = _seed_agent_and_project(db)
+
+    resp = _client.post(
+        "/api/v1/agent/bounties",
+        headers={"X-API-Key": api_key, "Idempotency-Key": "bounty:create:platform:security:1"},
+        json={
+            "project_id": None,
+            "funding_source": "platform_treasury",
+            "title": "Critical security fix for replay protection",
+            "description_md": "Tighten nonce validation and signature verification.",
+            "amount_micro_usdc": 500_000,
+            "priority": "critical",
+        },
+    )
+    assert resp.status_code == 200
+    bounty_id = resp.json()["data"]["bounty_id"]
+
+    _client.post(f"/api/v1/bounties/{bounty_id}/claim", headers={"X-API-Key": api_key}, json={})
+    _client.post(
+        f"/api/v1/bounties/{bounty_id}/submit",
+        headers={"X-API-Key": api_key},
+        json={"pr_url": "https://github.com/ClawsCorp/core/pull/2002", "merge_sha": "badc0ffe"},
+    )
+
+    eligibility_path = f"/api/v1/bounties/{bounty_id}/evaluate-eligibility"
+    eligibility_body = json.dumps(
+        {
+            "pr_url": "https://github.com/ClawsCorp/core/pull/2002",
+            "merged": True,
+            "merge_sha": "badc0ffe",
+            "required_approvals": 1,
+            "required_checks": [
+                {"name": "backend", "status": "success"},
+                {"name": "frontend", "status": "success"},
+                {"name": "contracts", "status": "success"},
+                {"name": "dependency-review", "status": "success"},
+                {"name": "secrets-scan", "status": "success"},
+            ],
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    resp = _client.post(
+        eligibility_path,
+        content=eligibility_body,
+        headers=_oracle_headers(eligibility_path, eligibility_body, "req-security-elig", idem="idem-security-elig"),
+    )
+    assert resp.status_code == 200
+
+    with _db() as db:
+        security_event = (
+            db.query(ReputationEvent)
+            .filter(ReputationEvent.idempotency_key == f"rep:core_security_fix:bounty:{bounty_id}")
+            .first()
+        )
+        assert security_event is not None
+        assert security_event.source == "core_security_fix"
+        assert security_event.delta_points == 200
+        hardening_event = (
+            db.query(ReputationEvent)
+            .filter(ReputationEvent.idempotency_key == f"rep:core_release_hardening:bounty:{bounty_id}")
+            .first()
+        )
+        assert hardening_event is None
