@@ -194,6 +194,7 @@ See:
 - `docs/BASE_MAINNET_INTERNAL_SMOKE_RUNBOOK.md`
 - `docs/BASE_MAINNET_GO_NO_GO_RUNBOOK.md`
 - `scripts/mainnet_cutover_preflight.py` (single JSON snapshot: manifest + rpc + on-chain + Railway env verification)
+- `scripts/generate_mainnet_go_no_go_report.py` (final GO/NO_GO markdown + json record from evidence artifacts)
 
 Mainnet pre-cutover unified preflight command:
 

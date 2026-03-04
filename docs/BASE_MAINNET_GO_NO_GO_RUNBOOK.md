@@ -180,6 +180,22 @@ Recommended format:
 
 The important part is that the decision is explicit and reviewable later.
 
+Suggested one-command report generation:
+
+```bash
+python3 scripts/generate_mainnet_go_no_go_report.py \
+  --decision NO_GO \
+  --reviewers "operator_a,operator_b" \
+  --preflight-json prod_preflight_report.json \
+  --railway-health-json railway_health_report.json \
+  --safe-preflight-json safe_execution_preflight.json \
+  --internal-smoke-notes-file internal_smoke_notes.md \
+  --out mainnet_go_no_go_report.md \
+  --json-out mainnet_go_no_go_report.json
+```
+
+Use `--decision GO` only when all mandatory questions are satisfied.
+
 ## First Public Enablement Constraint
 
 Even after `GO`, the first public mainnet window should still be constrained.
