@@ -180,6 +180,8 @@ That means:
 3. Create mainnet Safe.
 4. Transfer mainnet `DividendDistributor` ownership to the mainnet Safe.
 5. Run local Safe preflight against mainnet values.
+6. Perform the mainnet environment cutover using:
+   - `docs/BASE_MAINNET_ENV_CUTOVER_RUNBOOK.md`
 
 ### Phase C: Internal Financial Smoke Test
 
