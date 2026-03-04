@@ -20,6 +20,7 @@ from src.models.bounty import Bounty, BountyFundingSource, BountyStatus
 from src.models.expense_event import ExpenseEvent
 from src.models.git_outbox import GitOutbox
 from src.models.project_capital_event import ProjectCapitalEvent
+from src.models.platform_capital_event import PlatformCapitalEvent
 from src.models.project_update import ProjectUpdate
 from src.models.milestone import Milestone
 from src.models.proposal import Proposal
@@ -33,6 +34,11 @@ from src.services.project_revenue import (
     get_latest_project_revenue_reconciliation,
     get_project_revenue_spendable_balance_micro_usdc,
     is_reconciliation_fresh as is_revenue_reconciliation_fresh,
+)
+from src.services.platform_capital import (
+    get_latest_platform_capital_reconciliation,
+    get_platform_capital_spendable_balance_micro_usdc,
+    is_reconciliation_fresh as is_platform_reconciliation_fresh,
 )
 from src.services.bounty_git import (
     bounty_has_real_git_metadata,
@@ -734,7 +740,11 @@ async def mark_paid(
     if blocked_reason is None:
         blocked_reason = _ensure_project_revenue_reconciliation_gate(db, bounty)
     if blocked_reason is None:
+        blocked_reason = _ensure_platform_capital_reconciliation_gate(db, bounty)
+    if blocked_reason is None:
         blocked_reason = _ensure_project_spend_policy_gate(db, bounty)
+    if blocked_reason is None:
+        blocked_reason = _ensure_bounty_paid_platform_capital_outflow(db, bounty, payload.paid_tx_hash)
     if blocked_reason is None:
         blocked_reason = _ensure_bounty_paid_capital_outflow(db, bounty, payload.paid_tx_hash)
     if blocked_reason is None:
@@ -1025,6 +1035,56 @@ def _ensure_project_revenue_reconciliation_gate(db: Session, bounty: Bounty) -> 
     return None
 
 
+def _ensure_platform_capital_reconciliation_gate(db: Session, bounty: Bounty) -> str | None:
+    if bounty.funding_source != BountyFundingSource.platform_treasury:
+        return None
+
+    latest_reconciliation = get_latest_platform_capital_reconciliation(db)
+    if latest_reconciliation is None:
+        return "platform_capital_reconciliation_missing"
+    if not latest_reconciliation.ready or latest_reconciliation.delta_micro_usdc != 0:
+        return "platform_capital_not_reconciled"
+
+    settings = get_settings()
+    if not is_platform_reconciliation_fresh(
+        latest_reconciliation,
+        settings.platform_capital_reconciliation_max_age_seconds,
+    ):
+        return "platform_capital_reconciliation_stale"
+    return None
+
+
+def _ensure_bounty_paid_platform_capital_outflow(
+    db: Session,
+    bounty: Bounty,
+    paid_tx_hash: str | None,
+) -> str | None:
+    if bounty.funding_source != BountyFundingSource.platform_treasury:
+        return None
+
+    idempotency_key = f"platcap:bounty_paid:{bounty.bounty_id}"
+    balance_micro_usdc = get_platform_capital_spendable_balance_micro_usdc(db)
+    if balance_micro_usdc < bounty.amount_micro_usdc:
+        return "insufficient_platform_capital"
+
+    event = PlatformCapitalEvent(
+        event_id=_generate_platform_capital_event_id(db),
+        idempotency_key=idempotency_key,
+        profit_month_id=datetime.now(timezone.utc).strftime("%Y%m"),
+        delta_micro_usdc=-bounty.amount_micro_usdc,
+        source="bounty_paid",
+        evidence_tx_hash=paid_tx_hash,
+        evidence_url=f"bounty:{bounty.bounty_id}",
+    )
+    insert_or_get_by_unique(
+        db,
+        instance=event,
+        model=PlatformCapitalEvent,
+        unique_filter={"idempotency_key": idempotency_key},
+    )
+    return None
+
+
 def _ensure_bounty_paid_capital_outflow(db: Session, bounty: Bounty, paid_tx_hash: str | None) -> str | None:
     if bounty.project_id is None:
         return None
@@ -1110,6 +1170,15 @@ def _ensure_bounty_paid_expense(db: Session, bounty: Bounty) -> ExpenseEvent:
         unique_filter={"idempotency_key": idempotency_key},
     )
     return event
+
+
+def _generate_platform_capital_event_id(db: Session) -> str:
+    for _ in range(5):
+        candidate = f"platcap_{secrets.token_hex(8)}"
+        exists = db.query(PlatformCapitalEvent).filter(PlatformCapitalEvent.event_id == candidate).first()
+        if not exists:
+            return candidate
+    raise RuntimeError("Failed to generate unique platform capital event id.")
 
 
 def _generate_project_capital_event_id(db: Session) -> str:

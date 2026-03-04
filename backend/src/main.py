@@ -23,6 +23,7 @@ from src.api.v1.oracle_settlement import router as oracle_settlement_router
 from src.api.v1.oracle_billing import router as oracle_billing_router
 from src.api.v1.oracle_reputation import router as oracle_reputation_router
 from src.api.v1.oracle_project_capital import router as oracle_project_capital_router
+from src.api.v1.oracle_platform_capital import router as oracle_platform_capital_router
 from src.api.v1.oracle_project_revenue import router as oracle_project_revenue_router
 from src.api.v1.oracle_project_settlement import router as oracle_project_settlement_router
 from src.api.v1.oracle_project_spend_policy import router as oracle_project_spend_policy_router
@@ -129,6 +130,7 @@ app.include_router(oracle_billing_router)
 app.include_router(oracle_settlement_router)
 app.include_router(oracle_reputation_router)
 app.include_router(oracle_project_capital_router)
+app.include_router(oracle_platform_capital_router)
 app.include_router(oracle_project_revenue_router)
 app.include_router(oracle_project_settlement_router)
 app.include_router(oracle_project_spend_policy_router)
