@@ -79,6 +79,9 @@ Initial progress already made:
 - it now uses configurable `DEFAULT_CHAIN_ID` when `chain_id` is omitted
 - this is the first step of the broader “remove hidden Sepolia defaults” pass
 - public stats now expose `default_chain_id`, and the project UI uses that configured value for invoice creation and network hints instead of hardcoding `84532`
+- release tooling is also moving off hidden Sepolia assumptions:
+  - `scripts/rpc_endpoint_smoke.py` now defaults to `DEFAULT_CHAIN_ID` instead of hardcoding `84532`
+  - `scripts/rpc_cutover.py` can pass an explicit `--expected-chain-id` when validating a target chain
 
 ### 2. Contract Deployment on Base Mainnet
 
