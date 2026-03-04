@@ -10,6 +10,8 @@ Current state note:
 - The project activity header (`/api/v1/projects/{id}/updates/summary`) is now ETag-aware end-to-end:
   - backend returns `ETag` + `Cache-Control`
   - frontend reuses `If-None-Match` for polling to reduce repeated payload downloads
+- The current checklist is still for the Base Sepolia production-like environment.
+- Base mainnet cutover is a separate migration track and must be planned explicitly.
 
 ## 1) Security and Secrets
 
@@ -137,6 +139,9 @@ Go-live requires all of the following:
 
 - Before first external-agent launch, switch `BASE_SEPOLIA_RPC_URL` from the current limited-tier Alchemy endpoint to the paid/stable production RPC tier and re-verify the live system.
 - Until that switch is completed, funding contributor/cap-table freshness can still lag under limited-tier RPC conditions.
+- Base mainnet cutover is not yet complete:
+  - the current live deployment is still Base Sepolia
+  - mainnet deployment, Safe, and configuration hardening are still pending
 
 Current mitigation in place:
 
@@ -182,6 +187,7 @@ Pre-release cutover to production RPC tier:
 See:
 
 - `docs/RPC_PROVIDER_SWITCH_RUNBOOK.md`
+- `docs/BASE_MAINNET_CUTOVER_PLAN.md`
 
 Preferred cutover command:
 
