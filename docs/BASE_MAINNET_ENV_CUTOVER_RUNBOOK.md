@@ -34,6 +34,11 @@ All values used in this cutover must come from the mainnet deployment manifest c
 
 Do not type addresses from memory.
 Do not reuse Sepolia addresses.
+Validate the manifest first:
+
+```bash
+python3 scripts/validate_mainnet_deploy_manifest.py path/to/base-mainnet-deploy.json
+```
 
 ## Required Mainnet Values
 
