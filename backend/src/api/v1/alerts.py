@@ -16,6 +16,7 @@ from src.models.bounty import Bounty, BountyStatus
 from src.models.git_outbox import GitOutbox
 from src.models.marketing_fee_accrual_event import MarketingFeeAccrualEvent
 from src.models.project import Project, ProjectStatus
+from src.models.platform_capital_reconciliation_report import PlatformCapitalReconciliationReport
 from src.models.project_capital_reconciliation_report import ProjectCapitalReconciliationReport
 from src.models.project_revenue_reconciliation_report import ProjectRevenueReconciliationReport
 from src.models.reconciliation_report import ReconciliationReport
@@ -24,6 +25,7 @@ from src.models.distribution_execution import DistributionExecution
 from src.models.tx_outbox import TxOutbox
 from src.schemas.alerts import AlertItem, AlertsData, AlertsResponse
 from src.services.project_capital import is_reconciliation_fresh as is_capital_fresh
+from src.services.platform_capital import is_reconciliation_fresh as is_platform_capital_fresh
 from src.services.project_revenue import is_reconciliation_fresh as is_revenue_fresh
 
 router = APIRouter(prefix="/api/v1", tags=["public-system"])
@@ -354,6 +356,64 @@ def get_alerts(response: Response, db: Session = Depends(get_db)) -> AlertsRespo
                 )
 
     # Latest per project (simple loop; small data).
+    if (settings.funding_pool_contract_address or "").strip():
+        platform_capital_rep = (
+            db.query(PlatformCapitalReconciliationReport)
+            .order_by(
+                PlatformCapitalReconciliationReport.computed_at.desc(),
+                PlatformCapitalReconciliationReport.id.desc(),
+            )
+            .first()
+        )
+        if platform_capital_rep is None:
+            items.append(
+                AlertItem(
+                    alert_type="platform_capital_reconciliation_missing",
+                    severity="warning",
+                    message="Platform capital reconciliation report is missing.",
+                    ref="platform_treasury",
+                    observed_at=now,
+                    data={"funding_pool_address": settings.funding_pool_contract_address},
+                )
+            )
+        else:
+            fresh = is_platform_capital_fresh(
+                platform_capital_rep,
+                settings.platform_capital_reconciliation_max_age_seconds,
+                now=now,
+            )
+            if not fresh:
+                items.append(
+                    AlertItem(
+                        alert_type="platform_capital_reconciliation_stale",
+                        severity="warning",
+                        message="Platform capital reconciliation is stale.",
+                        ref="platform_treasury",
+                        observed_at=now,
+                        data={
+                            "computed_at": platform_capital_rep.computed_at.isoformat(),
+                            "ready": platform_capital_rep.ready,
+                            "delta_micro_usdc": platform_capital_rep.delta_micro_usdc,
+                        },
+                    )
+                )
+            if not platform_capital_rep.ready or (platform_capital_rep.delta_micro_usdc or 0) != 0:
+                items.append(
+                    AlertItem(
+                        alert_type="platform_capital_not_reconciled",
+                        severity="critical",
+                        message="Platform capital reconciliation is not strict-ready (platform_treasury outflows should be blocked).",
+                        ref="platform_treasury",
+                        observed_at=now,
+                        data={
+                            "computed_at": platform_capital_rep.computed_at.isoformat(),
+                            "ready": platform_capital_rep.ready,
+                            "delta_micro_usdc": platform_capital_rep.delta_micro_usdc,
+                            "blocked_reason": platform_capital_rep.blocked_reason,
+                        },
+                    )
+                )
+
     projects = db.query(Project).order_by(Project.project_id.asc()).all()
 
     cap_reports = (
