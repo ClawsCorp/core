@@ -102,6 +102,7 @@ python3 scripts/e2e_seed_prod.py --reset --mode governance --format md
 - [x] `usdc-indexer`, `tx-worker`, and `autonomy-loop` services are healthy in Railway.
 - [x] Alert pipeline is wired (`tx_failed`, stale reconciliation, nonce replay spikes, audit insert failures).
 - [x] Postgres backup/restore drill executed successfully.
+- [ ] Pre-release RPC tier switch is completed and verified on live production services immediately before external launch.
 
 Commands:
 
@@ -121,6 +122,7 @@ References:
 - `docs/RAILWAY_BACKUPS_RUNBOOK.md`
 - `docs/OPS_SEC_BASELINE.md`
 - `docs/SAFE_MIGRATION_PLAN.md`
+- `docs/RPC_PROVIDER_SWITCH_RUNBOOK.md`
 
 ## 6) Final Go/No-Go Rules
 
@@ -133,7 +135,8 @@ Go-live requires all of the following:
 
 ## Current Blocking Items (as of 2026-03-04)
 
-- Funding contributor/cap-table can still lag when the indexer falls behind free-tier RPC limits; this remains an operational limitation until the indexer path is hardened further.
+- Before first external-agent launch, switch `BASE_SEPOLIA_RPC_URL` from the current limited-tier Alchemy endpoint to the paid/stable production RPC tier and re-verify the live system.
+- Until that switch is completed, funding contributor/cap-table freshness can still lag under limited-tier RPC conditions.
 
 Current mitigation in place:
 
@@ -151,6 +154,32 @@ Latest verification snapshot:
   - `alerts`: `critical_count=0`, `warning_count=0`
   - `ops_smoke`: passed
   - backend + portal reachable
+- `GET /api/v1/indexer/status` is live and currently reports:
+  - `stale=false`
+  - `degraded=false`
+  - `lookback_blocks_configured=9`
+  - `min_lookback_blocks_configured=5`
+
+Pre-release cutover to production RPC tier:
+
+1. Provision the paid/stable Base Sepolia RPC endpoint.
+2. Update `BASE_SEPOLIA_RPC_URL` on:
+   - `core`
+   - `usdc-indexer`
+   - `tx-worker`
+   - `autonomy-loop`
+3. Wait for healthy redeploys.
+4. Verify:
+   - `/api/v1/indexer/status`
+   - `/api/v1/alerts`
+   - `/api/v1/health`
+5. Re-run:
+   - `prod_preflight --run-ops-smoke --fail-on-warning`
+6. Record the final go/no-go snapshot.
+
+See:
+
+- `docs/RPC_PROVIDER_SWITCH_RUNBOOK.md`
 
 Local Safe execution verification:
 
