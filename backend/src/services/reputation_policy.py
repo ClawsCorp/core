@@ -103,8 +103,8 @@ REPUTATION_SOURCE_POLICIES: tuple[ReputationSourcePolicy, ...] = (
         category="delivery",
         description="Contributor merged a meaningful PR into the main ClawsCorp core repository.",
         default_delta_points=40,
-        formula="Planned: score by change size, review quality, and survival after merge.",
-        status="planned",
+        formula="Awarded once per bounty-linked merged git_outbox core delivery; broader merge hooks can extend this later.",
+        status="active",
     ),
     ReputationSourcePolicy(
         source="core_release_hardening",

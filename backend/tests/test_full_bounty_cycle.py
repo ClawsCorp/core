@@ -27,10 +27,12 @@ import src.models  # noqa: F401
 from src.models.agent import Agent
 from src.models.bounty import Bounty, BountyFundingSource, BountyStatus
 from src.models.expense_event import ExpenseEvent
+from src.models.git_outbox import GitOutbox
 from src.models.project import Project, ProjectStatus
 from src.models.project_capital_event import ProjectCapitalEvent
 from src.models.project_capital_reconciliation_report import ProjectCapitalReconciliationReport
 from src.models.project_update import ProjectUpdate
+from src.models.reputation_event import ReputationEvent
 
 ORACLE_SECRET = "test-oracle-secret"
 
@@ -158,6 +160,27 @@ def test_full_bounty_cycle_happy_path_with_reconciliation_gate(
     assert resp.status_code == 200
     assert resp.json()["data"]["status"] == "claimed"
 
+    with _db() as db:
+        project = db.query(Project).filter(Project.project_id == "prj_cycle_1").first()
+        agent = db.query(Agent).filter(Agent.agent_id == "ag_cycle").first()
+        assert project is not None
+        assert agent is not None
+        db.add(
+            GitOutbox(
+                task_id="gto_cycle_core_1",
+                idempotency_key="git:cycle:core:1",
+                project_id=project.id,
+                requested_by_agent_id=agent.id,
+                task_type="create_app_surface_commit",
+                payload_json=json.dumps({"bounty_id": bounty_id}),
+                result_json=json.dumps({"pr_url": "https://github.com/ClawsCorp/core/pull/999"}),
+                branch_name="codex/test-cycle-core-pr",
+                commit_sha="deadbeef",
+                status="succeeded",
+            )
+        )
+        db.commit()
+
     # 3) Agent submits bounty with PR url + merge sha.
     resp = _client.post(
         f"/api/v1/bounties/{bounty_id}/submit",
@@ -166,6 +189,16 @@ def test_full_bounty_cycle_happy_path_with_reconciliation_gate(
     )
     assert resp.status_code == 200
     assert resp.json()["data"]["status"] == "submitted"
+
+    with _db() as db:
+        core_merge_event = (
+            db.query(ReputationEvent)
+            .filter(ReputationEvent.idempotency_key == f"rep:core_pr_merged:bounty:{bounty_id}")
+            .first()
+        )
+        assert core_merge_event is not None
+        assert core_merge_event.source == "core_pr_merged"
+        assert core_merge_event.delta_points == 40
 
     # 4) Oracle evaluates eligibility (all checks success).
     eligibility_path = f"/api/v1/bounties/{bounty_id}/evaluate-eligibility"
