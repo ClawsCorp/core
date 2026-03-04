@@ -60,6 +60,18 @@ python3 scripts/mainnet_cutover_preflight.py \
   --expected-rpc-url "$BASE_MAINNET_RPC_URL"
 ```
 
+The same check is also available via the standard preflight entrypoint:
+
+```bash
+python3 scripts/prod_preflight.py \
+  --run-mainnet-cutover-preflight \
+  --mainnet-manifest path/to/base-mainnet-deploy.json \
+  --mainnet-expected-chain-id 8453 \
+  --mainnet-project-id cd76995a-d819-4b36-808b-422de3ff430e \
+  --mainnet-environment-name production \
+  --mainnet-expected-rpc-url "$BASE_MAINNET_RPC_URL"
+```
+
 If `RAILWAY_WORKSPACE_TOKEN` is not exported, pass it via:
 
 ```bash
