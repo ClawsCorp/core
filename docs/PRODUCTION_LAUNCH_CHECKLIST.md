@@ -182,6 +182,7 @@ Pre-release cutover to production RPC tier:
    - `usdc-indexer`
    - `tx-worker`
    - `autonomy-loop`
+   - enable `REQUIRE_BLOCKCHAIN_RPC_URL=true` after values are migrated
 4. Wait for healthy redeploys.
 5. Verify:
    - `/api/v1/indexer/status`

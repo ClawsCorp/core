@@ -36,6 +36,7 @@ Required environment variable:
 
 - `BLOCKCHAIN_RPC_URL` (preferred)
 - `BASE_SEPOLIA_RPC_URL` (legacy-compatible fallback)
+- `REQUIRE_BLOCKCHAIN_RPC_URL=true` (recommended final hardening after migration)
 
 ## Success Criteria
 
@@ -183,6 +184,10 @@ RAILWAY_WORKSPACE_TOKEN=... python3 scripts/prod_preflight.py \
    - local `scripts/rpc_endpoint_smoke.py` result
    - `prod_preflight` result
    - `/api/v1/alerts` result
+
+8. Final hardening (after successful migration):
+   - set `REQUIRE_BLOCKCHAIN_RPC_URL=true` on all chain-reading services.
+   - this makes startup fail-closed if only legacy fallback is present.
 
 ## Rollback
 
