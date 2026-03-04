@@ -99,7 +99,18 @@ python3 scripts/prod_preflight.py \
   --mainnet-expected-chain-id 8453 \
   --mainnet-project-id cd76995a-d819-4b36-808b-422de3ff430e \
   --mainnet-environment-name production \
-  --mainnet-expected-rpc-url "$BASE_MAINNET_RPC_URL"`}
+  --mainnet-expected-rpc-url "$BASE_MAINNET_RPC_URL"
+
+# Generate final decision packet (markdown + json):
+python3 scripts/generate_mainnet_go_no_go_report.py \
+  --decision NO_GO \
+  --reviewers "ops_a,ops_b" \
+  --preflight-json prod_preflight_report.json \
+  --railway-health-json railway_health_report.json \
+  --safe-preflight-json safe_execution_preflight.json \
+  --internal-smoke-notes-file internal_smoke_notes.md \
+  --out mainnet_go_no_go_report.md \
+  --json-out mainnet_go_no_go_report.json`}
         </pre>
       </DataCard>
     </PageContainer>
