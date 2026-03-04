@@ -68,7 +68,7 @@ REQUIRED_CHECKS = [
     "dependency-review",
     "secrets-scan",
 ]
-CORE_REPUTATION_GIT_TASK_TYPES = {
+PROJECT_DELIVERY_GIT_TASK_TYPES = {
     "create_app_surface_commit",
     "create_project_backend_artifact_commit",
 }
@@ -105,7 +105,7 @@ def _select_bounty_paid_project_update_idempotency_key(
     return default_key
 
 
-def _maybe_emit_core_pr_merged_reputation(
+def _maybe_emit_project_delivery_merged_reputation(
     db: Session,
     *,
     bounty: Bounty,
@@ -117,17 +117,17 @@ def _maybe_emit_core_pr_merged_reputation(
     git_row = find_exact_git_outbox_for_bounty(db, bounty)
     if git_row is None:
         return
-    if str(git_row.task_type or "").strip() not in CORE_REPUTATION_GIT_TASK_TYPES:
+    if str(git_row.task_type or "").strip() not in PROJECT_DELIVERY_GIT_TASK_TYPES:
         return
 
     emit_reputation_event(
         db,
         agent_id=claimant_public_agent_id,
-        delta_points=40,
-        source="core_pr_merged",
+        delta_points=30,
+        source="project_delivery_merged",
         ref_type="git_outbox_task",
         ref_id=git_row.task_id,
-        idempotency_key=f"rep:core_pr_merged:bounty:{bounty.bounty_id}",
+        idempotency_key=f"rep:project_delivery_merged:bounty:{bounty.bounty_id}",
         note=f"task_type:{git_row.task_type};bounty:{bounty.bounty_id}",
     )
 
@@ -449,7 +449,7 @@ async def submit_bounty(
     db.commit()
     db.refresh(bounty)
 
-    _maybe_emit_core_pr_merged_reputation(
+    _maybe_emit_project_delivery_merged_reputation(
         db,
         bounty=bounty,
         claimant_public_agent_id=agent.agent_id,
@@ -511,7 +511,7 @@ async def evaluate_eligibility(
         db.commit()
         db.refresh(bounty)
 
-        _maybe_emit_core_pr_merged_reputation(
+        _maybe_emit_project_delivery_merged_reputation(
             db,
             bounty=bounty,
             claimant_public_agent_id=row.agent_id,

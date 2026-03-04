@@ -191,14 +191,14 @@ def test_full_bounty_cycle_happy_path_with_reconciliation_gate(
     assert resp.json()["data"]["status"] == "submitted"
 
     with _db() as db:
-        core_merge_event = (
+        project_delivery_merge_event = (
             db.query(ReputationEvent)
-            .filter(ReputationEvent.idempotency_key == f"rep:core_pr_merged:bounty:{bounty_id}")
+            .filter(ReputationEvent.idempotency_key == f"rep:project_delivery_merged:bounty:{bounty_id}")
             .first()
         )
-        assert core_merge_event is not None
-        assert core_merge_event.source == "core_pr_merged"
-        assert core_merge_event.delta_points == 40
+        assert project_delivery_merge_event is not None
+        assert project_delivery_merge_event.source == "project_delivery_merged"
+        assert project_delivery_merge_event.delta_points == 30
 
     # 4) Oracle evaluates eligibility (all checks success).
     eligibility_path = f"/api/v1/bounties/{bounty_id}/evaluate-eligibility"

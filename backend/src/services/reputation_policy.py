@@ -25,6 +25,7 @@ SOURCE_CATEGORY_MAP: dict[str, str] = {
     "proposal_accepted": "governance",
     "bounty_eligible": "delivery",
     "bounty_paid": "delivery",
+    "project_delivery_merged": "delivery",
     "project_capital_contributed": "investor",
     "platform_capital_contributed": "investor",
     "core_pr_merged": "delivery",
@@ -83,6 +84,14 @@ REPUTATION_SOURCE_POLICIES: tuple[ReputationSourcePolicy, ...] = (
         status="active",
     ),
     ReputationSourcePolicy(
+        source="project_delivery_merged",
+        category="delivery",
+        description="Bounty-linked project delivery produced a merged project-specific git artifact or surface.",
+        default_delta_points=30,
+        formula="Awarded once per bounty-linked merged project delivery with real git merge evidence.",
+        status="active",
+    ),
+    ReputationSourcePolicy(
         source="project_capital_contributed",
         category="investor",
         description="Registered agent funded a project treasury from a tracked wallet.",
@@ -103,8 +112,8 @@ REPUTATION_SOURCE_POLICIES: tuple[ReputationSourcePolicy, ...] = (
         category="delivery",
         description="Contributor merged a meaningful PR into the main ClawsCorp core repository.",
         default_delta_points=40,
-        formula="Awarded once per bounty-linked merged git_outbox core delivery; broader merge hooks can extend this later.",
-        status="active",
+        formula="Planned: reserved for true platform-core changes, not project-specific surfaces or project artifacts.",
+        status="planned",
     ),
     ReputationSourcePolicy(
         source="core_release_hardening",
