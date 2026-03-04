@@ -25,6 +25,16 @@ on:
         required: true
         default: "3"
         type: string
+      run_mainnet_cutover_preflight:
+        description: "Include mainnet cutover preflight (requires mainnet secrets)"
+        required: true
+        default: false
+        type: boolean
+      mainnet_expected_chain_id:
+        description: "Expected mainnet chain id for cutover preflight"
+        required: true
+        default: "8453"
+        type: string
 
 jobs:
   preflight:
@@ -52,11 +62,15 @@ jobs:
             echo "portal_base_url=https://core-bice-mu.vercel.app" >> "$GITHUB_OUTPUT"
             echo "month=auto" >> "$GITHUB_OUTPUT"
             echo "tx_max_tasks=3" >> "$GITHUB_OUTPUT"
+            echo "run_mainnet_cutover_preflight=false" >> "$GITHUB_OUTPUT"
+            echo "mainnet_expected_chain_id=8453" >> "$GITHUB_OUTPUT"
           else
             echo "api_base_url=${{ inputs.api_base_url }}" >> "$GITHUB_OUTPUT"
             echo "portal_base_url=${{ inputs.portal_base_url }}" >> "$GITHUB_OUTPUT"
             echo "month=${{ inputs.month }}" >> "$GITHUB_OUTPUT"
             echo "tx_max_tasks=${{ inputs.tx_max_tasks }}" >> "$GITHUB_OUTPUT"
+            echo "run_mainnet_cutover_preflight=${{ inputs.run_mainnet_cutover_preflight }}" >> "$GITHUB_OUTPUT"
+            echo "mainnet_expected_chain_id=${{ inputs.mainnet_expected_chain_id }}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Validate required secret
@@ -82,15 +96,40 @@ jobs:
         if: steps.secret.outputs.missing != 'true'
         env:
           ORACLE_HMAC_SECRET: ${{ secrets.ORACLE_HMAC_SECRET }}
+          BASE_MAINNET_RPC_URL: ${{ secrets.BASE_MAINNET_RPC_URL }}
+          BASE_MAINNET_DEPLOY_MANIFEST_JSON: ${{ secrets.BASE_MAINNET_DEPLOY_MANIFEST_JSON }}
+          RAILWAY_WORKSPACE_TOKEN: ${{ secrets.RAILWAY_WORKSPACE_TOKEN }}
         run: |
-          python3 scripts/prod_preflight.py \
-            --api-base-url "${{ steps.vars.outputs.api_base_url }}" \
-            --portal-base-url "${{ steps.vars.outputs.portal_base_url }}" \
-            --fail-on-warning \
-            --run-ops-smoke \
-            --ops-smoke-month "${{ steps.vars.outputs.month }}" \
-            --ops-smoke-tx-max-tasks "${{ steps.vars.outputs.tx_max_tasks }}" \
-            > prod_preflight_report.json
+          PREFLIGHT_CMD=(
+            python3 scripts/prod_preflight.py
+            --api-base-url "${{ steps.vars.outputs.api_base_url }}"
+            --portal-base-url "${{ steps.vars.outputs.portal_base_url }}"
+            --fail-on-warning
+            --run-ops-smoke
+            --ops-smoke-month "${{ steps.vars.outputs.month }}"
+            --ops-smoke-tx-max-tasks "${{ steps.vars.outputs.tx_max_tasks }}"
+          )
+
+          if [ "${{ steps.vars.outputs.run_mainnet_cutover_preflight }}" = "true" ]; then
+            if [ -z "${BASE_MAINNET_RPC_URL}" ] || [ -z "${BASE_MAINNET_DEPLOY_MANIFEST_JSON}" ]; then
+              echo "run_mainnet_cutover_preflight=true requires BASE_MAINNET_RPC_URL and BASE_MAINNET_DEPLOY_MANIFEST_JSON secrets" >&2
+              exit 1
+            fi
+            printf '%s' "${BASE_MAINNET_DEPLOY_MANIFEST_JSON}" > mainnet_deploy_manifest.json
+            PREFLIGHT_CMD+=(
+              --run-mainnet-cutover-preflight
+              --mainnet-manifest mainnet_deploy_manifest.json
+              --mainnet-expected-chain-id "${{ steps.vars.outputs.mainnet_expected_chain_id }}"
+              --mainnet-expected-rpc-url "${BASE_MAINNET_RPC_URL}"
+            )
+            if [ -n "${RAILWAY_WORKSPACE_TOKEN}" ]; then
+              PREFLIGHT_CMD+=(
+                --mainnet-railway-workspace-token "${RAILWAY_WORKSPACE_TOKEN}"
+              )
+            fi
+          fi
+
+          "${PREFLIGHT_CMD[@]}" > prod_preflight_report.json
           cat prod_preflight_report.json
 
       - name: Fail when required secret is missing
