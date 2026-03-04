@@ -32,6 +32,7 @@ Commands:
 
 ```bash
 scripts/check.sh
+python3 scripts/secrets_scan.py --diff-range origin/main...HEAD
 ```
 
 ## 2) Core Availability
