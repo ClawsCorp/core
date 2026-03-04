@@ -508,6 +508,22 @@ export interface paths {
      */
     get: operations["get_stakers_summary_api_v1_stakers_get"];
   };
+  "/api/v1/platform/funding": {
+    /** Get platform funding summary (FundingPool rounds and cap table) */
+    get: operations["get_platform_funding_summary_api_v1_platform_funding_get"];
+  };
+  "/api/v1/oracle/platform/funding-rounds": {
+    /** Open Platform Funding Round */
+    post: operations["open_platform_funding_round_api_v1_oracle_platform_funding_rounds_post"];
+  };
+  "/api/v1/oracle/platform/funding-rounds/{round_id}/close": {
+    /** Close Platform Funding Round */
+    post: operations["close_platform_funding_round_api_v1_oracle_platform_funding_rounds__round_id__close_post"];
+  };
+  "/api/v1/oracle/platform-funding/sync": {
+    /** Sync Platform Funding Deposits */
+    post: operations["sync_platform_funding_deposits_api_v1_oracle_platform_funding_sync_post"];
+  };
   "/api/v1/oracle/platform-capital/reputation-sync": {
     /** Sync Platform Investor Reputation */
     post: operations["sync_platform_investor_reputation_api_v1_oracle_platform_capital_reputation_sync_post"];
@@ -1801,6 +1817,111 @@ export interface components {
       /** Success */
       success: boolean;
       data: components["schemas"]["PlatformCapitalSyncData"];
+    };
+    /** PlatformFundingContributor */
+    PlatformFundingContributor: {
+      /** Address */
+      address: string;
+      /** Amount Micro Usdc */
+      amount_micro_usdc: number;
+    };
+    /** PlatformFundingRoundCloseRequest */
+    PlatformFundingRoundCloseRequest: {
+      /** Idempotency Key */
+      idempotency_key: string;
+    };
+    /** PlatformFundingRoundCreateRequest */
+    PlatformFundingRoundCreateRequest: {
+      /** Idempotency Key */
+      idempotency_key: string;
+      /** Title */
+      title?: string | null;
+      /** Cap Micro Usdc */
+      cap_micro_usdc?: number | null;
+    };
+    /** PlatformFundingRoundCreateResponse */
+    PlatformFundingRoundCreateResponse: {
+      /** Success */
+      success: boolean;
+      data?: components["schemas"]["PlatformFundingRoundPublic"] | null;
+      /** Blocked Reason */
+      blocked_reason?: string | null;
+    };
+    /** PlatformFundingRoundPublic */
+    PlatformFundingRoundPublic: {
+      /** Round Id */
+      round_id: string;
+      /** Title */
+      title: string | null;
+      /** Status */
+      status: string;
+      /** Cap Micro Usdc */
+      cap_micro_usdc: number | null;
+      /**
+       * Opened At
+       * Format: date-time
+       */
+      opened_at: string;
+      /** Closed At */
+      closed_at: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+    };
+    /** PlatformFundingSummaryData */
+    PlatformFundingSummaryData: {
+      /** Funding Pool Address */
+      funding_pool_address: string | null;
+      open_round: components["schemas"]["PlatformFundingRoundPublic"] | null;
+      /** Open Round Raised Micro Usdc */
+      open_round_raised_micro_usdc: number;
+      /** Total Raised Micro Usdc */
+      total_raised_micro_usdc: number;
+      /** Contributors */
+      contributors: components["schemas"]["PlatformFundingContributor"][];
+      /** Contributors Total Count */
+      contributors_total_count: number;
+      /**
+       * Contributors Data Source
+       * @default observed_transfers
+       */
+      contributors_data_source?: string;
+      /**
+       * Unattributed Micro Usdc
+       * @default 0
+       */
+      unattributed_micro_usdc?: number;
+      /** Last Deposit At */
+      last_deposit_at: string | null;
+      /** Blocked Reason */
+      blocked_reason?: string | null;
+    };
+    /** PlatformFundingSummaryResponse */
+    PlatformFundingSummaryResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["PlatformFundingSummaryData"];
+    };
+    /** PlatformFundingSyncData */
+    PlatformFundingSyncData: {
+      /** Funding Pool Address */
+      funding_pool_address: string;
+      /** Transfers Seen */
+      transfers_seen: number;
+      /** Deposits Inserted */
+      deposits_inserted: number;
+      /** Open Round Id */
+      open_round_id?: string | null;
+    };
+    /** PlatformFundingSyncResponse */
+    PlatformFundingSyncResponse: {
+      /** Success */
+      success: boolean;
+      data?: components["schemas"]["PlatformFundingSyncData"] | null;
+      /** Blocked Reason */
+      blocked_reason?: string | null;
     };
     /** PlatformInvestorReputationSyncData */
     PlatformInvestorReputationSyncData: {
@@ -6040,6 +6161,88 @@ export interface operations {
       422: {
         content: {
           "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Get platform funding summary (FundingPool rounds and cap table) */
+  get_platform_funding_summary_api_v1_platform_funding_get: {
+    parameters: {
+      query?: {
+        limit?: number;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["PlatformFundingSummaryResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Open Platform Funding Round */
+  open_platform_funding_round_api_v1_oracle_platform_funding_rounds_post: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PlatformFundingRoundCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["PlatformFundingRoundCreateResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Close Platform Funding Round */
+  close_platform_funding_round_api_v1_oracle_platform_funding_rounds__round_id__close_post: {
+    parameters: {
+      path: {
+        round_id: string;
+      };
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PlatformFundingRoundCloseRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["PlatformFundingRoundCreateResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Sync Platform Funding Deposits */
+  sync_platform_funding_deposits_api_v1_oracle_platform_funding_sync_post: {
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["PlatformFundingSyncResponse"];
         };
       };
     };
