@@ -193,6 +193,10 @@ That means:
    - tiny expense / payout proof
 4. Record tx hashes and verify reconciliation.
 
+Runbook:
+
+- `docs/BASE_MAINNET_INTERNAL_SMOKE_RUNBOOK.md`
+
 ### Phase D: Controlled Public Enablement
 
 1. Re-run final go/no-go snapshot.
