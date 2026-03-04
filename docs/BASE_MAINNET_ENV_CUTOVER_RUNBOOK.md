@@ -126,7 +126,7 @@ python3 scripts/railway_set_vars.py \
   --project-id cd76995a-d819-4b36-808b-422de3ff430e \
   --environment-name production \
   --service core \
-  --set BASE_SEPOLIA_RPC_URL="$BASE_MAINNET_RPC_URL" \
+  --set BLOCKCHAIN_RPC_URL="$BASE_MAINNET_RPC_URL" \
   --set DEFAULT_CHAIN_ID="$DEFAULT_CHAIN_ID" \
   --set USDC_ADDRESS="$USDC_ADDRESS" \
   --set DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS="$DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS" \
@@ -142,7 +142,7 @@ python3 scripts/railway_set_vars.py \
   --project-id cd76995a-d819-4b36-808b-422de3ff430e \
   --environment-name production \
   --service usdc-indexer \
-  --set BASE_SEPOLIA_RPC_URL="$BASE_MAINNET_RPC_URL" \
+  --set BLOCKCHAIN_RPC_URL="$BASE_MAINNET_RPC_URL" \
   --set USDC_ADDRESS="$USDC_ADDRESS"
 ```
 
@@ -153,7 +153,7 @@ python3 scripts/railway_set_vars.py \
   --project-id cd76995a-d819-4b36-808b-422de3ff430e \
   --environment-name production \
   --service tx-worker \
-  --set BASE_SEPOLIA_RPC_URL="$BASE_MAINNET_RPC_URL" \
+  --set BLOCKCHAIN_RPC_URL="$BASE_MAINNET_RPC_URL" \
   --set USDC_ADDRESS="$USDC_ADDRESS" \
   --set DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS="$DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS" \
   --set SAFE_OWNER_ADDRESS="$SAFE_OWNER_ADDRESS"
@@ -166,15 +166,15 @@ python3 scripts/railway_set_vars.py \
   --project-id cd76995a-d819-4b36-808b-422de3ff430e \
   --environment-name production \
   --service autonomy-loop \
-  --set BASE_SEPOLIA_RPC_URL="$BASE_MAINNET_RPC_URL" \
+  --set BLOCKCHAIN_RPC_URL="$BASE_MAINNET_RPC_URL" \
   --set USDC_ADDRESS="$USDC_ADDRESS" \
   --set DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS="$DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS"
 ```
 
-Note:
+Preferred runtime key:
 
-- The variable names remain the current ones (`BASE_SEPOLIA_RPC_URL`, etc.) until a later naming cleanup pass.
-- This runbook changes the values first, not the variable names.
+- set `BLOCKCHAIN_RPC_URL` on all affected services
+- `BASE_SEPOLIA_RPC_URL` remains only as a legacy fallback during migration and should not be the primary source of truth for the mainnet cutover
 
 ### Phase 3: Wait for Healthy Redeploys
 
@@ -205,6 +205,15 @@ Key expectations:
 - `default_chain_id = 8453`
 - indexer chain data is live and not stale
 - no critical alerts
+- Railway env matches the validated deployment manifest:
+
+```bash
+RAILWAY_WORKSPACE_TOKEN=... python3 scripts/verify_mainnet_cutover_env.py \
+  path/to/base-mainnet-deploy.json \
+  --project-id cd76995a-d819-4b36-808b-422de3ff430e \
+  --environment-name production \
+  --expected-rpc-url "$BASE_MAINNET_RPC_URL"
+```
 
 ### Phase 5: Run Formal Post-Cutover Validation
 
