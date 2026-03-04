@@ -8,7 +8,7 @@ import { EmptyState, Loading } from "@/components/State";
 import { ErrorState } from "@/components/ErrorState";
 import { api, readErrorMessage } from "@/lib/api";
 import { formatDateTimeShort } from "@/lib/format";
-import type { AlertsData, AlertItem, IndexerStatusData } from "@/types";
+import type { AlertsData, AlertItem, IndexerStatusData, StatsData } from "@/types";
 
 function groupBySeverity(items: AlertItem[]): Record<string, AlertItem[]> {
   const out: Record<string, AlertItem[]> = {};
@@ -29,14 +29,20 @@ export default function AutonomyPage() {
   const [error, setError] = useState<string | null>(null);
   const [alerts, setAlerts] = useState<AlertsData | null>(null);
   const [indexerStatus, setIndexerStatus] = useState<IndexerStatusData | null>(null);
+  const [stats, setStats] = useState<StatsData | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [alertsData, indexerData] = await Promise.all([api.getAlerts(), api.getIndexerStatus()]);
+      const [alertsData, indexerData, statsData] = await Promise.all([
+        api.getAlerts(),
+        api.getIndexerStatus(),
+        api.getStats(),
+      ]);
       setAlerts(alertsData);
       setIndexerStatus(indexerData);
+      setStats(statsData);
     } catch (err) {
       setError(readErrorMessage(err));
     } finally {
@@ -136,6 +142,41 @@ export default function AutonomyPage() {
               ) : null}
               {indexerStatus.last_error_hint ? (
                 <p>last_error_hint: {indexerStatus.last_error_hint}</p>
+              ) : null}
+            </DataCard>
+          ) : null}
+
+          {stats ? (
+            <DataCard title="Platform Capital Health">
+              <p>
+                reconciliation_status:{" "}
+                {stats.platform_capital_reconciliation_ready == null
+                  ? "missing"
+                  : stats.platform_capital_reconciliation_ready
+                    ? "ready"
+                    : "not_ready"}
+              </p>
+              <p>
+                ledger_micro_usdc:{" "}
+                {stats.platform_capital_ledger_balance_micro_usdc ?? "n/a"}
+              </p>
+              <p>
+                spendable_micro_usdc:{" "}
+                {stats.platform_capital_spendable_balance_micro_usdc ?? "n/a"}
+              </p>
+              <p>
+                delta_micro_usdc:{" "}
+                {stats.platform_capital_reconciliation_delta_micro_usdc ?? "n/a"}
+              </p>
+              <p>
+                max_age_seconds:{" "}
+                {stats.platform_capital_reconciliation_max_age_seconds ?? "n/a"}
+              </p>
+              {stats.platform_capital_reconciliation_computed_at ? (
+                <p>
+                  reconciliation_computed_at:{" "}
+                  {formatDateTimeShort(stats.platform_capital_reconciliation_computed_at)}
+                </p>
               ) : null}
             </DataCard>
           ) : null}
