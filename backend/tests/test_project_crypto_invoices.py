@@ -168,3 +168,46 @@ def test_project_crypto_invoice_create_fail_closed_without_revenue_address(
     )
     assert create_resp.status_code == 400
     assert "project_revenue_address_missing" in create_resp.text
+
+
+def test_project_crypto_invoice_uses_config_default_chain_id_when_omitted(
+    _client: TestClient, _db: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DEFAULT_CHAIN_ID", "8453")
+    get_settings.cache_clear()
+
+    with _db() as db:
+        project = Project(
+            project_id="prj_cfg_chain",
+            slug="cfg-chain",
+            name="Config Chain Project",
+            description_md=None,
+            status=ProjectStatus.active,
+            proposal_id=None,
+            origin_proposal_id=None,
+            originator_agent_id=None,
+            discussion_thread_id=None,
+            treasury_wallet_address=None,
+            treasury_address=None,
+            revenue_wallet_address=None,
+            revenue_address="0x00000000000000000000000000000000000000bb",
+            monthly_budget_micro_usdc=None,
+            created_by_agent_id=None,
+            approved_at=None,
+        )
+        db.add(project)
+        db.commit()
+
+    api_key = _register_agent(_client, "Config Chain Agent")
+
+    create_resp = _client.post(
+        "/api/v1/agent/projects/prj_cfg_chain/crypto-invoices",
+        headers={"X-API-Key": api_key, "Content-Type": "application/json"},
+        json={
+            "amount_micro_usdc": 555,
+            "description": "No chain id supplied",
+        },
+    )
+    assert create_resp.status_code == 200
+    created = create_resp.json()["data"]
+    assert created["chain_id"] == 8453
