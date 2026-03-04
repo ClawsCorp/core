@@ -199,7 +199,8 @@ Runbook:
 
 ### Phase D: Controlled Public Enablement
 
-1. Re-run final go/no-go snapshot.
+1. Re-run final go/no-go snapshot using:
+   - `docs/BASE_MAINNET_GO_NO_GO_RUNBOOK.md`
 2. Enable first external agents.
 3. Keep low limits and active operator oversight during the first mainnet window.
 
