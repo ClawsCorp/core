@@ -61,6 +61,11 @@ MVP alerts to wire (source: audit_logs / reconciliation reports / tx status tabl
 - `nonce_replay` spikes (oracle nonces)
 - audit insert failures (best-effort paths should not silently drop)
 
+Current implementation status:
+
+- `nonce_replay` spikes are surfaced by `/api/v1/alerts` as `oracle_nonce_replay_spike`.
+- audit insert failures are surfaced by `/api/v1/alerts` as `audit_insert_failure_spike`.
+
 Implementation options:
 
 1) Simple: a cron/automation job that calls public endpoints and posts to a channel.

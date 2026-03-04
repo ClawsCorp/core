@@ -19,6 +19,8 @@ from src.main import app
 from src.api.v1 import alerts as alerts_api
 
 import src.models  # noqa: F401
+from src.core.audit_health import note_audit_insert_failure, reset_audit_insert_failures_for_tests
+from src.models.audit_log import AuditLog
 from src.models.bounty import Bounty, BountyStatus
 from src.models.git_outbox import GitOutbox
 from src.models.marketing_fee_accrual_event import MarketingFeeAccrualEvent
@@ -87,6 +89,126 @@ def test_alerts_warn_when_safe_owner_address_missing(monkeypatch) -> None:
     finally:
         app.dependency_overrides.clear()
         get_settings.cache_clear()
+
+
+def test_alerts_include_oracle_nonce_replay_spike(monkeypatch) -> None:
+    monkeypatch.setenv("ORACLE_NONCE_REPLAY_WINDOW_SECONDS", "600")
+    monkeypatch.setenv("ORACLE_NONCE_REPLAY_SPIKE_THRESHOLD", "2")
+    get_settings.cache_clear()
+
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+
+    with session_local() as db:
+        now = datetime.now(timezone.utc)
+        db.add(
+            AuditLog(
+                actor_type="oracle",
+                agent_id=None,
+                method="POST",
+                path="/api/v1/oracle/revenue-events",
+                idempotency_key="idem-1",
+                body_hash="a" * 64,
+                signature_status="replay",
+                request_id="rid-1",
+                tx_hash=None,
+                error_hint="replayed_request_id",
+                created_at=now,
+            )
+        )
+        db.add(
+            AuditLog(
+                actor_type="oracle",
+                agent_id=None,
+                method="POST",
+                path="/api/v1/oracle/revenue-events",
+                idempotency_key="idem-2",
+                body_hash="b" * 64,
+                signature_status="replay",
+                request_id="rid-2",
+                tx_hash=None,
+                error_hint="replayed_request_id",
+                created_at=now,
+            )
+        )
+        db.commit()
+
+    def _override_get_db():
+        db: Session = session_local()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = _override_get_db
+    client = TestClient(app, raise_server_exceptions=False)
+    try:
+        resp = client.get("/api/v1/alerts")
+        assert resp.status_code == 200
+        items = [x for x in resp.json()["data"]["items"] if isinstance(x, dict)]
+        replay = [x for x in items if str(x.get("alert_type")) == "oracle_nonce_replay_spike"]
+        assert len(replay) == 1
+        assert int(replay[0]["data"]["count"]) == 2
+        assert int(replay[0]["data"]["threshold"]) == 2
+    finally:
+        app.dependency_overrides.clear()
+        get_settings.cache_clear()
+
+
+def test_alerts_include_audit_insert_failure_spike(monkeypatch) -> None:
+    reset_audit_insert_failures_for_tests()
+    monkeypatch.setenv("AUDIT_INSERT_FAILURE_WINDOW_SECONDS", "600")
+    monkeypatch.setenv("AUDIT_INSERT_FAILURE_SPIKE_THRESHOLD", "2")
+    get_settings.cache_clear()
+
+    now = datetime.now(timezone.utc)
+    note_audit_insert_failure(
+        actor_type="oracle",
+        path="/api/v1/oracle/revenue-events",
+        error_hint="OperationalError",
+        observed_at=now,
+    )
+    note_audit_insert_failure(
+        actor_type="agent",
+        path="/api/v1/proposals",
+        error_hint="IntegrityError",
+        observed_at=now,
+    )
+
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+
+    def _override_get_db():
+        db: Session = session_local()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = _override_get_db
+    client = TestClient(app, raise_server_exceptions=False)
+    try:
+        resp = client.get("/api/v1/alerts")
+        assert resp.status_code == 200
+        items = [x for x in resp.json()["data"]["items"] if isinstance(x, dict)]
+        failures = [x for x in items if str(x.get("alert_type")) == "audit_insert_failure_spike"]
+        assert len(failures) == 1
+        assert int(failures[0]["data"]["count"]) == 2
+        assert int(failures[0]["data"]["threshold"]) == 2
+    finally:
+        app.dependency_overrides.clear()
+        get_settings.cache_clear()
+        reset_audit_insert_failures_for_tests()
 
 
 def test_alerts_warn_when_platform_capital_reconciliation_missing(monkeypatch) -> None:

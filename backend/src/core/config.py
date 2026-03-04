@@ -93,6 +93,10 @@ class Settings:
     agents_register_max_per_day: int
     tx_outbox_enabled: bool
     marketing_fee_bps: int
+    oracle_nonce_replay_window_seconds: int
+    oracle_nonce_replay_spike_threshold: int
+    audit_insert_failure_window_seconds: int
+    audit_insert_failure_spike_threshold: int
 
 
 @lru_cache
@@ -177,6 +181,10 @@ def get_settings() -> Settings:
     agents_register_max_per_day = int(os.getenv("AGENTS_REGISTER_MAX_PER_DAY", "200"))
     tx_outbox_enabled = os.getenv("TX_OUTBOX_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
     marketing_fee_bps = int(os.getenv("MARKETING_FEE_BPS", "100"))
+    oracle_nonce_replay_window_seconds = int(os.getenv("ORACLE_NONCE_REPLAY_WINDOW_SECONDS", "300"))
+    oracle_nonce_replay_spike_threshold = int(os.getenv("ORACLE_NONCE_REPLAY_SPIKE_THRESHOLD", "5"))
+    audit_insert_failure_window_seconds = int(os.getenv("AUDIT_INSERT_FAILURE_WINDOW_SECONDS", "900"))
+    audit_insert_failure_spike_threshold = int(os.getenv("AUDIT_INSERT_FAILURE_SPIKE_THRESHOLD", "1"))
 
     return Settings(
         app_version=app_version,
@@ -225,4 +233,8 @@ def get_settings() -> Settings:
         agents_register_max_per_day=agents_register_max_per_day,
         tx_outbox_enabled=tx_outbox_enabled,
         marketing_fee_bps=marketing_fee_bps,
+        oracle_nonce_replay_window_seconds=oracle_nonce_replay_window_seconds,
+        oracle_nonce_replay_spike_threshold=oracle_nonce_replay_spike_threshold,
+        audit_insert_failure_window_seconds=audit_insert_failure_window_seconds,
+        audit_insert_failure_spike_threshold=audit_insert_failure_spike_threshold,
     )
