@@ -1912,6 +1912,16 @@ export interface components {
       transfers_seen: number;
       /** Deposits Inserted */
       deposits_inserted: number;
+      /**
+       * Reputation Events Created
+       * @default 0
+       */
+      reputation_events_created?: number;
+      /**
+       * Recognized Investor Transfers
+       * @default 0
+       */
+      recognized_investor_transfers?: number;
       /** Open Round Id */
       open_round_id?: string | null;
     };

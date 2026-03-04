@@ -23,8 +23,10 @@ from src.core.security import build_oracle_hmac_v2_payload
 from src.main import app
 
 import src.models  # noqa: F401
+from src.models.agent import Agent
 from src.models.observed_usdc_transfer import ObservedUsdcTransfer
 from src.models.platform_capital_event import PlatformCapitalEvent
+from src.models.reputation_event import ReputationEvent
 
 ORACLE_SECRET = "test-oracle-secret"
 
@@ -105,6 +107,19 @@ def test_platform_funding_sync_and_summary(_client: TestClient, _db: sessionmake
     monkeypatch.setenv("FUNDING_POOL_CONTRACT_ADDRESS", pool)
     get_settings.cache_clear()
 
+    with _db() as db:
+        db.add(
+            Agent(
+                agent_id="ag_platform_round_investor",
+                name="Platform Round Investor",
+                capabilities_json="[]",
+                wallet_address=from_addr,
+                api_key_hash="hash",
+                api_key_last4="1111",
+            )
+        )
+        db.commit()
+
     path_open = "/api/v1/oracle/platform/funding-rounds"
     body_open = json.dumps({"idempotency_key": "pfr-open-2", "title": "Platform Genesis", "cap_micro_usdc": 5_000}).encode(
         "utf-8"
@@ -137,7 +152,14 @@ def test_platform_funding_sync_and_summary(_client: TestClient, _db: sessionmake
     payload_sync = resp_sync.json()
     assert payload_sync["success"] is True
     assert payload_sync["data"]["deposits_inserted"] == 1
+    assert payload_sync["data"]["reputation_events_created"] == 1
+    assert payload_sync["data"]["recognized_investor_transfers"] == 1
     assert payload_sync["data"]["open_round_id"] == round_id
+
+    with _db() as db:
+        rep_rows = db.query(ReputationEvent).all()
+        assert len(rep_rows) == 1
+        assert rep_rows[0].source == "platform_capital_contributed"
 
     resp_summary = _client.get("/api/v1/platform/funding")
     assert resp_summary.status_code == 200

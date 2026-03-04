@@ -1203,6 +1203,10 @@ Semantics:
 - excludes self-transfers where `from_address == to_address`
 - links deposits to latest open platform funding round (if any)
 - idempotent per `observed_transfer_id`.
+- also emits investor reputation hook for registered wallets (`source=platform_capital_contributed`),
+  and returns counters:
+  - `reputation_events_created`
+  - `recognized_investor_transfers`
 
 ## Oracle project treasury and capital reconciliation
 

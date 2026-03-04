@@ -1188,7 +1188,17 @@ def run(argv: list[str] | None = None) -> int:
             if json_mode:
                 _print_json(data)
             else:
-                _print_fields(data, ["funding_pool_address", "transfers_seen", "deposits_inserted", "open_round_id"])
+                _print_fields(
+                    data,
+                    [
+                        "funding_pool_address",
+                        "transfers_seen",
+                        "deposits_inserted",
+                        "reputation_events_created",
+                        "recognized_investor_transfers",
+                        "open_round_id",
+                    ],
+                )
             return 0
 
         if args.command == "run-project-month":
