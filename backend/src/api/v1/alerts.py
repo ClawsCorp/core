@@ -257,6 +257,18 @@ def get_alerts(response: Response, db: Session = Depends(get_db)) -> AlertsRespo
             )
         )
 
+    if str(settings.blockchain_rpc_env_name or "").strip() != "BLOCKCHAIN_RPC_URL":
+        items.append(
+            AlertItem(
+                alert_type="legacy_rpc_env_fallback",
+                severity="warning",
+                message="Backend RPC is resolved via BASE_SEPOLIA_RPC_URL fallback; migrate to BLOCKCHAIN_RPC_URL.",
+                ref=settings.blockchain_rpc_env_name,
+                data={"resolved_from": settings.blockchain_rpc_env_name},
+                observed_at=now,
+            )
+        )
+
     if int(settings.marketing_fee_bps or 0) > 0 and not (settings.marketing_treasury_address or "").strip():
         items.append(
             AlertItem(
