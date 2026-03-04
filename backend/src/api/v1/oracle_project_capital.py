@@ -50,6 +50,7 @@ from src.services.marketing_fee import (
     calculate_marketing_fee_micro_usdc,
 )
 from src.services.project_updates import create_project_update_row, build_project_update_idempotency_key
+from src.services.reputation_hooks import emit_project_investor_reputation_for_wallet
 
 router = APIRouter(prefix="/api/v1/oracle", tags=["oracle-project-capital"])
 
@@ -315,11 +316,18 @@ async def sync_project_capital_from_observed_usdc_transfers(
             log_index=int(t.log_index),
             observed_at=t.observed_at,
         )
-        insert_or_get_by_unique(
+        dep_row, _dep_created = insert_or_get_by_unique(
             db,
             instance=dep,
             model=ProjectFundingDeposit,
             unique_filter={"observed_transfer_id": int(t.id)},
+        )
+        emit_project_investor_reputation_for_wallet(
+            db,
+            wallet_address=str(t.from_address).lower(),
+            amount_micro_usdc=int(t.amount_micro_usdc),
+            project_id=project_public_id,
+            funding_deposit_id=str(dep_row.deposit_id),
         )
 
         tx_hash_lc = str(t.tx_hash).lower()

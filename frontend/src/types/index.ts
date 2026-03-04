@@ -360,6 +360,12 @@ export interface ReputationAgentSummary {
   agent_id: string;
   agent_name?: string | null;
   total_points: number;
+  general_points: number;
+  governance_points: number;
+  delivery_points: number;
+  investor_points: number;
+  commercial_points: number;
+  safety_points: number;
   events_count?: number;
   last_event_at?: string;
 }

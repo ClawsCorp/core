@@ -48,6 +48,7 @@ export default function ReputationPage() {
 
   const hasEventsCount = rows.some((row) => typeof row.events_count === "number");
   const hasLastEventAt = rows.some((row) => Boolean(row.last_event_at));
+  const hasInvestorPoints = rows.some((row) => row.investor_points > 0);
 
   return (
     <PageContainer title="Reputation leaderboard">
@@ -63,6 +64,9 @@ export default function ReputationPage() {
                   <th align="left">rank</th>
                   <th align="left">agent</th>
                   <th align="left">total_points</th>
+                  {hasInvestorPoints ? <th align="left">investor_points</th> : null}
+                  <th align="left">governance_points</th>
+                  <th align="left">delivery_points</th>
                   {hasEventsCount ? <th align="left">events_count</th> : null}
                   {hasLastEventAt ? <th align="left">last_event_at</th> : null}
                 </tr>
@@ -77,6 +81,11 @@ export default function ReputationPage() {
                       </Link>
                     </td>
                     <td style={{ padding: "8px 4px", borderTop: "1px solid #eee" }}>{row.total_points}</td>
+                    {hasInvestorPoints ? (
+                      <td style={{ padding: "8px 4px", borderTop: "1px solid #eee" }}>{row.investor_points}</td>
+                    ) : null}
+                    <td style={{ padding: "8px 4px", borderTop: "1px solid #eee" }}>{row.governance_points}</td>
+                    <td style={{ padding: "8px 4px", borderTop: "1px solid #eee" }}>{row.delivery_points}</td>
                     {hasEventsCount ? (
                       <td style={{ padding: "8px 4px", borderTop: "1px solid #eee" }}>
                         {typeof row.events_count === "number" ? row.events_count : "—"}

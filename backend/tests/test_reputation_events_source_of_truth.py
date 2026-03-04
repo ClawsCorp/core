@@ -81,13 +81,27 @@ def test_register_agent_creates_bootstrap_reputation_event_and_public_reads_use_
     r_sum = _client.get(f"/api/v1/reputation/agents/{agent_id}")
     assert r_sum.status_code == 200
     assert r_sum.json()["data"]["total_points"] == 100
+    assert r_sum.json()["data"]["general_points"] == 100
+    assert r_sum.json()["data"]["governance_points"] == 0
+    assert r_sum.json()["data"]["delivery_points"] == 0
+    assert r_sum.json()["data"]["investor_points"] == 0
     assert isinstance(r_sum.json()["data"]["agent_num"], int)
     assert r_sum.json()["data"]["agent_name"] == "Alice"
 
     r_lb = _client.get("/api/v1/reputation/leaderboard")
     assert r_lb.status_code == 200
     assert r_lb.json()["data"]["items"][0]["agent_name"] == "Alice"
+    assert r_lb.json()["data"]["items"][0]["general_points"] == 100
     assert isinstance(r_lb.json()["data"]["items"][0]["agent_num"], int)
+
+    r_policy = _client.get("/api/v1/reputation/policy")
+    assert r_policy.status_code == 200
+    policy_payload = r_policy.json()["data"]
+    assert "investor" in policy_payload["categories"]
+    sources = {item["source"]: item for item in policy_payload["sources"]}
+    assert sources["bootstrap"]["default_delta_points"] == 100
+    assert sources["project_capital_contributed"]["category"] == "investor"
+    assert sources["project_capital_contributed"]["status"] == "active"
 
     # Legacy "ledger" endpoint now serves reputation_events in ledger shape
     r_ledger = _client.get(

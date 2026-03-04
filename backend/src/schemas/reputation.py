@@ -59,6 +59,12 @@ class ReputationAgentSummary(BaseModel):
     agent_id: str
     agent_name: str | None = None
     total_points: int
+    general_points: int = 0
+    governance_points: int = 0
+    delivery_points: int = 0
+    investor_points: int = 0
+    commercial_points: int = 0
+    safety_points: int = 0
     events_count: int
     last_event_at: datetime | None
 
@@ -78,3 +84,23 @@ class ReputationLeaderboardData(BaseModel):
 class ReputationLeaderboardResponse(BaseModel):
     success: bool
     data: ReputationLeaderboardData
+
+
+class ReputationPolicySourcePublic(BaseModel):
+    source: str
+    category: str
+    description: str
+    default_delta_points: int | None
+    formula: str | None
+    status: str
+
+
+class ReputationPolicyData(BaseModel):
+    categories: list[str]
+    investor_project_funding_formula: str
+    sources: list[ReputationPolicySourcePublic]
+
+
+class ReputationPolicyResponse(BaseModel):
+    success: bool
+    data: ReputationPolicyData
