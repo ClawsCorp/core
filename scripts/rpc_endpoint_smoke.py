@@ -87,8 +87,11 @@ def main() -> int:
     )
     parser.add_argument(
         "--rpc-url",
-        default=os.getenv("BASE_SEPOLIA_RPC_URL", "").strip(),
-        help="RPC URL to test (defaults to BASE_SEPOLIA_RPC_URL).",
+        default=(
+            os.getenv("BLOCKCHAIN_RPC_URL", "").strip()
+            or os.getenv("BASE_SEPOLIA_RPC_URL", "").strip()
+        ),
+        help="RPC URL to test (defaults to BLOCKCHAIN_RPC_URL, then BASE_SEPOLIA_RPC_URL).",
     )
     parser.add_argument(
         "--expected-chain-id",
@@ -115,7 +118,7 @@ def main() -> int:
                 {
                     "success": False,
                     "error": "missing_rpc_url",
-                    "hint": "Set --rpc-url or BASE_SEPOLIA_RPC_URL.",
+                    "hint": "Set --rpc-url or BLOCKCHAIN_RPC_URL (or legacy BASE_SEPOLIA_RPC_URL).",
                 }
             )
         )

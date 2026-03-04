@@ -40,7 +40,10 @@ def _load_env(envfile: Path | None) -> dict[str, str]:
     if envfile is not None:
         merged.update(_read_envfile(envfile))
     for key in (
+        "BLOCKCHAIN_RPC_URL",
         "BASE_SEPOLIA_RPC_URL",
+        "DEFAULT_CHAIN_ID",
+        "TARGET_HARDHAT_NETWORK",
         "DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS",
         "SAFE_OWNER_ADDRESS",
         "SAFE_OWNER_KEYS_FILE",
@@ -118,12 +121,23 @@ def _inspect_keys_file(path: Path) -> dict[str, Any]:
 def _owner_check(env: dict[str, str]) -> dict[str, Any]:
     contract_address = env.get("DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS", "").strip()
     safe_owner = env.get("SAFE_OWNER_ADDRESS", "").strip()
-    rpc_url = env.get("BASE_SEPOLIA_RPC_URL", "").strip()
+    rpc_url = env.get("BLOCKCHAIN_RPC_URL", "").strip() or env.get("BASE_SEPOLIA_RPC_URL", "").strip()
     contracts_dir = Path(env.get("CONTRACTS_DIR", "").strip() or CONTRACTS_DIR).expanduser()
+    target_network = env.get("TARGET_HARDHAT_NETWORK", "").strip()
+    if not target_network:
+        default_chain_id_raw = env.get("DEFAULT_CHAIN_ID", "").strip()
+        if default_chain_id_raw:
+            try:
+                target_network = "base" if int(default_chain_id_raw) == 8453 else "baseSepolia"
+            except ValueError:
+                target_network = "baseSepolia"
+        else:
+            target_network = "baseSepolia"
 
     result: dict[str, Any] = {
         "contract": contract_address,
         "expected_owner": safe_owner,
+        "target_network": target_network,
         "matches_expected_owner": False,
         "owner": None,
         "errors": [],
@@ -144,10 +158,14 @@ def _owner_check(env: dict[str, str]) -> dict[str, Any]:
         "run",
         "scripts/check-dividend-distributor-owner.js",
         "--network",
-        "baseSepolia",
+        target_network,
     ]
     run_env = os.environ.copy()
-    run_env["BASE_SEPOLIA_RPC_URL"] = rpc_url
+    run_env["BLOCKCHAIN_RPC_URL"] = rpc_url
+    if target_network == "base":
+        run_env["BASE_MAINNET_RPC_URL"] = rpc_url
+    else:
+        run_env["BASE_SEPOLIA_RPC_URL"] = rpc_url
     run_env["DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS"] = contract_address
     run_env["SAFE_OWNER_ADDRESS"] = safe_owner
     try:

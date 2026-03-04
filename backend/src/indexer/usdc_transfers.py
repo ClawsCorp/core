@@ -347,8 +347,11 @@ def main(argv: list[str] | None = None) -> int:
     settings = get_settings()
     if not settings.database_url:
         raise SystemExit("DATABASE_URL is required for indexer")
-    if not settings.base_sepolia_rpc_url:
-        raise SystemExit("BASE_SEPOLIA_RPC_URL is required for indexer")
+    if not settings.blockchain_rpc_url:
+        raise SystemExit(
+            "Blockchain RPC URL is required for indexer "
+            "(set BLOCKCHAIN_RPC_URL or BASE_SEPOLIA_RPC_URL)"
+        )
     if not settings.usdc_address or not _looks_like_address(settings.usdc_address):
         raise SystemExit("USDC_ADDRESS is required for indexer")
 
@@ -365,12 +368,12 @@ def main(argv: list[str] | None = None) -> int:
             with SessionLocal() as db:
                 watched = _resolve_watched_addresses(db)
 
-                chain_hex = _rpc_call(settings.base_sepolia_rpc_url, "eth_chainId", [])
+                chain_hex = _rpc_call(settings.blockchain_rpc_url, "eth_chainId", [])
                 chain_id = _parse_hex_int(chain_hex) if isinstance(chain_hex, str) else None
                 if chain_id is None:
                     raise SystemExit("Unable to read chain id")
 
-                latest_hex = _rpc_call(settings.base_sepolia_rpc_url, "eth_blockNumber", [])
+                latest_hex = _rpc_call(settings.blockchain_rpc_url, "eth_blockNumber", [])
                 latest = _parse_hex_int(latest_hex) if isinstance(latest_hex, str) else None
                 if latest is None:
                     raise SystemExit("Unable to read latest block")
@@ -408,7 +411,7 @@ def main(argv: list[str] | None = None) -> int:
 
                 result = index_usdc_transfers(
                     db=db,
-                    rpc_url=settings.base_sepolia_rpc_url,
+                    rpc_url=settings.blockchain_rpc_url,
                     usdc_address=settings.usdc_address.lower(),
                     cursor_key=args.cursor_key,
                     from_block=from_block,

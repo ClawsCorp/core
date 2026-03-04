@@ -100,6 +100,19 @@ def test_stats_includes_configured_default_chain_id(
     assert payload["data"]["default_chain_id"] == 8453
 
 
+def test_settings_prefers_blockchain_rpc_url_alias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("BLOCKCHAIN_RPC_URL", "https://rpc.example.invalid")
+    monkeypatch.setenv("BASE_SEPOLIA_RPC_URL", "https://legacy.example.invalid")
+    get_settings.cache_clear()
+
+    settings = get_settings()
+    assert settings.blockchain_rpc_url == "https://rpc.example.invalid"
+    assert settings.base_sepolia_rpc_url == "https://rpc.example.invalid"
+    assert settings.blockchain_rpc_env_name == "BLOCKCHAIN_RPC_URL"
+
+
 def test_indexer_status_reports_degraded_runtime_state(
     _client: TestClient,
     _db: sessionmaker[Session],

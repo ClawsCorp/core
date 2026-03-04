@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 _BALANCE_OF_SELECTOR = "70a08231"
 _GET_DISTRIBUTION_SELECTOR = "3b345a87"
+_BLOCKCHAIN_RPC_HINT = "set BLOCKCHAIN_RPC_URL or BASE_SEPOLIA_RPC_URL"
 
 
 class BlockchainReadError(Exception):
@@ -52,6 +53,11 @@ class TransactionReceiptResult:
     found: bool
     status: int | None
     block_number: int | None
+
+
+def _rpc_config_error(*required: str) -> BlockchainConfigError:
+    details = ", ".join(required)
+    return BlockchainConfigError(f"Missing {details} ({_BLOCKCHAIN_RPC_HINT})")
 
 
 def build_create_distribution_safe_tx(profit_month_value: int, total_profit_micro_usdc: int) -> dict[str, str | int]:
@@ -144,9 +150,9 @@ process.stdout.write(JSON.stringify({
 
 def read_block_timestamp_utc(block_number: int) -> datetime:
     settings = get_settings()
-    rpc_url = settings.base_sepolia_rpc_url
+    rpc_url = settings.blockchain_rpc_url
     if rpc_url is None or _is_placeholder(rpc_url):
-        raise BlockchainConfigError("Missing BASE_SEPOLIA_RPC_URL")
+        raise _rpc_config_error("blockchain RPC URL")
     if block_number < 0:
         raise BlockchainReadError("block_number must be >= 0")
 
@@ -169,12 +175,12 @@ def read_block_timestamp_utc(block_number: int) -> datetime:
 
 def read_usdc_balance_of_distributor() -> BalanceReadResult:
     settings = get_settings()
-    rpc_url = settings.base_sepolia_rpc_url
+    rpc_url = settings.blockchain_rpc_url
     usdc_address = settings.usdc_address
     distributor_address = settings.dividend_distributor_contract_address
     if _is_invalid_rpc_config(rpc_url, usdc_address, distributor_address):
         raise BlockchainConfigError(
-            "Missing BASE_SEPOLIA_RPC_URL, USDC_ADDRESS, or DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS"
+            "Missing blockchain RPC URL, USDC_ADDRESS, or DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS (set BLOCKCHAIN_RPC_URL or BASE_SEPOLIA_RPC_URL)"
         )
 
     call_data = f"0x{_BALANCE_OF_SELECTOR}{_encode_address_arg(distributor_address)}"
@@ -208,16 +214,16 @@ def read_usdc_balance_of_distributor() -> BalanceReadResult:
     return BalanceReadResult(
         balance_micro_usdc=balance,
         rpc_chain_id=chain_id,
-        rpc_url_name="base_sepolia",
+        rpc_url_name=settings.blockchain_rpc_env_name.lower(),
     )
 
 
 def get_usdc_balance_micro_usdc(address: str) -> BalanceReadResult:
     settings = get_settings()
-    rpc_url = settings.base_sepolia_rpc_url
+    rpc_url = settings.blockchain_rpc_url
     usdc_address = settings.usdc_address
     if _is_invalid_rpc_config(rpc_url, usdc_address, address):
-        raise BlockchainConfigError("Missing BASE_SEPOLIA_RPC_URL or USDC_ADDRESS")
+        raise _rpc_config_error("blockchain RPC URL", "USDC_ADDRESS")
 
     call_data = f"0x{_BALANCE_OF_SELECTOR}{_encode_address_arg(address)}"
     balance_hex = _rpc_call(
@@ -250,17 +256,17 @@ def get_usdc_balance_micro_usdc(address: str) -> BalanceReadResult:
     return BalanceReadResult(
         balance_micro_usdc=balance,
         rpc_chain_id=chain_id,
-        rpc_url_name="base_sepolia",
+        rpc_url_name=settings.blockchain_rpc_env_name.lower(),
     )
 
 
 def read_distribution_state(profit_month_value: int) -> DistributionState:
     settings = get_settings()
-    rpc_url = settings.base_sepolia_rpc_url
+    rpc_url = settings.blockchain_rpc_url
     distributor_address = settings.dividend_distributor_contract_address
     if _is_invalid_rpc_config(rpc_url, settings.usdc_address, distributor_address):
         raise BlockchainConfigError(
-            "Missing BASE_SEPOLIA_RPC_URL, USDC_ADDRESS, or DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS"
+            "Missing blockchain RPC URL, USDC_ADDRESS, or DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS (set BLOCKCHAIN_RPC_URL or BASE_SEPOLIA_RPC_URL)"
         )
 
     data = f"0x{_GET_DISTRIBUTION_SELECTOR}{_encode_uint256_arg(profit_month_value)}"
@@ -285,9 +291,9 @@ def read_distribution_state(profit_month_value: int) -> DistributionState:
 
 def read_transaction_receipt(tx_hash: str) -> TransactionReceiptResult:
     settings = get_settings()
-    rpc_url = settings.base_sepolia_rpc_url
+    rpc_url = settings.blockchain_rpc_url
     if rpc_url is None or _is_placeholder(rpc_url):
-        raise BlockchainConfigError("Missing BASE_SEPOLIA_RPC_URL")
+        raise _rpc_config_error("blockchain RPC URL")
 
     receipt = _rpc_call(rpc_url, "eth_getTransactionReceipt", [tx_hash])
     if receipt is None:
@@ -317,13 +323,13 @@ def read_transaction_receipt(tx_hash: str) -> TransactionReceiptResult:
 
 def submit_create_distribution_tx(profit_month_value: int, total_profit_micro_usdc: int) -> str:
     settings = get_settings()
-    rpc_url = settings.base_sepolia_rpc_url
+    rpc_url = settings.blockchain_rpc_url
     distributor_address = settings.dividend_distributor_contract_address
     signer_private_key = settings.oracle_signer_private_key
 
     if _is_invalid_rpc_config(rpc_url, settings.usdc_address, distributor_address):
         raise BlockchainConfigError(
-            "Missing BASE_SEPOLIA_RPC_URL, USDC_ADDRESS, or DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS"
+            "Missing blockchain RPC URL, USDC_ADDRESS, or DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS (set BLOCKCHAIN_RPC_URL or BASE_SEPOLIA_RPC_URL)"
         )
     if signer_private_key is None or _is_placeholder(signer_private_key):
         raise BlockchainConfigError("Missing ORACLE_SIGNER_PRIVATE_KEY")
@@ -439,13 +445,13 @@ def submit_safe_transaction(
     safe_address: str | None = None,
 ) -> str:
     settings = get_settings()
-    rpc_url = settings.base_sepolia_rpc_url
+    rpc_url = settings.blockchain_rpc_url
     executor_private_key = settings.oracle_signer_private_key
     configured_safe_address = str(safe_address or settings.safe_owner_address or "").strip()
     keys_file = str(settings.safe_owner_keys_file or "").strip()
 
     if not rpc_url or _is_placeholder(rpc_url):
-        raise BlockchainConfigError("Missing BASE_SEPOLIA_RPC_URL")
+        raise _rpc_config_error("blockchain RPC URL")
     if not executor_private_key or _is_placeholder(executor_private_key):
         raise BlockchainConfigError("Missing ORACLE_SIGNER_PRIVATE_KEY")
     if not configured_safe_address or _is_placeholder(configured_safe_address):
@@ -596,12 +602,12 @@ def _load_safe_owner_keys(path: str) -> tuple[int, list[str]]:
 
 def submit_usdc_transfer_tx(*, to_address: str, amount_micro_usdc: int) -> str:
     settings = get_settings()
-    rpc_url = settings.base_sepolia_rpc_url
+    rpc_url = settings.blockchain_rpc_url
     usdc_address = settings.usdc_address
     signer_private_key = settings.oracle_signer_private_key
 
     if _is_invalid_rpc_config(rpc_url, usdc_address, to_address):
-        raise BlockchainConfigError("Missing BASE_SEPOLIA_RPC_URL or USDC_ADDRESS")
+        raise _rpc_config_error("blockchain RPC URL", "USDC_ADDRESS")
     if signer_private_key is None or _is_placeholder(signer_private_key):
         raise BlockchainConfigError("Missing ORACLE_SIGNER_PRIVATE_KEY")
     if amount_micro_usdc <= 0:
@@ -676,13 +682,13 @@ def submit_execute_distribution_tx(
     author_shares: list[int],
 ) -> str:
     settings = get_settings()
-    rpc_url = settings.base_sepolia_rpc_url
+    rpc_url = settings.blockchain_rpc_url
     distributor_address = settings.dividend_distributor_contract_address
     signer_private_key = settings.oracle_signer_private_key
 
     if _is_invalid_rpc_config(rpc_url, settings.usdc_address, distributor_address):
         raise BlockchainConfigError(
-            "Missing BASE_SEPOLIA_RPC_URL, USDC_ADDRESS, or DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS"
+            "Missing blockchain RPC URL, USDC_ADDRESS, or DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS (set BLOCKCHAIN_RPC_URL or BASE_SEPOLIA_RPC_URL)"
         )
     if signer_private_key is None or _is_placeholder(signer_private_key):
         raise BlockchainConfigError("Missing ORACLE_SIGNER_PRIVATE_KEY")
