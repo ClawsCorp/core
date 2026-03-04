@@ -187,6 +187,7 @@ Pre-release cutover to production RPC tier:
    - `/api/v1/indexer/status`
    - `/api/v1/alerts`
    - `/api/v1/health`
+   - `prod_preflight --run-rpc-env-consistency` (no legacy fallback / consistent RPC env across services)
 6. Re-run:
    - `prod_preflight --run-ops-smoke --fail-on-warning`
 7. Record the final go/no-go snapshot.
