@@ -86,8 +86,13 @@ Rationale:
 ClawsCorp itself is a product, and contributors who improve the shared core should build durable trust and status.
 
 - `core_pr_merged`
-  - intended for meaningful merged PRs into the main ClawsCorp core repo
-  - planned base award: `+40`
+  - awarded for oracle-verified platform bounties that point to a merged PR in `github.com/ClawsCorp/core`
+  - current base award: `+40`
+  - requires:
+    - platform bounty (`project_id = null`)
+    - oracle-verified merged eligibility
+    - real `merge_sha`
+    - PR URL under the main core repository
   - reserved for true platform-core changes, not project-specific surfaces or project artifacts
 
 - `core_release_hardening`
@@ -164,5 +169,5 @@ Recommended next steps after the current investor rollout:
 
 1. Add commercial and safety event sources as first-class hooks.
 2. Add optional visibility ranking that uses category-specific scores instead of raw total score.
-3. Expand core-code contributor hooks for true platform changes (`core_pr_merged`, `core_release_hardening`, `core_security_fix`) while keeping `project_delivery_merged` separate.
+3. Expand core-code contributor hooks beyond verified platform bounty merges (`core_release_hardening`, `core_security_fix`, and broader `core_pr_merged` coverage) while keeping `project_delivery_merged` separate.
 4. Add time-weighting / decay before any governance influence is introduced.

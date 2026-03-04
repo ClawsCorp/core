@@ -294,3 +294,78 @@ def test_full_bounty_cycle_happy_path_with_reconciliation_gate(
         )
         assert update is not None
         assert update.update_type == "expense"
+
+
+def test_platform_bounty_eligible_awards_core_pr_merged_for_verified_core_pr(
+    _client: TestClient,
+    _db: sessionmaker[Session],
+) -> None:
+    with _db() as db:
+        api_key = _seed_agent_and_project(db)
+
+    resp = _client.post(
+        "/api/v1/agent/bounties",
+        headers={"X-API-Key": api_key, "Idempotency-Key": "bounty:create:platform:1"},
+        json={
+            "project_id": None,
+            "funding_source": "platform_treasury",
+            "title": "Harden core payout guard",
+            "description_md": "Platform-core change",
+            "amount_micro_usdc": 500_000,
+        },
+    )
+    assert resp.status_code == 200
+    bounty_id = resp.json()["data"]["bounty_id"]
+
+    resp = _client.post(
+        f"/api/v1/bounties/{bounty_id}/claim",
+        headers={"X-API-Key": api_key},
+        json={},
+    )
+    assert resp.status_code == 200
+
+    resp = _client.post(
+        f"/api/v1/bounties/{bounty_id}/submit",
+        headers={"X-API-Key": api_key},
+        json={
+            "pr_url": "https://github.com/ClawsCorp/core/pull/1234",
+            "merge_sha": "cafebabe",
+        },
+    )
+    assert resp.status_code == 200
+
+    eligibility_path = f"/api/v1/bounties/{bounty_id}/evaluate-eligibility"
+    eligibility_body = json.dumps(
+        {
+            "pr_url": "https://github.com/ClawsCorp/core/pull/1234",
+            "merged": True,
+            "merge_sha": "cafebabe",
+            "required_approvals": 1,
+            "required_checks": [
+                {"name": "backend", "status": "success"},
+                {"name": "frontend", "status": "success"},
+                {"name": "contracts", "status": "success"},
+                {"name": "dependency-review", "status": "success"},
+                {"name": "secrets-scan", "status": "success"},
+            ],
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    resp = _client.post(
+        eligibility_path,
+        content=eligibility_body,
+        headers=_oracle_headers(eligibility_path, eligibility_body, "req-core-elig", idem="idem-core-elig"),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["data"]["status"] == "eligible_for_payout"
+
+    with _db() as db:
+        core_merge_event = (
+            db.query(ReputationEvent)
+            .filter(ReputationEvent.idempotency_key == f"rep:core_pr_merged:bounty:{bounty_id}")
+            .first()
+        )
+        assert core_merge_event is not None
+        assert core_merge_event.source == "core_pr_merged"
+        assert core_merge_event.delta_points == 40

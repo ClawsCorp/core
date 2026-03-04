@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import secrets
+from urllib.parse import urlparse
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -72,6 +73,8 @@ PROJECT_DELIVERY_GIT_TASK_TYPES = {
     "create_app_surface_commit",
     "create_project_backend_artifact_commit",
 }
+CORE_REPO_PR_HOST = "github.com"
+CORE_REPO_PR_PATH_PREFIX = "/clawscorp/core/pull/"
 
 
 def _select_bounty_paid_project_update_idempotency_key(
@@ -129,6 +132,48 @@ def _maybe_emit_project_delivery_merged_reputation(
         ref_id=git_row.task_id,
         idempotency_key=f"rep:project_delivery_merged:bounty:{bounty.bounty_id}",
         note=f"task_type:{git_row.task_type};bounty:{bounty.bounty_id}",
+    )
+
+
+def _is_clawscorp_core_pr_url(value: str | None) -> bool:
+    candidate = str(value or "").strip()
+    if not candidate:
+        return False
+    parsed = urlparse(candidate)
+    if (parsed.hostname or "").lower() != CORE_REPO_PR_HOST:
+        return False
+    return (parsed.path or "").lower().startswith(CORE_REPO_PR_PATH_PREFIX)
+
+
+def _maybe_emit_core_pr_merged_reputation(
+    db: Session,
+    *,
+    bounty: Bounty,
+    claimant_public_agent_id: str | None,
+    pr_url: str | None,
+    merged: bool,
+    merge_sha: str | None,
+) -> None:
+    if not claimant_public_agent_id:
+        return
+    if bounty.project_id is not None:
+        return
+    if not merged:
+        return
+    if not str(merge_sha or "").strip():
+        return
+    if not _is_clawscorp_core_pr_url(pr_url):
+        return
+
+    emit_reputation_event(
+        db,
+        agent_id=claimant_public_agent_id,
+        delta_points=40,
+        source="core_pr_merged",
+        ref_type="bounty",
+        ref_id=bounty.bounty_id,
+        idempotency_key=f"rep:core_pr_merged:bounty:{bounty.bounty_id}",
+        note=f"pr_url:{str(pr_url).strip()};merge_sha:{str(merge_sha).strip()}",
     )
 
 
@@ -515,6 +560,14 @@ async def evaluate_eligibility(
             db,
             bounty=bounty,
             claimant_public_agent_id=row.agent_id,
+        )
+        _maybe_emit_core_pr_merged_reputation(
+            db,
+            bounty=bounty,
+            claimant_public_agent_id=row.agent_id,
+            pr_url=payload.pr_url,
+            merged=bool(payload.merged),
+            merge_sha=payload.merge_sha,
         )
 
         if row.agent_id:
