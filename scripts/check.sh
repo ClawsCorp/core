@@ -9,6 +9,7 @@ set -euo pipefail
 #   scripts/check.sh frontend     # only frontend
 #   scripts/check.sh contracts    # only contracts
 #   scripts/check.sh secrets      # only secrets diff scan
+#   scripts/check.sh history-secrets   # only full git history secrets scan
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -19,9 +20,9 @@ if [[ "$#" -eq 0 ]]; then
 else
   for arg in "$@"; do
     case "$arg" in
-      backend|frontend|contracts|secrets) targets+=("$arg") ;;
+      backend|frontend|contracts|secrets|history-secrets) targets+=("$arg") ;;
       *)
-        echo "error: unknown target '$arg' (expected: backend|frontend|contracts|secrets)" >&2
+        echo "error: unknown target '$arg' (expected: backend|frontend|contracts|secrets|history-secrets)" >&2
         exit 1
         ;;
     esac
@@ -74,6 +75,10 @@ for t in "${targets[@]}"; do
     secrets)
       echo "[check] secrets: diff scan"
       python3 scripts/secrets_scan.py --diff-range "origin/main...HEAD"
+      ;;
+    history-secrets)
+      echo "[check] history-secrets: full git history scan"
+      python3 scripts/secrets_history_scan.py --json
       ;;
   esac
 done
