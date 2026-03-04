@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "network": {
+    "name": "base",
+    "chain_id": 8453,
+    "rpc_env_var": "BLOCKCHAIN_RPC_URL"
+  },
+  "deployed_at": "2026-03-04T12:00:00Z",
+  "deployer": {
+    "address": "0x1111111111111111111111111111111111111111"
+  },
+  "usdc_address": "0x2222222222222222222222222222222222222222",
+  "treasury_wallet_address": "0x3333333333333333333333333333333333333333",
+  "founder_wallet_address": "0x4444444444444444444444444444444444444444",
+  "contracts": {
+    "funding_pool": {
+      "address": "0x5555555555555555555555555555555555555555",
+      "deploy_tx_hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "dividend_distributor": {
+      "address": "0x6666666666666666666666666666666666666666",
+      "deploy_tx_hash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  },
+  "safe": {
+    "address": "0x7777777777777777777777777777777777777777",
+    "deploy_tx_hash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "owners": [
+      "0x8888888888888888888888888888888888888888",
+      "0x9999999999999999999999999999999999999999",
+      "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ],
+    "threshold": 2
+  },
+  "ownership_transfer": {
+    "tx_hash": "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "new_owner": "0x7777777777777777777777777777777777777777"
+  }
+}

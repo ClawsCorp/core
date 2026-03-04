@@ -201,6 +201,16 @@ After deployment, capture one deployment manifest containing:
   - Safe deploy
   - ownership transfer
 
+Canonical example:
+
+- `docs/BASE_MAINNET_DEPLOYMENT_MANIFEST.example.json`
+
+Required validation before using this manifest as the cutover source of truth:
+
+```bash
+python3 scripts/validate_mainnet_deploy_manifest.py path/to/base-mainnet-deploy.json
+```
+
 This manifest becomes the configuration source of truth for:
 
 - Railway backend
@@ -214,8 +224,9 @@ After all four steps:
 
 1. Verify owner state on-chain.
 2. Verify contracts respond at the expected addresses.
-3. Store the deployment manifest locally and in secure operator records.
-4. Do not switch the live backend to mainnet yet unless the next mainnet cutover phase is planned and staffed.
+3. Validate the deployment manifest with `scripts/validate_mainnet_deploy_manifest.py`.
+4. Store the validated deployment manifest locally and in secure operator records.
+5. Do not switch the live backend to mainnet yet unless the next mainnet cutover phase is planned and staffed.
 
 ## What This Runbook Does Not Do
 

@@ -102,6 +102,8 @@ Required outputs:
 
 This deployment must be recorded as the new source of truth for backend and frontend configuration.
 
+The source of truth should be a validated deployment manifest, not free-form notes.
+
 Runbook:
 
 - `docs/BASE_MAINNET_DEPLOY_RUNBOOK.md`
