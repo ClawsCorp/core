@@ -242,6 +242,40 @@ def test_alerts_warn_when_platform_capital_reconciliation_missing(monkeypatch) -
         get_settings.cache_clear()
 
 
+def test_alerts_warn_when_rpc_env_uses_legacy_fallback(monkeypatch) -> None:
+    monkeypatch.delenv("BLOCKCHAIN_RPC_URL", raising=False)
+    monkeypatch.setenv("BASE_SEPOLIA_RPC_URL", "https://example-rpc.invalid")
+    get_settings.cache_clear()
+
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+
+    def _override_get_db():
+        db: Session = session_local()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = _override_get_db
+    client = TestClient(app, raise_server_exceptions=False)
+    try:
+        resp = client.get("/api/v1/alerts")
+        assert resp.status_code == 200
+        items = [x for x in resp.json()["data"]["items"] if isinstance(x, dict)]
+        matches = [x for x in items if str(x.get("alert_type")) == "legacy_rpc_env_fallback"]
+        assert len(matches) == 1
+        assert matches[0]["ref"] == "BASE_SEPOLIA_RPC_URL"
+    finally:
+        app.dependency_overrides.clear()
+        get_settings.cache_clear()
+
+
 def test_alerts_warn_when_dividend_distributor_owner_mismatches_safe(monkeypatch) -> None:
     monkeypatch.setenv("SAFE_OWNER_ADDRESS", "0x00000000000000000000000000000000000000aa")
     get_settings.cache_clear()
