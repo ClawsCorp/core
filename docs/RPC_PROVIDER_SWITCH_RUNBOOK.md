@@ -161,10 +161,19 @@ curl -sS https://core-production-b1a0.up.railway.app/api/v1/alerts
 ```bash
 python3 scripts/prod_preflight.py \
   --run-ops-smoke \
+  --run-rpc-env-consistency \
   --ops-smoke-env-file /Users/alex/.oracle.env \
   --ops-smoke-month auto \
   --ops-smoke-tx-max-tasks 5 \
   --fail-on-warning
+```
+
+If you want to verify exact URL parity across all services:
+
+```bash
+RAILWAY_WORKSPACE_TOKEN=... python3 scripts/prod_preflight.py \
+  --run-rpc-env-consistency \
+  --rpc-env-expected-url "$NEW_RPC_URL"
 ```
 
 7. Record the post-change snapshot:

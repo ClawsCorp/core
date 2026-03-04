@@ -227,6 +227,95 @@ def _run_mainnet_cutover_preflight(
     )
 
 
+def _run_rpc_env_consistency(
+    *,
+    project_id: str,
+    environment_name: str,
+    services: list[str],
+    expected_rpc_url: str | None,
+    railway_workspace_token: str | None,
+    allow_legacy_fallback: bool,
+    timeout_seconds: int,
+) -> CheckResult:
+    repo_root = Path(__file__).resolve().parents[1]
+    script_path = repo_root / "scripts" / "verify_rpc_env_consistency.py"
+    if not script_path.exists():
+        return CheckResult(
+            name="rpc_env_consistency",
+            ok=False,
+            detail=f"missing script: {script_path}",
+        )
+
+    token = (railway_workspace_token or "").strip() or os.getenv("RAILWAY_WORKSPACE_TOKEN", "").strip()
+    if not token:
+        return CheckResult(
+            name="rpc_env_consistency",
+            ok=False,
+            detail="missing Railway token for rpc env consistency check",
+            data={"error": "missing_railway_workspace_token"},
+        )
+
+    cmd = [
+        sys.executable,
+        str(script_path),
+        "--project-id",
+        project_id,
+        "--environment-name",
+        environment_name,
+    ]
+    for service in services:
+        s = str(service or "").strip()
+        if s:
+            cmd.extend(["--service", s])
+    if expected_rpc_url:
+        cmd.extend(["--expected-rpc-url", expected_rpc_url])
+    if allow_legacy_fallback:
+        cmd.append("--allow-legacy-fallback")
+
+    timeout = max(30, int(timeout_seconds)) * 2
+    try:
+        env = os.environ.copy()
+        env["RAILWAY_WORKSPACE_TOKEN"] = token
+        completed = subprocess.run(
+            cmd,
+            cwd=str(repo_root),
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=env,
+        )
+    except subprocess.TimeoutExpired:
+        return CheckResult(
+            name="rpc_env_consistency",
+            ok=False,
+            detail=f"rpc env consistency check timed out after {timeout}s",
+        )
+    except Exception as exc:
+        return CheckResult(name="rpc_env_consistency", ok=False, detail=f"rpc env consistency execution error: {exc}")
+
+    stdout = (completed.stdout or "").strip()
+    stderr = (completed.stderr or "").strip()
+    parsed_stdout: dict[str, Any] | str | None = None
+    if stdout:
+        try:
+            raw = json.loads(stdout)
+            parsed_stdout = raw if isinstance(raw, dict) else {"raw": raw}
+        except json.JSONDecodeError:
+            parsed_stdout = stdout
+    ok = completed.returncode == 0
+    return CheckResult(
+        name="rpc_env_consistency",
+        ok=ok,
+        detail="rpc env consistency passed" if ok else f"rpc env consistency failed with code={completed.returncode}",
+        data={
+            "return_code": completed.returncode,
+            "stdout": parsed_stdout,
+            "stderr_tail": stderr.splitlines()[-12:] if stderr else [],
+        },
+    )
+
+
 def run_preflight(
     *,
     api_base_url: str,
@@ -246,6 +335,13 @@ def run_preflight(
     mainnet_environment_name: str,
     mainnet_expected_rpc_url: str | None,
     mainnet_railway_workspace_token: str | None,
+    run_rpc_env_consistency: bool,
+    rpc_env_project_id: str,
+    rpc_env_environment_name: str,
+    rpc_env_services: list[str],
+    rpc_env_expected_url: str | None,
+    rpc_env_railway_workspace_token: str | None,
+    rpc_env_allow_legacy_fallback: bool,
 ) -> tuple[bool, list[CheckResult], dict[str, Any]]:
     checks: list[CheckResult] = []
     platform_capital_reconciliation_max_age_seconds = 0
@@ -255,6 +351,7 @@ def run_preflight(
         "timestamp": _utc_now_iso(),
         "run_ops_smoke": bool(run_ops_smoke),
         "run_mainnet_cutover_preflight": bool(run_mainnet_cutover_preflight),
+        "run_rpc_env_consistency": bool(run_rpc_env_consistency),
     }
 
     # health
@@ -436,6 +533,19 @@ def run_preflight(
                 )
             )
 
+    if run_rpc_env_consistency:
+        checks.append(
+            _run_rpc_env_consistency(
+                project_id=str(rpc_env_project_id),
+                environment_name=str(rpc_env_environment_name),
+                services=list(rpc_env_services or []),
+                expected_rpc_url=(rpc_env_expected_url or "").strip() or None,
+                railway_workspace_token=(rpc_env_railway_workspace_token or "").strip() or None,
+                allow_legacy_fallback=bool(rpc_env_allow_legacy_fallback),
+                timeout_seconds=timeout_seconds,
+            )
+        )
+
     overall_ok = all(c.ok for c in checks)
     return overall_ok, checks, meta
 
@@ -518,6 +628,42 @@ def main() -> int:
         help="Optional override for RAILWAY_WORKSPACE_TOKEN passed to mainnet cutover preflight.",
     )
     parser.add_argument(
+        "--run-rpc-env-consistency",
+        action="store_true",
+        help="Run Railway RPC env consistency gate across core/indexer/worker/autonomy services.",
+    )
+    parser.add_argument(
+        "--rpc-env-project-id",
+        default="cd76995a-d819-4b36-808b-422de3ff430e",
+        help="Railway project id for RPC env consistency check.",
+    )
+    parser.add_argument(
+        "--rpc-env-environment-name",
+        default="production",
+        help="Railway environment name for RPC env consistency check.",
+    )
+    parser.add_argument(
+        "--rpc-env-service",
+        action="append",
+        default=[],
+        help="Service name for RPC env consistency check (repeatable; default core/usdc-indexer/tx-worker/autonomy-loop).",
+    )
+    parser.add_argument(
+        "--rpc-env-expected-url",
+        default="",
+        help="Optional exact BLOCKCHAIN_RPC_URL expected in all checked services.",
+    )
+    parser.add_argument(
+        "--rpc-env-railway-workspace-token",
+        default="",
+        help="Optional override for RAILWAY_WORKSPACE_TOKEN used by rpc env consistency check.",
+    )
+    parser.add_argument(
+        "--rpc-env-allow-legacy-fallback",
+        action="store_true",
+        help="Allow BASE_SEPOLIA_RPC_URL fallback when BLOCKCHAIN_RPC_URL is missing.",
+    )
+    parser.add_argument(
         "--allow-warning-type",
         action="append",
         default=[],
@@ -550,6 +696,17 @@ def main() -> int:
         mainnet_environment_name=str(args.mainnet_environment_name),
         mainnet_expected_rpc_url=(args.mainnet_expected_rpc_url or "").strip() or None,
         mainnet_railway_workspace_token=(args.mainnet_railway_workspace_token or "").strip() or None,
+        run_rpc_env_consistency=bool(args.run_rpc_env_consistency),
+        rpc_env_project_id=str(args.rpc_env_project_id),
+        rpc_env_environment_name=str(args.rpc_env_environment_name),
+        rpc_env_services=[
+            x.strip()
+            for x in (args.rpc_env_service or [])
+            if x and str(x).strip()
+        ] or ["core", "usdc-indexer", "tx-worker", "autonomy-loop"],
+        rpc_env_expected_url=(args.rpc_env_expected_url or "").strip() or None,
+        rpc_env_railway_workspace_token=(args.rpc_env_railway_workspace_token or "").strip() or None,
+        rpc_env_allow_legacy_fallback=bool(args.rpc_env_allow_legacy_fallback),
     )
 
     out = {

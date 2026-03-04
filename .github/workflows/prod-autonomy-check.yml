@@ -146,6 +146,13 @@ jobs:
             fi
           fi
 
+          if [ -n "${RAILWAY_WORKSPACE_TOKEN}" ]; then
+            PREFLIGHT_CMD+=(
+              --run-rpc-env-consistency
+              --rpc-env-railway-workspace-token "${RAILWAY_WORKSPACE_TOKEN}"
+            )
+          fi
+
           "${PREFLIGHT_CMD[@]}" > prod_preflight_report.json
           cat prod_preflight_report.json
 
