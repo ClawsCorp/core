@@ -13,6 +13,16 @@ Current state:
 
 This runbook is intentionally a pre-release operation. Do not rotate the RPC endpoint casually during active debugging unless the old endpoint is clearly unstable.
 
+For the actual release window, prefer the single orchestration command below instead of running each sub-step manually:
+
+```bash
+python3 scripts/rpc_cutover.py \
+  --new-rpc-url 'https://...' \
+  --apply
+```
+
+Without `--apply`, the script stays in dry-run mode and only validates the candidate endpoint.
+
 ## Scope
 
 Services that must use the same Base Sepolia RPC endpoint:
@@ -53,6 +63,16 @@ python3 scripts/rpc_endpoint_smoke.py \
 ```
 
 ## Change Procedure
+
+Preferred one-command cutover:
+
+```bash
+python3 scripts/rpc_cutover.py \
+  --new-rpc-url 'https://...' \
+  --apply
+```
+
+Manual equivalent:
 
 1. Export the new endpoint only in the local operator shell:
 
@@ -186,3 +206,8 @@ python3 scripts/rpc_endpoint_smoke.py \
 - Do not store the new RPC URL in tracked files.
 - Keep provider keys only in Railway env and local operator env.
 - This runbook is the final infrastructure cutover step before first external-agent production launch, not part of daily operations.
+- `scripts/rpc_cutover.py` is intentionally fail-closed:
+  - candidate RPC must pass local smoke first
+  - each Railway service update must succeed
+  - Railway health must stay reachable
+  - final `prod_preflight --run-ops-smoke --fail-on-warning` must pass

@@ -183,6 +183,14 @@ See:
 
 - `docs/RPC_PROVIDER_SWITCH_RUNBOOK.md`
 
+Preferred cutover command:
+
+```bash
+python3 scripts/rpc_cutover.py \
+  --new-rpc-url 'https://...' \
+  --apply
+```
+
 Local Safe execution verification:
 
 ```bash
