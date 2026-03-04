@@ -96,7 +96,9 @@ PYTHONPATH=src python -m oracle_runner reconcile-project-capital --project-id pr
 PYTHONPATH=src python -m oracle_runner reconcile-project-revenue --project-id proj_...
 PYTHONPATH=src python -m oracle_runner project-reconcile --project-id proj_...
 PYTHONPATH=src python -m oracle_runner sync-project-capital
+PYTHONPATH=src python -m oracle_runner sync-platform-capital
 PYTHONPATH=src python -m oracle_runner sync-platform-investor-reputation
+PYTHONPATH=src python -m oracle_runner reconcile-platform-capital
 PYTHONPATH=src python -m oracle_runner billing-sync
 PYTHONPATH=src python -m oracle_runner prune-operational-tables
 PYTHONPATH=src python -m oracle_runner run-project-month --project-id proj_...
@@ -132,7 +134,9 @@ PYTHONPATH=src python -m oracle_runner --json reconcile-project-capital --projec
 PYTHONPATH=src python -m oracle_runner --json project-reconcile --project-id proj_...
 PYTHONPATH=src python -m oracle_runner --json open-funding-round --project-id proj_...
 PYTHONPATH=src python -m oracle_runner --json sync-project-capital
+PYTHONPATH=src python -m oracle_runner --json sync-platform-capital
 PYTHONPATH=src python -m oracle_runner --json sync-platform-investor-reputation
+PYTHONPATH=src python -m oracle_runner --json reconcile-platform-capital
 PYTHONPATH=src python -m oracle_runner --json prune-operational-tables
 PYTHONPATH=src python -m oracle_runner --json project-capital-event --project-id proj_... --delta-micro-usdc 1000000 --source stake
 PYTHONPATH=src python -m oracle_runner --json evaluate-bounty-eligibility --bounty-id bty_... --payload /path/eligibility.json
@@ -160,7 +164,7 @@ If `--idempotency-key` is omitted for execute actions, runner derives determinis
 
 ## One-command ops smoke
 
-For a single operational check of indexer ingestion + tx-worker + reconciliation + alerts:
+For a single operational check of indexer ingestion + tx-worker + platform settlement reconciliation + platform capital reconciliation + alerts:
 
 ```bash
 scripts/ops_smoke.sh --env-file /Users/alex/.oracle.env --month auto --tx-max-tasks 5

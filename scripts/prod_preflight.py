@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib import error, request
+from datetime import timedelta
 
 
 DEFAULT_API_BASE = "https://core-production-b1a0.up.railway.app"
@@ -157,6 +158,7 @@ def run_preflight(
     ops_smoke_allow_reconcile_blocked_reasons: list[str],
 ) -> tuple[bool, list[CheckResult], dict[str, Any]]:
     checks: list[CheckResult] = []
+    platform_capital_reconciliation_max_age_seconds = 0
     meta: dict[str, Any] = {
         "api_base_url": api_base_url,
         "portal_base_url": portal_base_url,
@@ -187,7 +189,12 @@ def run_preflight(
         data = stats.get("data") if isinstance(stats, dict) else None
         d = data if isinstance(data, dict) else {}
         cap_age = d.get("project_capital_reconciliation_max_age_seconds")
+        platform_cap_age = d.get("platform_capital_reconciliation_max_age_seconds")
         rev_age = d.get("project_revenue_reconciliation_max_age_seconds")
+        try:
+            platform_capital_reconciliation_max_age_seconds = int(platform_cap_age or 0)
+        except Exception:
+            platform_capital_reconciliation_max_age_seconds = 0
         checks.append(
             CheckResult(
                 name="stats",
@@ -196,6 +203,7 @@ def run_preflight(
                 data={
                     "total_registered_agents": d.get("total_registered_agents"),
                     "project_capital_reconciliation_max_age_seconds": cap_age,
+                    "platform_capital_reconciliation_max_age_seconds": platform_cap_age,
                     "project_revenue_reconciliation_max_age_seconds": rev_age,
                 },
             )
@@ -235,6 +243,54 @@ def run_preflight(
         )
     except Exception as exc:
         checks.append(CheckResult(name="alerts", ok=False, detail=str(exc)))
+
+    # platform capital summary/readiness
+    platform_capital_url = f"{api_base_url.rstrip('/')}/api/v1/platform-capital/summary"
+    try:
+        payload = _http_json(platform_capital_url, timeout_seconds)
+        data = payload.get("data") if isinstance(payload, dict) else None
+        d = data if isinstance(data, dict) else {}
+        funding_pool_address = str(d.get("funding_pool_address") or "").strip()
+        blocked_reason = str(d.get("blocked_reason") or "").strip() or None
+        latest = d.get("latest_reconciliation") if isinstance(d.get("latest_reconciliation"), dict) else None
+        ready = bool((latest or {}).get("ready")) if latest is not None else None
+        delta = (latest or {}).get("delta_micro_usdc") if latest is not None else None
+        computed_at_raw = str((latest or {}).get("computed_at") or "").strip() if latest is not None else ""
+        max_age = int(platform_capital_reconciliation_max_age_seconds or 0)
+
+        stale = None
+        if latest is not None and computed_at_raw and max_age > 0:
+            try:
+                ts = datetime.fromisoformat(computed_at_raw.replace("Z", "+00:00"))
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+                stale = ts < (datetime.now(timezone.utc) - timedelta(seconds=max_age))
+            except ValueError:
+                stale = None
+
+        ok = True
+        if funding_pool_address:
+            ok = latest is not None and bool(ready) and int(delta or 0) == 0 and stale is not True
+
+        checks.append(
+            CheckResult(
+                name="platform_capital",
+                ok=ok,
+                detail="platform capital reconciliation must be strict-ready and fresh when funding pool is configured",
+                data={
+                    "funding_pool_address": funding_pool_address or None,
+                    "blocked_reason": blocked_reason,
+                    "ledger_balance_micro_usdc": d.get("ledger_balance_micro_usdc"),
+                    "spendable_balance_micro_usdc": d.get("spendable_balance_micro_usdc"),
+                    "latest_reconciliation_ready": ready,
+                    "latest_reconciliation_delta_micro_usdc": delta,
+                    "latest_reconciliation_computed_at": computed_at_raw or None,
+                    "latest_reconciliation_stale": stale,
+                },
+            )
+        )
+    except Exception as exc:
+        checks.append(CheckResult(name="platform_capital", ok=False, detail=str(exc)))
 
     # portal reachability (optional)
     if portal_base_url:
