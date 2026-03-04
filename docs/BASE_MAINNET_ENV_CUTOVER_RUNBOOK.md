@@ -40,6 +40,14 @@ Validate the manifest first:
 python3 scripts/validate_mainnet_deploy_manifest.py path/to/base-mainnet-deploy.json
 ```
 
+Then verify it matches live chain state:
+
+```bash
+python3 scripts/verify_deploy_manifest_onchain.py \
+  path/to/base-mainnet-deploy.json \
+  --rpc-url "$BASE_MAINNET_RPC_URL"
+```
+
 ## Required Mainnet Values
 
 At minimum, the operator must have:

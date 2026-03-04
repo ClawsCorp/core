@@ -31,7 +31,7 @@ def _is_tx_hash(value: object) -> bool:
     return isinstance(value, str) and _HEX_TX_RE.fullmatch(value) is not None
 
 
-def _validate_manifest(data: dict[str, Any]) -> list[dict[str, str]]:
+def validate_manifest_payload(data: dict[str, Any]) -> list[dict[str, str]]:
     errors: list[dict[str, str]] = []
 
     _require(data.get("schema_version") == 1, "schema_version", "Expected schema_version=1.", errors)
@@ -224,7 +224,7 @@ def main() -> int:
         )
         return 2
 
-    errors = _validate_manifest(payload)
+    errors = validate_manifest_payload(payload)
     if errors:
         print(
             json.dumps(

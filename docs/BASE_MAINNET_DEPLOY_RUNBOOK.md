@@ -211,6 +211,14 @@ Required validation before using this manifest as the cutover source of truth:
 python3 scripts/validate_mainnet_deploy_manifest.py path/to/base-mainnet-deploy.json
 ```
 
+Required post-deploy on-chain verification:
+
+```bash
+python3 scripts/verify_deploy_manifest_onchain.py \
+  path/to/base-mainnet-deploy.json \
+  --rpc-url "$BASE_MAINNET_RPC_URL"
+```
+
 This manifest becomes the configuration source of truth for:
 
 - Railway backend
@@ -225,8 +233,9 @@ After all four steps:
 1. Verify owner state on-chain.
 2. Verify contracts respond at the expected addresses.
 3. Validate the deployment manifest with `scripts/validate_mainnet_deploy_manifest.py`.
-4. Store the validated deployment manifest locally and in secure operator records.
-5. Do not switch the live backend to mainnet yet unless the next mainnet cutover phase is planned and staffed.
+4. Verify the validated manifest against live on-chain state with `scripts/verify_deploy_manifest_onchain.py`.
+5. Store the validated deployment manifest locally and in secure operator records.
+6. Do not switch the live backend to mainnet yet unless the next mainnet cutover phase is planned and staffed.
 
 ## What This Runbook Does Not Do
 
