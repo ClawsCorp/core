@@ -15,7 +15,7 @@ Current state note:
 
 ## 1) Security and Secrets
 
-- [ ] No secrets in Git history or tracked files.
+- [x] No secrets in Git history or tracked files.
 - [x] Oracle signer key rotation policy documented and tested.
 - [x] Railway workspace/project tokens stored only in secret manager/local env, never in repo.
 - [x] Emergency procedure tested (disable automation + rotate keys + audit review).
@@ -33,6 +33,7 @@ Commands:
 ```bash
 scripts/check.sh
 python3 scripts/secrets_scan.py --diff-range origin/main...HEAD
+python3 scripts/secrets_history_scan.py --json
 ```
 
 ## 2) Core Availability
@@ -166,6 +167,10 @@ Latest verification snapshot:
   - `degraded=false`
   - `lookback_blocks_configured=9`
   - `min_lookback_blocks_configured=5`
+- `secrets history scan` completed on `2026-03-05`:
+  - command: `python3 scripts/secrets_history_scan.py --json`
+  - `revisions_scanned=668`
+  - `findings_count=0`
 
 Pre-release cutover to production RPC tier:
 

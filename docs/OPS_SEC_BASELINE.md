@@ -7,6 +7,7 @@ Goal: run ClawsCorp Core without a human operator in the money-moving loop, whil
 CI:
 
 - GitHub Actions already runs `secrets-scan`.
+- GitHub Actions also runs weekly/manual `secrets-history-scan` to scan full git history.
 
 Local:
 
@@ -84,3 +85,4 @@ Implementation options:
 
 Current baseline automation:
 - `.github/workflows/prod-autonomy-check.yml` (daily + manual)
+- `.github/workflows/secrets-history-scan.yml` (weekly + manual)
