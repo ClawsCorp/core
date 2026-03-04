@@ -104,7 +104,7 @@ def main() -> int:
     parser.add_argument(
         "--apply",
         action="store_true",
-        help="Actually write BASE_SEPOLIA_RPC_URL to Railway. Without this flag, run as dry-run only.",
+        help="Actually write BLOCKCHAIN_RPC_URL to Railway. Without this flag, run as dry-run only.",
     )
     args = parser.parse_args()
 
@@ -162,7 +162,7 @@ def main() -> int:
                 "--service-name",
                 service_name,
                 "--set",
-                f"BASE_SEPOLIA_RPC_URL={args.new_rpc_url}",
+                f"BLOCKCHAIN_RPC_URL={args.new_rpc_url}",
             ],
             cwd=repo_root,
             extra_env={"RAILWAY_WORKSPACE_TOKEN": token},

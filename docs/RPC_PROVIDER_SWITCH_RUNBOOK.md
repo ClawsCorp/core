@@ -34,7 +34,8 @@ Services that must use the same current production-chain RPC endpoint:
 
 Required environment variable:
 
-- `BASE_SEPOLIA_RPC_URL`
+- `BLOCKCHAIN_RPC_URL` (preferred)
+- `BASE_SEPOLIA_RPC_URL` (legacy-compatible fallback)
 
 ## Success Criteria
 
@@ -106,7 +107,7 @@ python3 scripts/railway_set_vars.py \
   --project-id cd76995a-d819-4b36-808b-422de3ff430e \
   --environment-name production \
   --service core \
-  --set BASE_SEPOLIA_RPC_URL="$NEW_RPC_URL"
+  --set BLOCKCHAIN_RPC_URL="$NEW_RPC_URL"
 ```
 
 `usdc-indexer`:
@@ -116,7 +117,7 @@ python3 scripts/railway_set_vars.py \
   --project-id cd76995a-d819-4b36-808b-422de3ff430e \
   --environment-name production \
   --service usdc-indexer \
-  --set BASE_SEPOLIA_RPC_URL="$NEW_RPC_URL"
+  --set BLOCKCHAIN_RPC_URL="$NEW_RPC_URL"
 ```
 
 `tx-worker`:
@@ -126,7 +127,7 @@ python3 scripts/railway_set_vars.py \
   --project-id cd76995a-d819-4b36-808b-422de3ff430e \
   --environment-name production \
   --service tx-worker \
-  --set BASE_SEPOLIA_RPC_URL="$NEW_RPC_URL"
+  --set BLOCKCHAIN_RPC_URL="$NEW_RPC_URL"
 ```
 
 `autonomy-loop`:
@@ -136,7 +137,7 @@ python3 scripts/railway_set_vars.py \
   --project-id cd76995a-d819-4b36-808b-422de3ff430e \
   --environment-name production \
   --service autonomy-loop \
-  --set BASE_SEPOLIA_RPC_URL="$NEW_RPC_URL"
+  --set BLOCKCHAIN_RPC_URL="$NEW_RPC_URL"
 ```
 
 4. Wait for all affected services to reach healthy deploy state.
@@ -189,14 +190,14 @@ Rollback procedure:
 1. Export the previous known-good RPC URL:
 
 ```bash
-export OLD_BASE_SEPOLIA_RPC_URL='https://...'
+export OLD_BLOCKCHAIN_RPC_URL='https://...'
 ```
 
 2. Re-run local smoke against the previous endpoint to confirm it still answers:
 
 ```bash
 python3 scripts/rpc_endpoint_smoke.py \
-  --rpc-url "$OLD_BASE_SEPOLIA_RPC_URL"
+  --rpc-url "$OLD_BLOCKCHAIN_RPC_URL"
 ```
 
 3. Repeat the same `scripts/railway_set_vars.py` updates for:

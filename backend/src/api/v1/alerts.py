@@ -36,7 +36,7 @@ def _as_aware_utc(dt: datetime | None) -> datetime | None:
 
 
 def _fetch_dividend_distributor_owner(settings) -> tuple[str | None, str | None]:
-    rpc_url = str(settings.base_sepolia_rpc_url or "").strip()
+    rpc_url = str(settings.blockchain_rpc_url or "").strip()
     contract_address = str(settings.dividend_distributor_contract_address or "").strip()
     if not rpc_url or not contract_address:
         return None, "config_missing"

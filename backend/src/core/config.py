@@ -53,6 +53,8 @@ class Settings:
     database_url: str | None
     oracle_hmac_secret: str | None
     default_chain_id: int
+    blockchain_rpc_url: str | None
+    blockchain_rpc_env_name: str
     base_sepolia_rpc_url: str | None
     usdc_address: str | None
     dividend_distributor_contract_address: str | None
@@ -104,8 +106,14 @@ def get_settings() -> Settings:
     oracle_hmac_secret = oracle_hmac_secret_value if oracle_hmac_secret_value else None
 
     default_chain_id = int(os.getenv("DEFAULT_CHAIN_ID", "84532"))
-    base_sepolia_rpc_url_value = os.getenv("BASE_SEPOLIA_RPC_URL", "").strip()
-    base_sepolia_rpc_url = base_sepolia_rpc_url_value if base_sepolia_rpc_url_value else None
+    blockchain_rpc_env_name = "BLOCKCHAIN_RPC_URL"
+    blockchain_rpc_url_value = os.getenv("BLOCKCHAIN_RPC_URL", "").strip()
+    if not blockchain_rpc_url_value:
+        blockchain_rpc_env_name = "BASE_SEPOLIA_RPC_URL"
+        blockchain_rpc_url_value = os.getenv("BASE_SEPOLIA_RPC_URL", "").strip()
+    blockchain_rpc_url = blockchain_rpc_url_value if blockchain_rpc_url_value else None
+    # Keep the legacy field as an alias during the naming migration.
+    base_sepolia_rpc_url = blockchain_rpc_url
     usdc_address_value = os.getenv("USDC_ADDRESS", "").strip()
     usdc_address = usdc_address_value if usdc_address_value else None
     distributor_address_value = os.getenv("DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS", "").strip()
@@ -173,6 +181,8 @@ def get_settings() -> Settings:
         database_url=database_url,
         oracle_hmac_secret=oracle_hmac_secret,
         default_chain_id=default_chain_id,
+        blockchain_rpc_url=blockchain_rpc_url,
+        blockchain_rpc_env_name=blockchain_rpc_env_name,
         base_sepolia_rpc_url=base_sepolia_rpc_url,
         usdc_address=usdc_address,
         dividend_distributor_contract_address=dividend_distributor_contract_address,

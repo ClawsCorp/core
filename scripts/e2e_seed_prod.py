@@ -555,12 +555,17 @@ def main() -> int:
     portal_base_url = args.portal_base_url.rstrip("/")
     oracle_hmac_secret = _require_env(env, "ORACLE_HMAC_SECRET")
     # Defaults are only for local e2e seeding convenience; override via env if needed.
-    base_sepolia_rpc_url = env.get("BASE_SEPOLIA_RPC_URL", "").strip() or "https://sepolia.base.org"
+    blockchain_rpc_url = (
+        env.get("BLOCKCHAIN_RPC_URL", "").strip()
+        or env.get("BASE_SEPOLIA_RPC_URL", "").strip()
+        or "https://sepolia.base.org"
+    )
     usdc_address = env.get("USDC_ADDRESS", "").strip() or "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
     oracle_signer_pk = _normalize_hex_private_key(_require_env(env, "ORACLE_SIGNER_PRIVATE_KEY"))
 
     # Make sure the env has the keys we rely on for node helpers.
-    env["BASE_SEPOLIA_RPC_URL"] = base_sepolia_rpc_url
+    env["BLOCKCHAIN_RPC_URL"] = blockchain_rpc_url
+    env["BASE_SEPOLIA_RPC_URL"] = env.get("BASE_SEPOLIA_RPC_URL", "").strip() or blockchain_rpc_url
     env["USDC_ADDRESS"] = usdc_address
 
     oracle = Oracle(base_url=oracle_base_url, hmac_secret=oracle_hmac_secret)

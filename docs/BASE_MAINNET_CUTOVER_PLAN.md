@@ -82,6 +82,8 @@ Initial progress already made:
 - release tooling is also moving off hidden Sepolia assumptions:
   - `scripts/rpc_endpoint_smoke.py` now defaults to `DEFAULT_CHAIN_ID` instead of hardcoding `84532`
   - `scripts/rpc_cutover.py` can pass an explicit `--expected-chain-id` when validating a target chain
+  - runtime config now supports `BLOCKCHAIN_RPC_URL` as the preferred cross-network alias, while `BASE_SEPOLIA_RPC_URL` remains a legacy-compatible fallback during migration
+  - frontend invoice creation no longer silently falls back to `84532` when stats are unavailable; the server default remains the source of truth
 
 ### 2. Contract Deployment on Base Mainnet
 

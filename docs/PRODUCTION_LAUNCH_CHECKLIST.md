@@ -137,7 +137,7 @@ Go-live requires all of the following:
 
 ## Current Blocking Items (as of 2026-03-04)
 
-- Before first external-agent launch, switch `BASE_SEPOLIA_RPC_URL` from the current limited-tier Alchemy endpoint to the paid/stable production RPC tier and re-verify the live system.
+- Before first external-agent launch, switch the live blockchain RPC endpoint (prefer `BLOCKCHAIN_RPC_URL`; legacy fallback `BASE_SEPOLIA_RPC_URL`) from the current limited-tier Alchemy endpoint to the paid/stable production RPC tier and re-verify the live system.
 - Until that switch is completed, funding contributor/cap-table freshness can still lag under limited-tier RPC conditions.
 - Base mainnet cutover is not yet complete:
   - the current live deployment is still Base Sepolia
@@ -170,7 +170,7 @@ Pre-release cutover to production RPC tier:
 1. Provision the paid/stable Base Sepolia RPC endpoint.
 2. Run local candidate verification:
    - `python3 scripts/rpc_endpoint_smoke.py --rpc-url 'https://...'`
-3. Update `BASE_SEPOLIA_RPC_URL` on:
+3. Update the blockchain RPC endpoint on:
    - `core`
    - `usdc-indexer`
    - `tx-worker`

@@ -35,7 +35,7 @@ Current operating policy (pilot / pre-production):
 
 Required local-only inputs:
 
-- `BASE_SEPOLIA_RPC_URL`
+- `BLOCKCHAIN_RPC_URL` (preferred) or `BASE_SEPOLIA_RPC_URL` (legacy fallback)
 - `DIVIDEND_DISTRIBUTOR_CONTRACT_ADDRESS`
 - `SAFE_OWNER_ADDRESS`
 - `SAFE_OWNER_KEYS_FILE`

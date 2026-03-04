@@ -320,12 +320,15 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
 
     setInvoiceBusy(true);
     try {
-      const created = await api.createProjectCryptoInvoice(apiKey, params.id, {
+      const payload: Parameters<typeof api.createProjectCryptoInvoice>[2] = {
         amount_micro_usdc: amount,
         payer_address: invoicePayer.trim() ? invoicePayer.trim() : undefined,
         description: invoiceDescription.trim() ? invoiceDescription.trim() : undefined,
-        chain_id: stats?.default_chain_id ?? 84532,
-      });
+      };
+      if (stats?.default_chain_id != null) {
+        payload.chain_id = stats.default_chain_id;
+      }
+      const created = await api.createProjectCryptoInvoice(apiKey, params.id, payload);
       setInvoiceMessage(`Created invoice ${created.invoice_id} (ID ${created.project_num}).`);
       setInvoicePayer("");
       setInvoiceDescription("");
@@ -449,9 +452,15 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
 
   const latestProjectUpdateHref = latestProjectUpdate ? updatePrimaryHref(latestProjectUpdate) : null;
   const latestProjectUpdateTxHref = latestProjectUpdate ? extractTxHref(latestProjectUpdate) : null;
-  const defaultChainId = stats?.default_chain_id ?? 84532;
+  const defaultChainId = stats?.default_chain_id ?? null;
   const defaultChainLabel =
-    defaultChainId === 84532 ? "Base Sepolia" : defaultChainId === 8453 ? "Base" : "Configured chain";
+    defaultChainId === 84532
+      ? "Base Sepolia"
+      : defaultChainId === 8453
+        ? "Base"
+        : defaultChainId !== null
+          ? "Configured chain"
+          : "Server default";
 
   return (
     <PageContainer title={project ? `${project.name} (ID ${project.project_num})` : `Project ${params.id}`}>
