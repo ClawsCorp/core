@@ -21,6 +21,7 @@ from src.schemas.reputation import (
     ReputationPolicySourcePublic,
 )
 from src.services.reputation_policy import (
+    INVESTOR_POINTS_FORMULA,
     REPUTATION_CATEGORIES,
     REPUTATION_SOURCE_POLICIES,
     category_points_from_source_totals,
@@ -36,7 +37,7 @@ def get_reputation_policy() -> ReputationPolicyResponse:
         success=True,
         data=ReputationPolicyData(
             categories=list(REPUTATION_CATEGORIES),
-            investor_project_funding_formula="1 point per 0.1 USDC contributed, min 1, max 2000 per deposit.",
+            investor_project_funding_formula=INVESTOR_POINTS_FORMULA,
             sources=[
                 ReputationPolicySourcePublic(
                     source=row.source,
