@@ -10,6 +10,11 @@ from src.core.config import get_settings
 from src.core.database import get_db
 from src.models.agent import Agent
 from src.models.indexer_cursor import IndexerCursor
+from src.services.platform_capital import (
+    get_latest_platform_capital_reconciliation,
+    get_platform_capital_balance_micro_usdc,
+    get_platform_capital_spendable_balance_micro_usdc,
+)
 
 router = APIRouter(prefix="/api/v1", tags=["public-system"])
 
@@ -20,7 +25,13 @@ class StatsData(BaseModel):
     total_registered_agents: int
     server_time_utc: str
     project_capital_reconciliation_max_age_seconds: int
+    platform_capital_reconciliation_max_age_seconds: int
     project_revenue_reconciliation_max_age_seconds: int
+    platform_capital_ledger_balance_micro_usdc: int
+    platform_capital_spendable_balance_micro_usdc: int
+    platform_capital_reconciliation_ready: bool | None
+    platform_capital_reconciliation_delta_micro_usdc: int | None
+    platform_capital_reconciliation_computed_at: str | None
 
 
 class IndexerStatusData(BaseModel):
@@ -65,6 +76,10 @@ def get_stats(response: Response, db: Session = Depends(get_db)) -> StatsRespons
     time_bucket_seconds = 30
     bucketed_timestamp = int(now.timestamp() // time_bucket_seconds) * time_bucket_seconds
     bucketed_time = datetime.fromtimestamp(bucketed_timestamp, tz=timezone.utc)
+    latest_platform_reconciliation = get_latest_platform_capital_reconciliation(db)
+    platform_capital_ledger_balance = get_platform_capital_balance_micro_usdc(db)
+    platform_capital_spendable_balance = get_platform_capital_spendable_balance_micro_usdc(db)
+
     result = StatsResponse(
         success=True,
         data=StatsData(
@@ -73,7 +88,23 @@ def get_stats(response: Response, db: Session = Depends(get_db)) -> StatsRespons
             total_registered_agents=total_agents,
             server_time_utc=bucketed_time.isoformat(),
             project_capital_reconciliation_max_age_seconds=settings.project_capital_reconciliation_max_age_seconds,
+            platform_capital_reconciliation_max_age_seconds=settings.platform_capital_reconciliation_max_age_seconds,
             project_revenue_reconciliation_max_age_seconds=settings.project_revenue_reconciliation_max_age_seconds,
+            platform_capital_ledger_balance_micro_usdc=platform_capital_ledger_balance,
+            platform_capital_spendable_balance_micro_usdc=platform_capital_spendable_balance,
+            platform_capital_reconciliation_ready=(
+                bool(latest_platform_reconciliation.ready) if latest_platform_reconciliation is not None else None
+            ),
+            platform_capital_reconciliation_delta_micro_usdc=(
+                int(latest_platform_reconciliation.delta_micro_usdc)
+                if latest_platform_reconciliation is not None and latest_platform_reconciliation.delta_micro_usdc is not None
+                else None
+            ),
+            platform_capital_reconciliation_computed_at=(
+                latest_platform_reconciliation.computed_at.isoformat()
+                if latest_platform_reconciliation is not None
+                else None
+            ),
         ),
     )
     etag_seed = (
@@ -82,7 +113,13 @@ def get_stats(response: Response, db: Session = Depends(get_db)) -> StatsRespons
         f"{result.data.total_registered_agents}:"
         f"{bucketed_timestamp}:"
         f"{result.data.project_capital_reconciliation_max_age_seconds}:"
+        f"{result.data.platform_capital_reconciliation_max_age_seconds}:"
         f"{result.data.project_revenue_reconciliation_max_age_seconds}"
+        f":{result.data.platform_capital_ledger_balance_micro_usdc}"
+        f":{result.data.platform_capital_spendable_balance_micro_usdc}"
+        f":{result.data.platform_capital_reconciliation_ready}"
+        f":{result.data.platform_capital_reconciliation_delta_micro_usdc}"
+        f":{result.data.platform_capital_reconciliation_computed_at or ''}"
     )
     response.headers["Cache-Control"] = "public, max-age=30"
     response.headers["ETag"] = f'W/"{etag_seed}"'

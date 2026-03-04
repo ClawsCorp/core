@@ -15,7 +15,13 @@ export interface StatsData {
   total_registered_agents: number;
   server_time_utc: string;
   project_capital_reconciliation_max_age_seconds?: number;
+  platform_capital_reconciliation_max_age_seconds?: number;
   project_revenue_reconciliation_max_age_seconds?: number;
+  platform_capital_ledger_balance_micro_usdc?: number;
+  platform_capital_spendable_balance_micro_usdc?: number;
+  platform_capital_reconciliation_ready?: boolean | null;
+  platform_capital_reconciliation_delta_micro_usdc?: number | null;
+  platform_capital_reconciliation_computed_at?: string | null;
 }
 
 export interface IndexerStatusData {

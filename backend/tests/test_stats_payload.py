@@ -20,6 +20,8 @@ from src.main import app
 
 import src.models  # noqa: F401
 from src.models.indexer_cursor import IndexerCursor
+from src.models.platform_capital_event import PlatformCapitalEvent
+from src.models.platform_capital_reconciliation_report import PlatformCapitalReconciliationReport
 
 
 @pytest.fixture(autouse=True)
@@ -71,6 +73,7 @@ def test_stats_includes_project_capital_reconciliation_max_age_seconds(
     assert payload1["success"] is True
     assert payload1["data"]["default_chain_id"] == 84532
     assert payload1["data"]["project_capital_reconciliation_max_age_seconds"] == 3600
+    assert payload1["data"]["platform_capital_reconciliation_max_age_seconds"] == 3600
     etag1 = r1.headers.get("ETag")
     assert etag1 is not None
 
@@ -84,6 +87,52 @@ def test_stats_includes_project_capital_reconciliation_max_age_seconds(
     etag2 = r2.headers.get("ETag")
     assert etag2 is not None
     assert etag2 != etag1
+
+
+def test_stats_includes_platform_capital_summary(
+    _client: TestClient,
+    _db: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PLATFORM_CAPITAL_RECONCILIATION_MAX_AGE_SECONDS", "1800")
+    get_settings.cache_clear()
+
+    with _db() as db:
+        db.add(
+            PlatformCapitalEvent(
+                event_id="platcap_1",
+                idempotency_key="platcap:test:1",
+                profit_month_id="202603",
+                delta_micro_usdc=3_000_000,
+                source="seed",
+                evidence_tx_hash="0x" + "1" * 64,
+                evidence_url="seed",
+            )
+        )
+        db.add(
+            PlatformCapitalReconciliationReport(
+                funding_pool_address="0x" + "a" * 40,
+                ledger_balance_micro_usdc=3_000_000,
+                onchain_balance_micro_usdc=3_000_000,
+                delta_micro_usdc=0,
+                ready=True,
+                blocked_reason=None,
+                computed_at=datetime.now(timezone.utc),
+            )
+        )
+        db.commit()
+
+    response = _client.get("/api/v1/stats")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["success"] is True
+    data = payload["data"]
+    assert data["platform_capital_reconciliation_max_age_seconds"] == 1800
+    assert data["platform_capital_ledger_balance_micro_usdc"] == 3_000_000
+    assert data["platform_capital_spendable_balance_micro_usdc"] == 3_000_000
+    assert data["platform_capital_reconciliation_ready"] is True
+    assert data["platform_capital_reconciliation_delta_micro_usdc"] == 0
+    assert data["platform_capital_reconciliation_computed_at"] is not None
 
 
 def test_stats_includes_configured_default_chain_id(

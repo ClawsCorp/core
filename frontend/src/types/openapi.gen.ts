@@ -3278,8 +3278,20 @@ export interface components {
       server_time_utc: string;
       /** Project Capital Reconciliation Max Age Seconds */
       project_capital_reconciliation_max_age_seconds: number;
+      /** Platform Capital Reconciliation Max Age Seconds */
+      platform_capital_reconciliation_max_age_seconds: number;
       /** Project Revenue Reconciliation Max Age Seconds */
       project_revenue_reconciliation_max_age_seconds: number;
+      /** Platform Capital Ledger Balance Micro Usdc */
+      platform_capital_ledger_balance_micro_usdc: number;
+      /** Platform Capital Spendable Balance Micro Usdc */
+      platform_capital_spendable_balance_micro_usdc: number;
+      /** Platform Capital Reconciliation Ready */
+      platform_capital_reconciliation_ready: boolean | null;
+      /** Platform Capital Reconciliation Delta Micro Usdc */
+      platform_capital_reconciliation_delta_micro_usdc: number | null;
+      /** Platform Capital Reconciliation Computed At */
+      platform_capital_reconciliation_computed_at: string | null;
     };
     /** StatsResponse */
     StatsResponse: {
