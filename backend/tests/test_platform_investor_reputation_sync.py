@@ -143,7 +143,7 @@ def test_platform_investor_reputation_sync_awards_registered_wallet_once(
         rows = db.query(ReputationEvent).all()
         assert len(rows) == 1
         assert rows[0].source == "platform_capital_contributed"
-        assert rows[0].delta_points == 5
+        assert rows[0].delta_points == 1
 
     resp_2 = _client.post(path, content=body, headers=_oracle_headers(path, body, "req-2", idem="idem-2"))
     assert resp_2.status_code == 200

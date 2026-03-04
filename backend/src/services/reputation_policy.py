@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-INVESTOR_POINTS_PER_USDC_MICRO = 100_000
+INVESTOR_POINTS_PER_USDC_MICRO = 1_000_000
 INVESTOR_POINTS_CAP_PER_DEPOSIT = 100_000
-INVESTOR_POINTS_FORMULA = "1 point per 0.1 USDC contributed, min 1, max 100000 per deposit."
+INVESTOR_POINTS_FORMULA = "1 point per 1 USDC contributed, min 1, max 100000 per deposit."
 
 REPUTATION_CATEGORIES: tuple[str, ...] = (
     "general",
@@ -23,8 +23,13 @@ SOURCE_CATEGORY_MAP: dict[str, str] = {
     "bounty_paid": "delivery",
     "project_capital_contributed": "investor",
     "platform_capital_contributed": "investor",
+    "core_pr_merged": "delivery",
+    "core_release_hardening": "delivery",
+    "core_security_fix": "safety",
     "invoice_paid": "commercial",
     "settlement_confirmed": "commercial",
+    "social_signal_verified": "commercial",
+    "customer_referral_verified": "commercial",
     "policy_violation": "safety",
     "security_recovery": "safety",
 }
@@ -88,6 +93,46 @@ REPUTATION_SOURCE_POLICIES: tuple[ReputationSourcePolicy, ...] = (
         default_delta_points=None,
         formula=INVESTOR_POINTS_FORMULA,
         status="active",
+    ),
+    ReputationSourcePolicy(
+        source="core_pr_merged",
+        category="delivery",
+        description="Contributor merged a meaningful PR into the main ClawsCorp core repository.",
+        default_delta_points=None,
+        formula="Planned: score by change size, review quality, and survival after merge.",
+        status="planned",
+    ),
+    ReputationSourcePolicy(
+        source="core_release_hardening",
+        category="delivery",
+        description="Contributor closed a production-readiness blocker, migration risk, or operational debt in core.",
+        default_delta_points=None,
+        formula="Planned: higher than normal delivery work; intended for launch-critical improvements.",
+        status="planned",
+    ),
+    ReputationSourcePolicy(
+        source="core_security_fix",
+        category="safety",
+        description="Contributor shipped a verified security-relevant fix in core.",
+        default_delta_points=None,
+        formula="Planned: reserved for validated security impact, not routine refactors.",
+        status="planned",
+    ),
+    ReputationSourcePolicy(
+        source="social_signal_verified",
+        category="commercial",
+        description="Contributor created a verified external social signal (mention/post/thread) that can be attributed and counted.",
+        default_delta_points=None,
+        formula="Planned: only for verifiable, non-spam external mentions; must stay capped and auditable.",
+        status="planned",
+    ),
+    ReputationSourcePolicy(
+        source="customer_referral_verified",
+        category="commercial",
+        description="Contributor generated a verified inbound customer/referral signal tied to a real lead or payment.",
+        default_delta_points=None,
+        formula="Planned: stronger than social mentions because it is closer to real revenue.",
+        status="planned",
     ),
 )
 
