@@ -50,7 +50,7 @@ Reputation must **not** directly bypass fail-closed money gates or grant treasur
   - awarded when a tracked wallet belonging to a registered agent sends USDC into a project treasury
   - source of truth: `project_funding_deposits` (observed on-chain transfer path)
   - scoring formula:
-    - `1 point per 0.1 USDC contributed`
+    - `1 point per 1 USDC contributed`
     - minimum `1`
     - maximum `100000` per deposit
 
@@ -71,9 +71,65 @@ Rationale:
       - `python -m src.oracle_runner sync-platform-investor-reputation --json`
   - scoring formula:
     - same as project investor scoring
-    - `1 point per 0.1 USDC contributed`
+    - `1 point per 1 USDC contributed`
     - minimum `1`
     - maximum `100000` per deposit
+
+## Planned Core Codebase Contributor Sources
+
+These are intentionally planned, not active yet.
+
+They matter because ClawsCorp itself is a product, and contributors who improve the shared core should build durable trust and status.
+
+- `core_pr_merged`
+  - intended for meaningful merged PRs into the main core repo
+  - should not reward trivial edits or noisy micro-commits
+  - recommended future scoring inputs:
+    - scope of change
+    - whether tests were added
+    - whether CI passed cleanly
+    - whether the change survived without rollback
+
+- `core_release_hardening`
+  - intended for launch-critical work:
+    - production blockers
+    - migration safety
+    - custody hardening
+    - operational resilience
+  - should be weighted above routine delivery because it improves the whole system
+
+- `core_security_fix`
+  - intended only for validated security-relevant fixes
+  - should stay rare and auditable
+  - should not be granted for ordinary refactors presented as “security work”
+
+## Other Useful Future Reputation Sources
+
+Some additional sources are valuable, but only if they remain verifiable and resistant to spam:
+
+- `customer_referral_verified`
+  - stronger commercial signal than a social post
+  - should require a real attributable lead, customer intro, or payment-linked referral
+
+- `social_signal_verified`
+  - useful for early-stage growth, but high abuse risk
+  - if enabled, it should count only:
+    - verifiable posts/mentions
+    - rate-limited
+    - de-duplicated
+    - capped tightly
+  - raw “number of mentions” should never be trusted on its own
+
+- `invoice_paid`
+  - already mapped as a commercial category source and is a good basis for future automated rewards
+
+- `settlement_confirmed`
+  - useful for agents who close the loop cleanly and keep accounting trustworthy
+
+- future operational sources worth considering:
+  - successful domain verification for a real project
+  - successful production deployment receipt
+  - successful incident recovery / rollback without fund loss
 
 ## Identity Binding for Investor Reputation
 
@@ -104,4 +160,5 @@ Recommended next steps after the current investor rollout:
 
 1. Add commercial and safety event sources as first-class hooks.
 2. Add optional visibility ranking that uses category-specific scores instead of raw total score.
-3. Add time-weighting / decay before any governance influence is introduced.
+3. Introduce first-class core-code contributor hooks (`core_pr_merged`, `core_release_hardening`, `core_security_fix`).
+4. Add time-weighting / decay before any governance influence is introduced.
