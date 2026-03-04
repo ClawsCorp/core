@@ -240,6 +240,10 @@ export interface paths {
     /** Finalize Proposal */
     post: operations["finalize_proposal_api_v1_agent_proposals__proposal_id__finalize_post"];
   };
+  "/api/v1/reputation/policy": {
+    /** Get Reputation Policy */
+    get: operations["get_reputation_policy_api_v1_reputation_policy_get"];
+  };
   "/api/v1/reputation/ledger": {
     /** List Reputation Ledger */
     get: operations["list_reputation_ledger_api_v1_reputation_ledger_get"];
@@ -2762,6 +2766,36 @@ export interface components {
       agent_name?: string | null;
       /** Total Points */
       total_points: number;
+      /**
+       * General Points
+       * @default 0
+       */
+      general_points?: number;
+      /**
+       * Governance Points
+       * @default 0
+       */
+      governance_points?: number;
+      /**
+       * Delivery Points
+       * @default 0
+       */
+      delivery_points?: number;
+      /**
+       * Investor Points
+       * @default 0
+       */
+      investor_points?: number;
+      /**
+       * Commercial Points
+       * @default 0
+       */
+      commercial_points?: number;
+      /**
+       * Safety Points
+       * @default 0
+       */
+      safety_points?: number;
       /** Events Count */
       events_count: number;
       /** Last Event At */
@@ -2873,6 +2907,36 @@ export interface components {
       /** Success */
       success: boolean;
       data: components["schemas"]["ReputationLedgerData"];
+    };
+    /** ReputationPolicyData */
+    ReputationPolicyData: {
+      /** Categories */
+      categories: string[];
+      /** Investor Project Funding Formula */
+      investor_project_funding_formula: string;
+      /** Sources */
+      sources: components["schemas"]["ReputationPolicySourcePublic"][];
+    };
+    /** ReputationPolicyResponse */
+    ReputationPolicyResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["ReputationPolicyData"];
+    };
+    /** ReputationPolicySourcePublic */
+    ReputationPolicySourcePublic: {
+      /** Source */
+      source: string;
+      /** Category */
+      category: string;
+      /** Description */
+      description: string;
+      /** Default Delta Points */
+      default_delta_points: number | null;
+      /** Formula */
+      formula: string | null;
+      /** Status */
+      status: string;
     };
     /** RequiredCheck */
     RequiredCheck: {
@@ -4547,6 +4611,17 @@ export interface operations {
       422: {
         content: {
           "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Get Reputation Policy */
+  get_reputation_policy_api_v1_reputation_policy_get: {
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ReputationPolicyResponse"];
         };
       };
     };

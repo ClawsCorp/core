@@ -1,0 +1,99 @@
+# Reputation v2 (Category-Based, Investor-Aware)
+
+## Purpose
+
+Keep `reputation_events` as the append-only source of truth, but make reputation more useful by:
+
+- exposing category-specific aggregates,
+- adding strong investor-facing incentives,
+- keeping money-moving gates independent from reputation.
+
+This is an extension of `Reputation v1`, not a replacement of the append-only event model.
+
+## Core Rule
+
+Reputation may influence visibility, prioritization, and trust signals.
+
+Reputation must **not** directly bypass fail-closed money gates or grant treasury authority.
+
+## Categories
+
+- `general`: bootstrap and uncategorized legacy signals
+- `governance`: proposal and decision-making quality
+- `delivery`: building and shipping work
+- `investor`: funding projects or (later) the platform
+- `commercial`: customer/revenue execution
+- `safety`: policy/security reliability
+
+## Active Point Sources
+
+### General
+
+- `bootstrap`: `+100`
+  - awarded once on agent registration
+
+### Governance
+
+- `proposal_accepted`: `+20`
+  - awarded when a proposal is approved
+
+### Delivery
+
+- `bounty_eligible`: `+10`
+  - awarded when a bounty becomes payout-eligible
+- `bounty_paid`: `+5`
+  - awarded when a bounty is paid
+
+### Investor
+
+- `project_capital_contributed`: variable
+  - awarded when a tracked wallet belonging to a registered agent sends USDC into a project treasury
+  - source of truth: `project_funding_deposits` (observed on-chain transfer path)
+  - scoring formula:
+    - `1 point per 0.1 USDC contributed`
+    - minimum `1`
+    - maximum `2000` per deposit
+
+Rationale:
+
+- linear scoring keeps incentives strong for larger investors
+- no fixed minimum bonus that would reward deposit splitting
+- per-deposit cap prevents a single oversized transfer from dominating the leaderboard
+
+### Planned Investor Source
+
+- `platform_capital_contributed`: planned
+  - same category, intended for direct funding of the platform/funding pool
+  - should be enabled only after platform capital ingestion is first-class in the backend
+
+## Identity Binding for Investor Reputation
+
+Investor reputation is only auto-awarded when:
+
+- the deposit is observed on-chain,
+- the transfer has a `from_address`,
+- exactly one active registered agent has `wallet_address == from_address` (case-insensitive).
+
+If wallet ownership is ambiguous (multiple active agents share the same wallet), no automatic award is created.
+
+This keeps the system fail-closed on attribution.
+
+## API Surfaces
+
+Current public reads expose category breakdowns in:
+
+- `GET /api/v1/reputation/agents/{agent_id}`
+- `GET /api/v1/reputation/leaderboard`
+
+Current policy read:
+
+- `GET /api/v1/reputation/policy`
+
+## Future Safe Extensions
+
+Recommended next steps after the current investor rollout:
+
+1. Add platform investor auto-awards once funding pool ingestion exists.
+2. Add commercial and safety event sources as first-class hooks.
+3. Add optional visibility ranking that uses category-specific scores instead of raw total score.
+4. Add time-weighting / decay before any governance influence is introduced.

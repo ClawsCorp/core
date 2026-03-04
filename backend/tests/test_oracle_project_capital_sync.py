@@ -24,12 +24,14 @@ from src.core.security import build_oracle_hmac_v2_payload
 from src.main import app
 
 import src.models  # noqa: F401
+from src.models.agent import Agent
 from src.models.observed_usdc_transfer import ObservedUsdcTransfer
 from src.models.marketing_fee_accrual_event import MarketingFeeAccrualEvent
 from src.models.project import Project, ProjectStatus
 from src.models.project_capital_event import ProjectCapitalEvent
 from src.models.project_funding_deposit import ProjectFundingDeposit
 from src.models.project_update import ProjectUpdate
+from src.models.reputation_event import ReputationEvent
 
 ORACLE_SECRET = "test-oracle-secret"
 
@@ -102,9 +104,20 @@ def _client(_db: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch) -> Test
 
 def test_project_capital_sync_creates_capital_events(_client: TestClient, _db: sessionmaker[Session]) -> None:
     treasury = "0x00000000000000000000000000000000000000aa"
+    from_addr = "0x00000000000000000000000000000000000000cc"
     expected_month = datetime.now(timezone.utc).strftime("%Y%m")
 
     with _db() as db:
+        db.add(
+            Agent(
+                agent_id="ag_investor",
+                name="Investor Alice",
+                capabilities_json="[]",
+                wallet_address=from_addr,
+                api_key_hash="hash",
+                api_key_last4="1234",
+            )
+        )
         project = Project(
             project_id="prj_cap",
             slug="cap",
@@ -129,7 +142,7 @@ def test_project_capital_sync_creates_capital_events(_client: TestClient, _db: s
             ObservedUsdcTransfer(
                 chain_id=84532,
                 token_address="0x0000000000000000000000000000000000000bbb",
-                from_address="0x00000000000000000000000000000000000000cc",
+                from_address=from_addr,
                 to_address=treasury,
                 amount_micro_usdc=1234,
                 block_number=100,
@@ -154,6 +167,11 @@ def test_project_capital_sync_creates_capital_events(_client: TestClient, _db: s
         assert db.query(ProjectCapitalEvent).count() == 1
         assert db.query(ProjectFundingDeposit).count() == 1
         assert db.query(ProjectUpdate).count() == 1
+        rep_events = db.query(ReputationEvent).all()
+        assert len(rep_events) == 1
+        assert rep_events[0].source == "project_capital_contributed"
+        assert rep_events[0].delta_points == 1
+        assert rep_events[0].idempotency_key.startswith("rep:project_capital_contributed:")
         evt = db.query(ProjectCapitalEvent).first()
         assert evt is not None
         assert evt.profit_month_id == expected_month
@@ -176,6 +194,7 @@ def test_project_capital_sync_creates_capital_events(_client: TestClient, _db: s
         assert db.query(ProjectFundingDeposit).count() == 1
         assert db.query(MarketingFeeAccrualEvent).count() == 1
         assert db.query(ProjectUpdate).count() == 1
+        assert db.query(ReputationEvent).count() == 1
 
 
 def test_project_capital_sync_skips_transfer_already_accounted_by_evidence_tx_hash(

@@ -16,9 +16,40 @@ from src.schemas.reputation import (
     ReputationLedgerData,
     ReputationLedgerEntry,
     ReputationLedgerResponse,
+    ReputationPolicyData,
+    ReputationPolicyResponse,
+    ReputationPolicySourcePublic,
+)
+from src.services.reputation_policy import (
+    REPUTATION_CATEGORIES,
+    REPUTATION_SOURCE_POLICIES,
+    category_points_from_source_totals,
+    empty_category_points,
 )
 
 router = APIRouter(prefix="/api/v1/reputation", tags=["reputation"])
+
+
+@router.get("/policy", response_model=ReputationPolicyResponse)
+def get_reputation_policy() -> ReputationPolicyResponse:
+    return ReputationPolicyResponse(
+        success=True,
+        data=ReputationPolicyData(
+            categories=list(REPUTATION_CATEGORIES),
+            investor_project_funding_formula="1 point per 0.1 USDC contributed, min 1, max 2000 per deposit.",
+            sources=[
+                ReputationPolicySourcePublic(
+                    source=row.source,
+                    category=row.category,
+                    description=row.description,
+                    default_delta_points=row.default_delta_points,
+                    formula=row.formula,
+                    status=row.status,
+                )
+                for row in REPUTATION_SOURCE_POLICIES
+            ],
+        ),
+    )
 
 
 @router.get("/ledger", response_model=ReputationLedgerResponse)
@@ -81,6 +112,7 @@ def get_agent_reputation_summary(
         .filter(ReputationEvent.agent_id == agent.id)
         .one()
     )
+    category_totals = _load_category_points_for_agent_ids(db, [agent.id]).get(agent.id, empty_category_points())
 
     return ReputationAgentSummaryResponse(
         success=True,
@@ -89,6 +121,12 @@ def get_agent_reputation_summary(
             agent_id=agent.agent_id,
             agent_name=agent.name,
             total_points=int(total_points),
+            general_points=int(category_totals["general"]),
+            governance_points=int(category_totals["governance"]),
+            delivery_points=int(category_totals["delivery"]),
+            investor_points=int(category_totals["investor"]),
+            commercial_points=int(category_totals["commercial"]),
+            safety_points=int(category_totals["safety"]),
             events_count=int(events_count),
             last_event_at=last_event_at,
         ),
@@ -101,7 +139,7 @@ def get_reputation_leaderboard(
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ) -> ReputationLeaderboardResponse:
-    rows = (
+    rows_query = (
         db.query(
             Agent.id.label("agent_num"),
             Agent.agent_id.label("public_agent_id"),
@@ -115,20 +153,51 @@ def get_reputation_leaderboard(
         .order_by(func.coalesce(func.sum(ReputationEvent.delta_points), 0).desc(), Agent.id.asc())
     )
 
-    total = rows.count()
+    total = rows_query.count()
+    page_rows = rows_query.offset(offset).limit(limit).all()
+    category_totals = _load_category_points_for_agent_ids(db, [int(row.agent_num) for row in page_rows])
     items = [
         ReputationAgentSummary(
             agent_num=int(row.agent_num),
             agent_id=row.public_agent_id,
             agent_name=row.agent_name,
             total_points=int(row.total_points),
+            general_points=int(category_totals.get(int(row.agent_num), empty_category_points())["general"]),
+            governance_points=int(category_totals.get(int(row.agent_num), empty_category_points())["governance"]),
+            delivery_points=int(category_totals.get(int(row.agent_num), empty_category_points())["delivery"]),
+            investor_points=int(category_totals.get(int(row.agent_num), empty_category_points())["investor"]),
+            commercial_points=int(category_totals.get(int(row.agent_num), empty_category_points())["commercial"]),
+            safety_points=int(category_totals.get(int(row.agent_num), empty_category_points())["safety"]),
             events_count=int(row.events_count),
             last_event_at=row.last_event_at,
         )
-        for row in rows.offset(offset).limit(limit).all()
+        for row in page_rows
     ]
 
     return ReputationLeaderboardResponse(
         success=True,
         data=ReputationLeaderboardData(items=items, limit=limit, offset=offset, total=total),
     )
+
+
+def _load_category_points_for_agent_ids(db: Session, agent_db_ids: list[int]) -> dict[int, dict[str, int]]:
+    if not agent_db_ids:
+        return {}
+
+    rows = (
+        db.query(
+            ReputationEvent.agent_id,
+            ReputationEvent.source,
+            func.coalesce(func.sum(ReputationEvent.delta_points), 0).label("total_points"),
+        )
+        .filter(ReputationEvent.agent_id.in_(agent_db_ids))
+        .group_by(ReputationEvent.agent_id, ReputationEvent.source)
+        .all()
+    )
+    by_agent: dict[int, list[tuple[str | None, int]]] = {int(agent_id): [] for agent_id in agent_db_ids}
+    for row in rows:
+        by_agent.setdefault(int(row.agent_id), []).append((row.source, int(row.total_points or 0)))
+    return {
+        agent_id: category_points_from_source_totals(source_totals)
+        for agent_id, source_totals in by_agent.items()
+    }
