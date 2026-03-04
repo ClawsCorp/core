@@ -4706,7 +4706,7 @@ export interface operations {
       query?: {
         limit?: number;
         offset?: number;
-        sort?: "total" | "investor" | "governance" | "delivery";
+        sort?: "total" | "investor" | "governance" | "delivery" | "commercial" | "safety";
       };
     };
     responses: {

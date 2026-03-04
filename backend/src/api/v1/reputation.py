@@ -142,7 +142,7 @@ def get_agent_reputation_summary(
 def get_reputation_leaderboard(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    sort: Literal["total", "investor", "governance", "delivery"] = Query("total"),
+    sort: Literal["total", "investor", "governance", "delivery", "commercial", "safety"] = Query("total"),
     db: Session = Depends(get_db),
 ) -> ReputationLeaderboardResponse:
     rows_query = (
@@ -218,6 +218,10 @@ def _leaderboard_sort_key(item: ReputationAgentSummary, sort: str) -> tuple[int,
         primary = int(item.governance_points)
     elif sort == "delivery":
         primary = int(item.delivery_points)
+    elif sort == "commercial":
+        primary = int(item.commercial_points)
+    elif sort == "safety":
+        primary = int(item.safety_points)
     else:
         primary = int(item.total_points)
     return (-primary, -int(item.total_points), int(item.agent_num))

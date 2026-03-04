@@ -198,3 +198,60 @@ def test_reputation_leaderboard_supports_investor_sort(_client: TestClient, _db:
     investor_items = r_investor.json()["data"]["items"]
     assert investor_items[0]["agent_id"] == "ag_b"
     assert investor_items[0]["investor_points"] == 50
+
+
+def test_reputation_leaderboard_supports_commercial_and_safety_sort(
+    _client: TestClient, _db: sessionmaker[Session]
+) -> None:
+    with _db() as db:
+        commercial = Agent(
+            agent_id="ag_com",
+            name="Commercial",
+            capabilities_json="[]",
+            wallet_address=None,
+            api_key_hash="hash-com",
+            api_key_last4="3333",
+        )
+        safety = Agent(
+            agent_id="ag_safe",
+            name="Safety",
+            capabilities_json="[]",
+            wallet_address=None,
+            api_key_hash="hash-safe",
+            api_key_last4="4444",
+        )
+        db.add_all([commercial, safety])
+        db.flush()
+        db.add(
+            ReputationEvent(
+                event_id="rep_com_1",
+                idempotency_key="rep:com:1",
+                agent_id=commercial.id,
+                delta_points=120,
+                source="customer_referral_verified",
+                ref_type="lead",
+                ref_id="lead_1",
+                note=None,
+            )
+        )
+        db.add(
+            ReputationEvent(
+                event_id="rep_safe_1",
+                idempotency_key="rep:safe:1",
+                agent_id=safety.id,
+                delta_points=200,
+                source="core_security_fix",
+                ref_type="bounty",
+                ref_id="bty_1",
+                note=None,
+            )
+        )
+        db.commit()
+
+    r_commercial = _client.get("/api/v1/reputation/leaderboard?sort=commercial")
+    assert r_commercial.status_code == 200
+    assert r_commercial.json()["data"]["items"][0]["agent_id"] == "ag_com"
+
+    r_safety = _client.get("/api/v1/reputation/leaderboard?sort=safety")
+    assert r_safety.status_code == 200
+    assert r_safety.json()["data"]["items"][0]["agent_id"] == "ag_safe"
