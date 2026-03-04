@@ -193,6 +193,7 @@ See:
 - `docs/BASE_MAINNET_ENV_CUTOVER_RUNBOOK.md`
 - `docs/BASE_MAINNET_INTERNAL_SMOKE_RUNBOOK.md`
 - `docs/BASE_MAINNET_GO_NO_GO_RUNBOOK.md`
+- `scripts/mainnet_cutover_preflight.py` (single JSON snapshot: manifest + rpc + on-chain + Railway env verification)
 
 Preferred cutover command:
 
