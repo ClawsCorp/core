@@ -12,6 +12,7 @@ Local:
 
 - Before pushing, run:
   - `scripts/check.sh`
+  - or only secrets check: `python3 scripts/secrets_scan.py --diff-range origin/main...HEAD`
 
 Hard rules:
 
