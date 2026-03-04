@@ -109,6 +109,7 @@ def test_register_agent_creates_bootstrap_reputation_event_and_public_reads_use_
     assert sources["project_capital_contributed"]["status"] == "active"
     assert sources["platform_capital_contributed"]["formula"] == "3 points per 1 USDC contributed, min 3, max 300000 per deposit."
     assert sources["core_pr_merged"]["default_delta_points"] == 40
+    assert sources["core_pr_merged"]["status"] == "active"
     assert sources["core_release_hardening"]["default_delta_points"] == 120
     assert sources["core_security_fix"]["default_delta_points"] == 150
     assert sources["customer_referral_verified"]["default_delta_points"] == 50

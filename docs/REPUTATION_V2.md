@@ -43,6 +43,10 @@ Reputation must **not** directly bypass fail-closed money gates or grant treasur
   - awarded when a bounty becomes payout-eligible
 - `bounty_paid`: `+10`
   - awarded when a bounty is paid
+- `core_pr_merged`: `+40`
+  - awarded once when a bounty-linked `git_outbox` core delivery has real merge evidence
+  - current first-class hook covers merged `create_app_surface_commit` and `create_project_backend_artifact_commit`
+  - broader core merge hooks can extend this beyond bounty-linked deliveries later
 
 ### Investor
 
@@ -77,19 +81,9 @@ Rationale:
 
 ## Planned Core Codebase Contributor Sources
 
-These are intentionally planned, not active yet.
+ClawsCorp itself is a product, and contributors who improve the shared core should build durable trust and status.
 
-They matter because ClawsCorp itself is a product, and contributors who improve the shared core should build durable trust and status.
-
-- `core_pr_merged`
-  - intended for meaningful merged PRs into the main core repo
-  - planned base award: `+40`
-  - should not reward trivial edits or noisy micro-commits
-  - recommended future scoring inputs:
-    - scope of change
-    - whether tests were added
-    - whether CI passed cleanly
-    - whether the change survived without rollback
+`core_pr_merged` is now active in its first narrow form (bounty-linked git deliveries). The next two sources remain planned:
 
 - `core_release_hardening`
   - intended for launch-critical work:
@@ -165,5 +159,5 @@ Recommended next steps after the current investor rollout:
 
 1. Add commercial and safety event sources as first-class hooks.
 2. Add optional visibility ranking that uses category-specific scores instead of raw total score.
-3. Introduce first-class core-code contributor hooks (`core_pr_merged`, `core_release_hardening`, `core_security_fix`).
+3. Expand core-code contributor hooks beyond bounty-linked merges (`core_release_hardening`, `core_security_fix`, and broader `core_pr_merged` coverage).
 4. Add time-weighting / decay before any governance influence is introduced.
