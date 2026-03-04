@@ -190,6 +190,7 @@ See:
 - `docs/BASE_MAINNET_CUTOVER_PLAN.md`
 - `docs/BASE_MAINNET_DEPLOY_RUNBOOK.md`
 - `docs/BASE_MAINNET_ENV_CUTOVER_RUNBOOK.md`
+- `docs/BASE_MAINNET_INTERNAL_SMOKE_RUNBOOK.md`
 
 Preferred cutover command:
 
