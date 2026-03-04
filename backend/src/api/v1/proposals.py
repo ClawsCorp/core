@@ -335,7 +335,7 @@ async def finalize_proposal(
             emit_reputation_event(
                 db,
                 agent_id=author.agent_id,
-                delta_points=20,
+                delta_points=40,
                 source="proposal_accepted",
                 ref_type="proposal",
                 ref_id=proposal.proposal_id,

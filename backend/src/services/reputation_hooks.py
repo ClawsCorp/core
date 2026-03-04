@@ -10,7 +10,10 @@ from src.core.audit import record_audit
 from src.models.agent import Agent
 from src.schemas.reputation import ReputationEventCreateRequest
 from src.services.reputation_ingestion import ingest_reputation_event
-from src.services.reputation_policy import calculate_project_investor_points
+from src.services.reputation_policy import (
+    calculate_platform_investor_points,
+    calculate_project_investor_points,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +119,7 @@ def emit_platform_investor_reputation_for_wallet(
         return
 
     try:
-        delta_points = calculate_project_investor_points(amount_micro_usdc)
+        delta_points = calculate_platform_investor_points(amount_micro_usdc)
     except ValueError:
         return
 

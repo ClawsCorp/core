@@ -98,6 +98,7 @@ class ReputationPolicySourcePublic(BaseModel):
 class ReputationPolicyData(BaseModel):
     categories: list[str]
     investor_project_funding_formula: str
+    investor_platform_funding_formula: str
     sources: list[ReputationPolicySourcePublic]
 
 
