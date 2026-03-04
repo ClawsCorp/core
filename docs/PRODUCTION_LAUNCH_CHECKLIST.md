@@ -188,6 +188,8 @@ See:
 
 - `docs/RPC_PROVIDER_SWITCH_RUNBOOK.md`
 - `docs/BASE_MAINNET_CUTOVER_PLAN.md`
+- `docs/BASE_MAINNET_DEPLOY_RUNBOOK.md`
+- `docs/BASE_MAINNET_ENV_CUTOVER_RUNBOOK.md`
 
 Preferred cutover command:
 
