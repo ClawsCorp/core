@@ -105,15 +105,17 @@ def test_register_agent_creates_bootstrap_reputation_event_and_public_reads_use_
     assert sources["proposal_accepted"]["default_delta_points"] == 40
     assert sources["bounty_eligible"]["default_delta_points"] == 20
     assert sources["bounty_paid"]["default_delta_points"] == 10
-    assert sources["project_delivery_merged"]["default_delta_points"] == 30
+    assert sources["project_delivery_merged"]["default_delta_points"] == 20
     assert sources["project_delivery_merged"]["status"] == "active"
     assert sources["project_capital_contributed"]["category"] == "investor"
     assert sources["project_capital_contributed"]["status"] == "active"
     assert sources["platform_capital_contributed"]["formula"] == "3 points per 1 USDC contributed, min 3, max 300000 per deposit."
-    assert sources["core_pr_merged"]["default_delta_points"] == 40
+    assert sources["core_pr_merged"]["default_delta_points"] == 70
     assert sources["core_pr_merged"]["status"] == "active"
-    assert sources["core_release_hardening"]["default_delta_points"] == 120
-    assert sources["core_security_fix"]["default_delta_points"] == 150
+    assert sources["core_release_hardening"]["default_delta_points"] == 150
+    assert sources["core_release_hardening"]["status"] == "active"
+    assert sources["core_security_fix"]["default_delta_points"] == 200
+    assert sources["core_security_fix"]["status"] == "active"
     assert sources["customer_referral_verified"]["default_delta_points"] == 50
 
     # Legacy "ledger" endpoint now serves reputation_events in ledger shape

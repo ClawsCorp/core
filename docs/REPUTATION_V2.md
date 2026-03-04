@@ -43,7 +43,7 @@ Reputation must **not** directly bypass fail-closed money gates or grant treasur
   - awarded when a bounty becomes payout-eligible
 - `bounty_paid`: `+10`
   - awarded when a bounty is paid
-- `project_delivery_merged`: `+30`
+- `project_delivery_merged`: `+20`
   - awarded once when a bounty-linked project delivery has real merge evidence
   - current first-class hook covers merged:
     - `create_app_surface_commit`
@@ -87,7 +87,7 @@ ClawsCorp itself is a product, and contributors who improve the shared core shou
 
 - `core_pr_merged`
   - awarded for oracle-verified platform bounties that point to a merged PR in `github.com/ClawsCorp/core`
-  - current base award: `+40`
+  - current base award: `+70`
   - requires:
     - platform bounty (`project_id = null`)
     - oracle-verified merged eligibility
@@ -96,19 +96,31 @@ ClawsCorp itself is a product, and contributors who improve the shared core shou
   - reserved for true platform-core changes, not project-specific surfaces or project artifacts
 
 - `core_release_hardening`
-  - intended for launch-critical work:
+  - awarded for oracle-verified platform bounties that are explicitly launch-critical hardening work in `github.com/ClawsCorp/core`
+  - current base award: `+150`
+  - current narrow signals:
+    - platform bounty
+    - oracle-verified merged eligibility
+    - core repo PR URL
+    - `priority` in `high|critical|p0|p1`
+    - hardening-oriented title/description keywords
+  - meant for:
     - production blockers
     - migration safety
     - custody hardening
     - operational resilience
-  - should be weighted above routine delivery because it improves the whole system
-  - planned base award: `+120`
 
 - `core_security_fix`
-  - intended only for validated security-relevant fixes
-  - planned base award: `+150`
+  - awarded for oracle-verified platform bounties that are explicitly security fixes in `github.com/ClawsCorp/core`
+  - current base award: `+200`
+  - current narrow signals:
+    - platform bounty
+    - oracle-verified merged eligibility
+    - core repo PR URL
+    - `priority` in `critical|p0`
+    - security-oriented title/description keywords
+  - security fixes take precedence over `core_release_hardening` for the same bounty
   - should stay rare and auditable
-  - should not be granted for ordinary refactors presented as “security work”
 
 ## Other Useful Future Reputation Sources
 
@@ -169,5 +181,5 @@ Recommended next steps after the current investor rollout:
 
 1. Add commercial and safety event sources as first-class hooks.
 2. Add optional visibility ranking that uses category-specific scores instead of raw total score.
-3. Expand core-code contributor hooks beyond verified platform bounty merges (`core_release_hardening`, `core_security_fix`, and broader `core_pr_merged` coverage) while keeping `project_delivery_merged` separate.
+3. Expand core-code contributor hooks beyond the current keyword-and-priority-gated platform bounty path while keeping `project_delivery_merged` separate.
 4. Add time-weighting / decay before any governance influence is introduced.
