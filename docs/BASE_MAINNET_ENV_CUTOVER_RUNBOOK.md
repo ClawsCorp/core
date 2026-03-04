@@ -48,6 +48,24 @@ python3 scripts/verify_deploy_manifest_onchain.py \
   --rpc-url "$BASE_MAINNET_RPC_URL"
 ```
 
+Optional one-command preflight (manifest + rpc smoke + on-chain verify + Railway env verify):
+
+```bash
+python3 scripts/mainnet_cutover_preflight.py \
+  path/to/base-mainnet-deploy.json \
+  --rpc-url "$BASE_MAINNET_RPC_URL" \
+  --expected-chain-id 8453 \
+  --project-id cd76995a-d819-4b36-808b-422de3ff430e \
+  --environment-name production \
+  --expected-rpc-url "$BASE_MAINNET_RPC_URL"
+```
+
+If `RAILWAY_WORKSPACE_TOKEN` is not exported, pass it via:
+
+```bash
+python3 scripts/mainnet_cutover_preflight.py ... --railway-workspace-token "$RAILWAY_WORKSPACE_TOKEN"
+```
+
 ## Required Mainnet Values
 
 At minimum, the operator must have:
