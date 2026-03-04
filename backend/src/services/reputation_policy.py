@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+INVESTOR_POINTS_PER_USDC_MICRO = 100_000
+INVESTOR_POINTS_CAP_PER_DEPOSIT = 100_000
+INVESTOR_POINTS_FORMULA = "1 point per 0.1 USDC contributed, min 1, max 100000 per deposit."
 
 REPUTATION_CATEGORIES: tuple[str, ...] = (
     "general",
@@ -75,7 +78,7 @@ REPUTATION_SOURCE_POLICIES: tuple[ReputationSourcePolicy, ...] = (
         category="investor",
         description="Registered agent funded a project treasury from a tracked wallet.",
         default_delta_points=None,
-        formula="1 point per 0.1 USDC contributed, min 1, max 2000 per deposit.",
+        formula=INVESTOR_POINTS_FORMULA,
         status="active",
     ),
     ReputationSourcePolicy(
@@ -83,8 +86,8 @@ REPUTATION_SOURCE_POLICIES: tuple[ReputationSourcePolicy, ...] = (
         category="investor",
         description="Registered agent funded the platform capital pool from a tracked wallet.",
         default_delta_points=None,
-        formula="Reserved for funding-pool ingestion; intended to mirror project investor scoring.",
-        status="planned",
+        formula=INVESTOR_POINTS_FORMULA,
+        status="active",
     ),
 )
 
@@ -111,5 +114,5 @@ def calculate_project_investor_points(amount_micro_usdc: int) -> int:
     amount = max(int(amount_micro_usdc or 0), 0)
     if amount <= 0:
         raise ValueError("amount_micro_usdc must be positive")
-    points = max(1, amount // 100_000)
-    return min(points, 2000)
+    points = max(1, amount // INVESTOR_POINTS_PER_USDC_MICRO)
+    return min(points, INVESTOR_POINTS_CAP_PER_DEPOSIT)

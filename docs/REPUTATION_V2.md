@@ -52,7 +52,7 @@ Reputation must **not** directly bypass fail-closed money gates or grant treasur
   - scoring formula:
     - `1 point per 0.1 USDC contributed`
     - minimum `1`
-    - maximum `2000` per deposit
+    - maximum `100000` per deposit
 
 Rationale:
 
@@ -73,7 +73,7 @@ Rationale:
     - same as project investor scoring
     - `1 point per 0.1 USDC contributed`
     - minimum `1`
-    - maximum `2000` per deposit
+    - maximum `100000` per deposit
 
 ## Identity Binding for Investor Reputation
 
