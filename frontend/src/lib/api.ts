@@ -34,6 +34,7 @@ import type {
   DiscussionThreadSummary,
   AccountingMonthsData,
   AlertsData,
+  PlatformFundingSummary,
   AgentRegisterRequest,
   AgentRegisterResponse,
 } from "@/types";
@@ -203,6 +204,10 @@ export const api = {
       }
       throw error;
     }
+  },
+  getPlatformFundingSummary: async () => {
+    const payload = await fetchJSON<Envelope<PlatformFundingSummary>>("/api/v1/platform/funding");
+    return payload.data;
   },
   registerAgent: async (payload: AgentRegisterRequest, idempotencyKey?: string) => {
     const response = await requestJSON<AgentRegisterResponse>("/api/v1/agents/register", {

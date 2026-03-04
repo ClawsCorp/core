@@ -1155,6 +1155,54 @@ Public reads:
 
 - `GET /api/v1/platform-capital/summary`
 - `GET /api/v1/platform-capital/reconciliation/latest`
+- `GET /api/v1/platform/funding` (funding progress + cap table)
+
+## Oracle platform funding rounds and deposits
+
+`POST /api/v1/oracle/platform/funding-rounds` opens a platform funding round (HMAC required).
+
+Request body:
+
+```json
+{
+  "idempotency_key": "pfr:open:round1",
+  "title": "Platform Round 1",
+  "cap_micro_usdc": 1000000000
+}
+```
+
+Semantics:
+
+- fail-closed when FundingPool is missing/invalid:
+  - `blocked_reason="funding_pool_address_missing"` or `funding_pool_address_invalid`
+- if another round is already open and idempotency differs:
+  - `blocked_reason="funding_round_already_open"`
+- idempotent by `idempotency_key`.
+
+`POST /api/v1/oracle/platform/funding-rounds/{round_id}/close` closes a platform funding round (HMAC required).
+
+Request body:
+
+```json
+{
+  "idempotency_key": "pfr:close:round1"
+}
+```
+
+Semantics:
+
+- returns `blocked_reason="funding_round_not_found"` when round does not exist
+- closing is idempotent: repeated close returns same row state.
+
+`POST /api/v1/oracle/platform-funding/sync` syncs observed FundingPool inflows into
+append-only `platform_funding_deposits` rows (HMAC required).
+
+Semantics:
+
+- reads `observed_usdc_transfers` where `to_address == FUNDING_POOL_CONTRACT_ADDRESS`
+- excludes self-transfers where `from_address == to_address`
+- links deposits to latest open platform funding round (if any)
+- idempotent per `observed_transfer_id`.
 
 ## Oracle project treasury and capital reconciliation
 

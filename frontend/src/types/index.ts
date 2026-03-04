@@ -24,6 +24,34 @@ export interface StatsData {
   platform_capital_reconciliation_computed_at?: string | null;
 }
 
+export interface PlatformFundingRoundPublic {
+  round_id: string;
+  title: string | null;
+  status: string;
+  cap_micro_usdc: number | null;
+  opened_at: string;
+  closed_at: string | null;
+  created_at: string;
+}
+
+export interface PlatformFundingContributor {
+  address: string;
+  amount_micro_usdc: number;
+}
+
+export interface PlatformFundingSummary {
+  funding_pool_address: string | null;
+  open_round: PlatformFundingRoundPublic | null;
+  open_round_raised_micro_usdc: number;
+  total_raised_micro_usdc: number;
+  contributors: PlatformFundingContributor[];
+  contributors_total_count: number;
+  contributors_data_source: string;
+  unattributed_micro_usdc: number;
+  last_deposit_at: string | null;
+  blocked_reason: string | null;
+}
+
 export interface IndexerStatusData {
   cursor_key: string;
   chain_id: number | null;

@@ -443,6 +443,29 @@ def build_parser() -> argparse.ArgumentParser:
     close_funding_round.add_argument("--idempotency-key")
     close_funding_round.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
 
+    open_platform_funding_round = subparsers.add_parser(
+        "open-platform-funding-round",
+        help="Open a platform funding round (oracle HMAC protected).",
+    )
+    open_platform_funding_round.add_argument("--title")
+    open_platform_funding_round.add_argument("--cap-micro-usdc", type=int)
+    open_platform_funding_round.add_argument("--idempotency-key")
+    open_platform_funding_round.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
+
+    close_platform_funding_round = subparsers.add_parser(
+        "close-platform-funding-round",
+        help="Close a platform funding round (oracle HMAC protected).",
+    )
+    close_platform_funding_round.add_argument("--round-id", required=True)
+    close_platform_funding_round.add_argument("--idempotency-key")
+    close_platform_funding_round.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
+
+    sync_platform_funding = subparsers.add_parser(
+        "sync-platform-funding",
+        help="Sync observed FundingPool inflows into platform funding deposits (oracle HMAC protected).",
+    )
+    sync_platform_funding.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
+
     run_project_month = subparsers.add_parser(
         "run-project-month",
         help="Project month orchestration (MVP): refresh project capital reconciliation and report readiness.",
@@ -1111,6 +1134,61 @@ def run(argv: list[str] | None = None) -> int:
                 _print_json(data)
             else:
                 _print_fields(data, ["round_id", "status"])
+            return 0
+
+        if args.command == "open-platform-funding-round":
+            payload = {
+                "idempotency_key": args.idempotency_key or "",
+                "title": (str(args.title).strip() if args.title is not None else None),
+                "cap_micro_usdc": (int(args.cap_micro_usdc) if args.cap_micro_usdc is not None else None),
+            }
+            payload = {k: v for k, v in payload.items() if v is not None}
+            if not payload.get("idempotency_key"):
+                derived = dict(payload)
+                derived.pop("idempotency_key", None)
+                payload["idempotency_key"] = _derive_idempotency_key("open_platform_funding_round", derived)
+
+            body_bytes = json.dumps(payload, separators=(",", ":"), ensure_ascii=True, sort_keys=True).encode("utf-8")
+            data = _post_action(
+                client,
+                "/api/v1/oracle/platform/funding-rounds",
+                body_bytes,
+                idempotency_key=str(payload["idempotency_key"]),
+            )
+            if json_mode:
+                _print_json(data)
+            else:
+                _print_fields(data, ["round_id", "status", "cap_micro_usdc"])
+            return 0
+
+        if args.command == "close-platform-funding-round":
+            round_id = str(args.round_id).strip()
+            if not round_id:
+                raise OracleRunnerError("--round-id is required.")
+
+            payload: dict[str, Any] = {"idempotency_key": args.idempotency_key or ""}
+            if not payload.get("idempotency_key"):
+                payload["idempotency_key"] = _derive_idempotency_key(f"close_platform_funding_round:{round_id}", {})
+
+            body_bytes = json.dumps(payload, separators=(",", ":"), ensure_ascii=True, sort_keys=True).encode("utf-8")
+            data = _post_action(
+                client,
+                f"/api/v1/oracle/platform/funding-rounds/{round_id}/close",
+                body_bytes,
+                idempotency_key=str(payload["idempotency_key"]),
+            )
+            if json_mode:
+                _print_json(data)
+            else:
+                _print_fields(data, ["round_id", "status"])
+            return 0
+
+        if args.command == "sync-platform-funding":
+            data = _post_action(client, "/api/v1/oracle/platform-funding/sync", b"{}")
+            if json_mode:
+                _print_json(data)
+            else:
+                _print_fields(data, ["funding_pool_address", "transfers_seen", "deposits_inserted", "open_round_id"])
             return 0
 
         if args.command == "run-project-month":

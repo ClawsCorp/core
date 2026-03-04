@@ -8,7 +8,7 @@ import { EmptyState, Loading } from "@/components/State";
 import { ErrorState } from "@/components/ErrorState";
 import { api, readErrorMessage } from "@/lib/api";
 import { formatDateTimeShort } from "@/lib/format";
-import type { AlertsData, AlertItem, IndexerStatusData, StatsData } from "@/types";
+import type { AlertsData, AlertItem, IndexerStatusData, PlatformFundingSummary, StatsData } from "@/types";
 
 function groupBySeverity(items: AlertItem[]): Record<string, AlertItem[]> {
   const out: Record<string, AlertItem[]> = {};
@@ -30,19 +30,22 @@ export default function AutonomyPage() {
   const [alerts, setAlerts] = useState<AlertsData | null>(null);
   const [indexerStatus, setIndexerStatus] = useState<IndexerStatusData | null>(null);
   const [stats, setStats] = useState<StatsData | null>(null);
+  const [platformFunding, setPlatformFunding] = useState<PlatformFundingSummary | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [alertsData, indexerData, statsData] = await Promise.all([
+      const [alertsData, indexerData, statsData, platformFundingData] = await Promise.all([
         api.getAlerts(),
         api.getIndexerStatus(),
         api.getStats(),
+        api.getPlatformFundingSummary(),
       ]);
       setAlerts(alertsData);
       setIndexerStatus(indexerData);
       setStats(statsData);
+      setPlatformFunding(platformFundingData);
     } catch (err) {
       setError(readErrorMessage(err));
     } finally {
@@ -177,6 +180,40 @@ export default function AutonomyPage() {
                   reconciliation_computed_at:{" "}
                   {formatDateTimeShort(stats.platform_capital_reconciliation_computed_at)}
                 </p>
+              ) : null}
+            </DataCard>
+          ) : null}
+
+          {platformFunding ? (
+            <DataCard title="Platform Funding Progress">
+              <p>funding_pool: {platformFunding.funding_pool_address ?? "not configured"}</p>
+              <p>
+                open_round:{" "}
+                {platformFunding.open_round
+                  ? `${platformFunding.open_round.round_id}${platformFunding.open_round.title ? ` (${platformFunding.open_round.title})` : ""}`
+                  : "—"}
+              </p>
+              <p>
+                round_raised: {platformFunding.open_round_raised_micro_usdc}
+                {platformFunding.open_round?.cap_micro_usdc ? ` / ${platformFunding.open_round.cap_micro_usdc}` : ""}
+              </p>
+              <p>total_raised: {platformFunding.total_raised_micro_usdc}</p>
+              <p>contributors: {platformFunding.contributors_total_count}</p>
+              <p>data_source: {platformFunding.contributors_data_source}</p>
+              <p>unattributed_micro_usdc: {platformFunding.unattributed_micro_usdc}</p>
+              <p>last_deposit_at: {formatDateTimeShort(platformFunding.last_deposit_at)}</p>
+              {platformFunding.blocked_reason ? <p>blocked_reason: {platformFunding.blocked_reason}</p> : null}
+              {platformFunding.contributors.length > 0 ? (
+                <>
+                  <p>cap_table (top {platformFunding.contributors.length})</p>
+                  <ul>
+                    {platformFunding.contributors.map((row) => (
+                      <li key={row.address}>
+                        {row.address}: {row.amount_micro_usdc}
+                      </li>
+                    ))}
+                  </ul>
+                </>
               ) : null}
             </DataCard>
           ) : null}
