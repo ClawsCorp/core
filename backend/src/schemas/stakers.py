@@ -22,3 +22,15 @@ class StakersSummaryResponse(BaseModel):
     success: bool
     data: StakersSummaryData
 
+
+class PlatformInvestorReputationSyncData(BaseModel):
+    funding_pool_address: str
+    transfers_seen: int = Field(..., ge=0)
+    reputation_events_created: int = Field(..., ge=0)
+    recognized_investor_transfers: int = Field(..., ge=0)
+
+
+class PlatformInvestorReputationSyncResponse(BaseModel):
+    success: bool
+    data: PlatformInvestorReputationSyncData | None = None
+    blocked_reason: str | None = None

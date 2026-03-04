@@ -60,11 +60,20 @@ Rationale:
 - no fixed minimum bonus that would reward deposit splitting
 - per-deposit cap prevents a single oversized transfer from dominating the leaderboard
 
-### Planned Investor Source
+### Platform Investor Source
 
-- `platform_capital_contributed`: planned
-  - same category, intended for direct funding of the platform/funding pool
-  - should be enabled only after platform capital ingestion is first-class in the backend
+- `platform_capital_contributed`: variable
+  - awarded when a tracked wallet belonging to a registered agent sends USDC into `FundingPool`
+  - source of truth: `observed_usdc_transfers` into `FUNDING_POOL_CONTRACT_ADDRESS`
+  - sync path:
+    - `POST /api/v1/oracle/platform-capital/reputation-sync`
+    - runner command:
+      - `python -m src.oracle_runner sync-platform-investor-reputation --json`
+  - scoring formula:
+    - same as project investor scoring
+    - `1 point per 0.1 USDC contributed`
+    - minimum `1`
+    - maximum `2000` per deposit
 
 ## Identity Binding for Investor Reputation
 
@@ -93,7 +102,6 @@ Current policy read:
 
 Recommended next steps after the current investor rollout:
 
-1. Add platform investor auto-awards once funding pool ingestion exists.
-2. Add commercial and safety event sources as first-class hooks.
-3. Add optional visibility ranking that uses category-specific scores instead of raw total score.
-4. Add time-weighting / decay before any governance influence is introduced.
+1. Add commercial and safety event sources as first-class hooks.
+2. Add optional visibility ranking that uses category-specific scores instead of raw total score.
+3. Add time-weighting / decay before any governance influence is introduced.

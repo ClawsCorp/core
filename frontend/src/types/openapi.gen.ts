@@ -488,6 +488,10 @@ export interface paths {
      */
     get: operations["get_stakers_summary_api_v1_stakers_get"];
   };
+  "/api/v1/oracle/platform-capital/reputation-sync": {
+    /** Sync Platform Investor Reputation */
+    post: operations["sync_platform_investor_reputation_api_v1_oracle_platform_capital_reputation_sync_post"];
+  };
   "/api/v1/discussions/threads": {
     /** List Threads */
     get: operations["list_threads_api_v1_discussions_threads_get"];
@@ -1671,6 +1675,25 @@ export interface components {
       /** Success */
       success: boolean;
       data: components["schemas"]["PayoutTriggerData"];
+    };
+    /** PlatformInvestorReputationSyncData */
+    PlatformInvestorReputationSyncData: {
+      /** Funding Pool Address */
+      funding_pool_address: string;
+      /** Transfers Seen */
+      transfers_seen: number;
+      /** Reputation Events Created */
+      reputation_events_created: number;
+      /** Recognized Investor Transfers */
+      recognized_investor_transfers: number;
+    };
+    /** PlatformInvestorReputationSyncResponse */
+    PlatformInvestorReputationSyncResponse: {
+      /** Success */
+      success: boolean;
+      data?: components["schemas"]["PlatformInvestorReputationSyncData"] | null;
+      /** Blocked Reason */
+      blocked_reason?: string | null;
     };
     /** ProfitDepositData */
     ProfitDepositData: {
@@ -5810,6 +5833,17 @@ export interface operations {
       422: {
         content: {
           "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Sync Platform Investor Reputation */
+  sync_platform_investor_reputation_api_v1_oracle_platform_capital_reputation_sync_post: {
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["PlatformInvestorReputationSyncResponse"];
         };
       };
     };
