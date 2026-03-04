@@ -98,10 +98,20 @@ def test_register_agent_creates_bootstrap_reputation_event_and_public_reads_use_
     assert r_policy.status_code == 200
     policy_payload = r_policy.json()["data"]
     assert "investor" in policy_payload["categories"]
+    assert policy_payload["investor_project_funding_formula"] == "1 point per 1 USDC contributed, min 1, max 100000 per deposit."
+    assert policy_payload["investor_platform_funding_formula"] == "3 points per 1 USDC contributed, min 3, max 300000 per deposit."
     sources = {item["source"]: item for item in policy_payload["sources"]}
     assert sources["bootstrap"]["default_delta_points"] == 100
+    assert sources["proposal_accepted"]["default_delta_points"] == 40
+    assert sources["bounty_eligible"]["default_delta_points"] == 20
+    assert sources["bounty_paid"]["default_delta_points"] == 10
     assert sources["project_capital_contributed"]["category"] == "investor"
     assert sources["project_capital_contributed"]["status"] == "active"
+    assert sources["platform_capital_contributed"]["formula"] == "3 points per 1 USDC contributed, min 3, max 300000 per deposit."
+    assert sources["core_pr_merged"]["default_delta_points"] == 40
+    assert sources["core_release_hardening"]["default_delta_points"] == 120
+    assert sources["core_security_fix"]["default_delta_points"] == 150
+    assert sources["customer_referral_verified"]["default_delta_points"] == 50
 
     # Legacy "ledger" endpoint now serves reputation_events in ledger shape
     r_ledger = _client.get(
@@ -113,3 +123,73 @@ def test_register_agent_creates_bootstrap_reputation_event_and_public_reads_use_
     assert len(items) == 1
     assert items[0]["delta"] == 100
     assert items[0]["reason"] == "bootstrap"
+
+
+def test_reputation_leaderboard_supports_investor_sort(_client: TestClient, _db: sessionmaker[Session]) -> None:
+    with _db() as db:
+        a = Agent(
+            agent_id="ag_a",
+            name="A",
+            capabilities_json="[]",
+            wallet_address=None,
+            api_key_hash="hash-a",
+            api_key_last4="1111",
+        )
+        b = Agent(
+            agent_id="ag_b",
+            name="B",
+            capabilities_json="[]",
+            wallet_address=None,
+            api_key_hash="hash-b",
+            api_key_last4="2222",
+        )
+        db.add_all([a, b])
+        db.flush()
+        db.add(
+            ReputationEvent(
+                event_id="rep_a_total",
+                idempotency_key="rep:a:total",
+                agent_id=a.id,
+                delta_points=200,
+                source="bootstrap",
+                ref_type="agent",
+                ref_id="ag_a",
+                note=None,
+            )
+        )
+        db.add(
+            ReputationEvent(
+                event_id="rep_b_investor",
+                idempotency_key="rep:b:investor",
+                agent_id=b.id,
+                delta_points=50,
+                source="platform_capital_contributed",
+                ref_type="funding_pool_deposit",
+                ref_id="d1",
+                note=None,
+            )
+        )
+        db.add(
+            ReputationEvent(
+                event_id="rep_b_total",
+                idempotency_key="rep:b:total",
+                agent_id=b.id,
+                delta_points=20,
+                source="proposal_accepted",
+                ref_type="proposal",
+                ref_id="p1",
+                note=None,
+            )
+        )
+        db.commit()
+
+    r_total = _client.get("/api/v1/reputation/leaderboard?sort=total")
+    assert r_total.status_code == 200
+    total_items = r_total.json()["data"]["items"]
+    assert total_items[0]["agent_id"] == "ag_a"
+
+    r_investor = _client.get("/api/v1/reputation/leaderboard?sort=investor")
+    assert r_investor.status_code == 200
+    investor_items = r_investor.json()["data"]["items"]
+    assert investor_items[0]["agent_id"] == "ag_b"
+    assert investor_items[0]["investor_points"] == 50

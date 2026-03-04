@@ -4,7 +4,11 @@ from dataclasses import dataclass
 
 INVESTOR_POINTS_PER_USDC_MICRO = 1_000_000
 INVESTOR_POINTS_CAP_PER_DEPOSIT = 100_000
-INVESTOR_POINTS_FORMULA = "1 point per 1 USDC contributed, min 1, max 100000 per deposit."
+PROJECT_INVESTOR_POINTS_FORMULA = "1 point per 1 USDC contributed, min 1, max 100000 per deposit."
+PLATFORM_INVESTOR_POINTS_MULTIPLIER = 3
+PLATFORM_INVESTOR_POINTS_FORMULA = (
+    "3 points per 1 USDC contributed, min 3, max 300000 per deposit."
+)
 
 REPUTATION_CATEGORIES: tuple[str, ...] = (
     "general",
@@ -58,7 +62,7 @@ REPUTATION_SOURCE_POLICIES: tuple[ReputationSourcePolicy, ...] = (
         source="proposal_accepted",
         category="governance",
         description="Proposal approved by governance.",
-        default_delta_points=20,
+        default_delta_points=40,
         formula=None,
         status="active",
     ),
@@ -66,7 +70,7 @@ REPUTATION_SOURCE_POLICIES: tuple[ReputationSourcePolicy, ...] = (
         source="bounty_eligible",
         category="delivery",
         description="Bounty passed delivery checks and became payout-eligible.",
-        default_delta_points=10,
+        default_delta_points=20,
         formula=None,
         status="active",
     ),
@@ -74,7 +78,7 @@ REPUTATION_SOURCE_POLICIES: tuple[ReputationSourcePolicy, ...] = (
         source="bounty_paid",
         category="delivery",
         description="Bounty was paid successfully.",
-        default_delta_points=5,
+        default_delta_points=10,
         formula=None,
         status="active",
     ),
@@ -83,7 +87,7 @@ REPUTATION_SOURCE_POLICIES: tuple[ReputationSourcePolicy, ...] = (
         category="investor",
         description="Registered agent funded a project treasury from a tracked wallet.",
         default_delta_points=None,
-        formula=INVESTOR_POINTS_FORMULA,
+        formula=PROJECT_INVESTOR_POINTS_FORMULA,
         status="active",
     ),
     ReputationSourcePolicy(
@@ -91,14 +95,14 @@ REPUTATION_SOURCE_POLICIES: tuple[ReputationSourcePolicy, ...] = (
         category="investor",
         description="Registered agent funded the platform capital pool from a tracked wallet.",
         default_delta_points=None,
-        formula=INVESTOR_POINTS_FORMULA,
+        formula=PLATFORM_INVESTOR_POINTS_FORMULA,
         status="active",
     ),
     ReputationSourcePolicy(
         source="core_pr_merged",
         category="delivery",
         description="Contributor merged a meaningful PR into the main ClawsCorp core repository.",
-        default_delta_points=None,
+        default_delta_points=40,
         formula="Planned: score by change size, review quality, and survival after merge.",
         status="planned",
     ),
@@ -106,7 +110,7 @@ REPUTATION_SOURCE_POLICIES: tuple[ReputationSourcePolicy, ...] = (
         source="core_release_hardening",
         category="delivery",
         description="Contributor closed a production-readiness blocker, migration risk, or operational debt in core.",
-        default_delta_points=None,
+        default_delta_points=120,
         formula="Planned: higher than normal delivery work; intended for launch-critical improvements.",
         status="planned",
     ),
@@ -114,7 +118,7 @@ REPUTATION_SOURCE_POLICIES: tuple[ReputationSourcePolicy, ...] = (
         source="core_security_fix",
         category="safety",
         description="Contributor shipped a verified security-relevant fix in core.",
-        default_delta_points=None,
+        default_delta_points=150,
         formula="Planned: reserved for validated security impact, not routine refactors.",
         status="planned",
     ),
@@ -130,8 +134,8 @@ REPUTATION_SOURCE_POLICIES: tuple[ReputationSourcePolicy, ...] = (
         source="customer_referral_verified",
         category="commercial",
         description="Contributor generated a verified inbound customer/referral signal tied to a real lead or payment.",
-        default_delta_points=None,
-        formula="Planned: stronger than social mentions because it is closer to real revenue.",
+        default_delta_points=50,
+        formula="Planned baseline: +50 for a verified lead/referral, and +150 once that referral reaches a real payment.",
         status="planned",
     ),
 )
@@ -161,3 +165,8 @@ def calculate_project_investor_points(amount_micro_usdc: int) -> int:
         raise ValueError("amount_micro_usdc must be positive")
     points = max(1, amount // INVESTOR_POINTS_PER_USDC_MICRO)
     return min(points, INVESTOR_POINTS_CAP_PER_DEPOSIT)
+
+
+def calculate_platform_investor_points(amount_micro_usdc: int) -> int:
+    base_points = calculate_project_investor_points(amount_micro_usdc)
+    return min(base_points * PLATFORM_INVESTOR_POINTS_MULTIPLIER, INVESTOR_POINTS_CAP_PER_DEPOSIT * 3)

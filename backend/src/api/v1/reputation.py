@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -21,7 +23,8 @@ from src.schemas.reputation import (
     ReputationPolicySourcePublic,
 )
 from src.services.reputation_policy import (
-    INVESTOR_POINTS_FORMULA,
+    PLATFORM_INVESTOR_POINTS_FORMULA,
+    PROJECT_INVESTOR_POINTS_FORMULA,
     REPUTATION_CATEGORIES,
     REPUTATION_SOURCE_POLICIES,
     category_points_from_source_totals,
@@ -37,7 +40,8 @@ def get_reputation_policy() -> ReputationPolicyResponse:
         success=True,
         data=ReputationPolicyData(
             categories=list(REPUTATION_CATEGORIES),
-            investor_project_funding_formula=INVESTOR_POINTS_FORMULA,
+            investor_project_funding_formula=PROJECT_INVESTOR_POINTS_FORMULA,
+            investor_platform_funding_formula=PLATFORM_INVESTOR_POINTS_FORMULA,
             sources=[
                 ReputationPolicySourcePublic(
                     source=row.source,
@@ -138,6 +142,7 @@ def get_agent_reputation_summary(
 def get_reputation_leaderboard(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
+    sort: Literal["total", "investor", "governance", "delivery"] = Query("total"),
     db: Session = Depends(get_db),
 ) -> ReputationLeaderboardResponse:
     rows_query = (
@@ -151,13 +156,13 @@ def get_reputation_leaderboard(
         )
         .outerjoin(ReputationEvent, ReputationEvent.agent_id == Agent.id)
         .group_by(Agent.id, Agent.agent_id, Agent.name)
-        .order_by(func.coalesce(func.sum(ReputationEvent.delta_points), 0).desc(), Agent.id.asc())
     )
 
-    total = rows_query.count()
-    page_rows = rows_query.offset(offset).limit(limit).all()
-    category_totals = _load_category_points_for_agent_ids(db, [int(row.agent_num) for row in page_rows])
-    items = [
+    all_rows = rows_query.all()
+    total = len(all_rows)
+    category_totals = _load_category_points_for_agent_ids(db, [int(row.agent_num) for row in all_rows])
+
+    materialized_items = [
         ReputationAgentSummary(
             agent_num=int(row.agent_num),
             agent_id=row.public_agent_id,
@@ -172,8 +177,10 @@ def get_reputation_leaderboard(
             events_count=int(row.events_count),
             last_event_at=row.last_event_at,
         )
-        for row in page_rows
+        for row in all_rows
     ]
+    materialized_items.sort(key=lambda item: _leaderboard_sort_key(item, sort))
+    items = materialized_items[offset : offset + limit]
 
     return ReputationLeaderboardResponse(
         success=True,
@@ -202,3 +209,15 @@ def _load_category_points_for_agent_ids(db: Session, agent_db_ids: list[int]) ->
         agent_id: category_points_from_source_totals(source_totals)
         for agent_id, source_totals in by_agent.items()
     }
+
+
+def _leaderboard_sort_key(item: ReputationAgentSummary, sort: str) -> tuple[int, int, int]:
+    if sort == "investor":
+        primary = int(item.investor_points)
+    elif sort == "governance":
+        primary = int(item.governance_points)
+    elif sort == "delivery":
+        primary = int(item.delivery_points)
+    else:
+        primary = int(item.total_points)
+    return (-primary, -int(item.total_points), int(item.agent_num))

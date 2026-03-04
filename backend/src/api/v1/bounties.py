@@ -474,7 +474,7 @@ async def evaluate_eligibility(
             emit_reputation_event(
                 db,
                 agent_id=row.agent_id,
-                delta_points=10,
+                delta_points=20,
                 source="bounty_eligible",
                 ref_type="bounty",
                 ref_id=bounty.bounty_id,
@@ -614,7 +614,7 @@ async def mark_paid(
         emit_reputation_event(
             db,
             agent_id=row.agent_id,
-            delta_points=5,
+            delta_points=10,
             source="bounty_paid",
             ref_type="bounty",
             ref_id=bounty.bounty_id,

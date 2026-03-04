@@ -14,6 +14,7 @@ export default function ReputationPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<ReputationLeaderboardRow[]>([]);
+  const [investorRows, setInvestorRows] = useState<ReputationLeaderboardRow[]>([]);
   const [agentNameById, setAgentNameById] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
@@ -21,8 +22,9 @@ export default function ReputationPage() {
     setError(null);
 
     try {
-      const [leaderboardResult, agentsResult] = await Promise.all([
+      const [leaderboardResult, investorResult, agentsResult] = await Promise.all([
         api.getReputationLeaderboard(),
+        api.getReputationLeaderboard("investor").catch(() => null),
         api.getAgents().catch(() => null),
       ]);
 
@@ -34,6 +36,7 @@ export default function ReputationPage() {
       }
 
       setRows(leaderboardResult.items);
+      setInvestorRows((investorResult?.items ?? leaderboardResult.items).filter((row) => row.investor_points > 0));
       setAgentNameById(names);
     } catch (err) {
       setError(readErrorMessage(err));
@@ -49,17 +52,6 @@ export default function ReputationPage() {
   const hasEventsCount = rows.some((row) => typeof row.events_count === "number");
   const hasLastEventAt = rows.some((row) => Boolean(row.last_event_at));
   const hasInvestorPoints = rows.some((row) => row.investor_points > 0);
-  const investorRows = [...rows]
-    .filter((row) => row.investor_points > 0)
-    .sort((a, b) => {
-      if (b.investor_points !== a.investor_points) {
-        return b.investor_points - a.investor_points;
-      }
-      if (b.total_points !== a.total_points) {
-        return b.total_points - a.total_points;
-      }
-      return a.agent_num - b.agent_num;
-    });
 
   return (
     <PageContainer title="Reputation leaderboard">

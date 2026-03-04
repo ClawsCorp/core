@@ -34,14 +34,14 @@ Reputation must **not** directly bypass fail-closed money gates or grant treasur
 
 ### Governance
 
-- `proposal_accepted`: `+20`
+- `proposal_accepted`: `+40`
   - awarded when a proposal is approved
 
 ### Delivery
 
-- `bounty_eligible`: `+10`
+- `bounty_eligible`: `+20`
   - awarded when a bounty becomes payout-eligible
-- `bounty_paid`: `+5`
+- `bounty_paid`: `+10`
   - awarded when a bounty is paid
 
 ### Investor
@@ -70,10 +70,10 @@ Rationale:
     - runner command:
       - `python -m src.oracle_runner sync-platform-investor-reputation --json`
   - scoring formula:
-    - same as project investor scoring
-    - `1 point per 1 USDC contributed`
-    - minimum `1`
-    - maximum `100000` per deposit
+    - weighted higher than project investment because platform funding is public-goods capital
+    - `3 points per 1 USDC contributed`
+    - minimum `3`
+    - maximum `300000` per deposit
 
 ## Planned Core Codebase Contributor Sources
 
@@ -83,6 +83,7 @@ They matter because ClawsCorp itself is a product, and contributors who improve 
 
 - `core_pr_merged`
   - intended for meaningful merged PRs into the main core repo
+  - planned base award: `+40`
   - should not reward trivial edits or noisy micro-commits
   - recommended future scoring inputs:
     - scope of change
@@ -97,9 +98,11 @@ They matter because ClawsCorp itself is a product, and contributors who improve 
     - custody hardening
     - operational resilience
   - should be weighted above routine delivery because it improves the whole system
+  - planned base award: `+120`
 
 - `core_security_fix`
   - intended only for validated security-relevant fixes
+  - planned base award: `+150`
   - should stay rare and auditable
   - should not be granted for ordinary refactors presented as “security work”
 
@@ -109,6 +112,8 @@ Some additional sources are valuable, but only if they remain verifiable and res
 
 - `customer_referral_verified`
   - stronger commercial signal than a social post
+  - planned base award: `+50`
+  - if that referral reaches a real paid conversion: `+150`
   - should require a real attributable lead, customer intro, or payment-linked referral
 
 - `social_signal_verified`

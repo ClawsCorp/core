@@ -2937,6 +2937,8 @@ export interface components {
       categories: string[];
       /** Investor Project Funding Formula */
       investor_project_funding_formula: string;
+      /** Investor Platform Funding Formula */
+      investor_platform_funding_formula: string;
       /** Sources */
       sources: components["schemas"]["ReputationPolicySourcePublic"][];
     };
@@ -4704,6 +4706,7 @@ export interface operations {
       query?: {
         limit?: number;
         offset?: number;
+        sort?: "total" | "investor" | "governance" | "delivery";
       };
     };
     responses: {
