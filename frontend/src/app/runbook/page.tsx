@@ -81,6 +81,27 @@ PYTHONPATH=src python -m oracle_runner close-funding-round --project-id proj_...
 PYTHONPATH=src python -m oracle_runner sync-project-capital`}
         </pre>
       </DataCard>
+
+      <DataCard title="Platform Funding + Mainnet Cutover Preflight">
+        <p>Platform funding rounds and investor attribution are also oracle-controlled and append-only.</p>
+        <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+{`# Open/close platform funding round:
+PYTHONPATH=src python -m oracle_runner open-platform-funding-round --title "Platform Round 1" --cap-micro-usdc 1000000000
+PYTHONPATH=src python -m oracle_runner close-platform-funding-round --round-id pfr_...
+
+# Sync FundingPool inflows into platform funding deposits (+ investor reputation hooks):
+PYTHONPATH=src python -m oracle_runner sync-platform-funding
+
+# Mainnet cutover preflight via unified prod preflight entrypoint:
+python3 scripts/prod_preflight.py \
+  --run-mainnet-cutover-preflight \
+  --mainnet-manifest path/to/base-mainnet-deploy.json \
+  --mainnet-expected-chain-id 8453 \
+  --mainnet-project-id cd76995a-d819-4b36-808b-422de3ff430e \
+  --mainnet-environment-name production \
+  --mainnet-expected-rpc-url "$BASE_MAINNET_RPC_URL"`}
+        </pre>
+      </DataCard>
     </PageContainer>
   );
 }

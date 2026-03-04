@@ -144,6 +144,89 @@ def _run_ops_smoke(
     )
 
 
+def _run_mainnet_cutover_preflight(
+    *,
+    manifest: str,
+    expected_chain_id: int,
+    project_id: str,
+    environment_name: str,
+    expected_rpc_url: str | None,
+    railway_workspace_token: str | None,
+    timeout_seconds: int,
+) -> CheckResult:
+    repo_root = Path(__file__).resolve().parents[1]
+    script_path = repo_root / "scripts" / "mainnet_cutover_preflight.py"
+    if not script_path.exists():
+        return CheckResult(
+            name="mainnet_cutover_preflight",
+            ok=False,
+            detail=f"missing script: {script_path}",
+        )
+
+    cmd = [
+        sys.executable,
+        str(script_path),
+        manifest,
+        "--expected-chain-id",
+        str(int(expected_chain_id)),
+        "--project-id",
+        project_id,
+        "--environment-name",
+        environment_name,
+    ]
+    if expected_rpc_url:
+        cmd.extend(["--expected-rpc-url", expected_rpc_url])
+    if railway_workspace_token:
+        cmd.extend(["--railway-workspace-token", railway_workspace_token])
+
+    timeout = max(30, int(timeout_seconds)) * 4
+    try:
+        env = os.environ.copy()
+        completed = subprocess.run(
+            cmd,
+            cwd=str(repo_root),
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=env,
+        )
+    except subprocess.TimeoutExpired:
+        return CheckResult(
+            name="mainnet_cutover_preflight",
+            ok=False,
+            detail=f"mainnet cutover preflight timed out after {timeout}s",
+        )
+    except Exception as exc:
+        return CheckResult(name="mainnet_cutover_preflight", ok=False, detail=f"mainnet cutover preflight execution error: {exc}")
+
+    stdout = (completed.stdout or "").strip()
+    stderr = (completed.stderr or "").strip()
+    parsed_stdout: dict[str, Any] | str | None = None
+    if stdout:
+        try:
+            raw = json.loads(stdout)
+            parsed_stdout = raw if isinstance(raw, dict) else {"raw": raw}
+        except json.JSONDecodeError:
+            parsed_stdout = stdout
+
+    ok = completed.returncode == 0
+    return CheckResult(
+        name="mainnet_cutover_preflight",
+        ok=ok,
+        detail=(
+            "mainnet cutover preflight passed"
+            if ok
+            else f"mainnet cutover preflight failed with code={completed.returncode}"
+        ),
+        data={
+            "return_code": completed.returncode,
+            "stdout": parsed_stdout,
+            "stderr_tail": stderr.splitlines()[-12:] if stderr else [],
+        },
+    )
+
+
 def run_preflight(
     *,
     api_base_url: str,
@@ -156,6 +239,13 @@ def run_preflight(
     ops_smoke_tx_max_tasks: int,
     ops_smoke_env_file: str | None,
     ops_smoke_allow_reconcile_blocked_reasons: list[str],
+    run_mainnet_cutover_preflight: bool,
+    mainnet_manifest: str | None,
+    mainnet_expected_chain_id: int,
+    mainnet_project_id: str,
+    mainnet_environment_name: str,
+    mainnet_expected_rpc_url: str | None,
+    mainnet_railway_workspace_token: str | None,
 ) -> tuple[bool, list[CheckResult], dict[str, Any]]:
     checks: list[CheckResult] = []
     platform_capital_reconciliation_max_age_seconds = 0
@@ -164,6 +254,7 @@ def run_preflight(
         "portal_base_url": portal_base_url,
         "timestamp": _utc_now_iso(),
         "run_ops_smoke": bool(run_ops_smoke),
+        "run_mainnet_cutover_preflight": bool(run_mainnet_cutover_preflight),
     }
 
     # health
@@ -322,6 +413,29 @@ def run_preflight(
             )
         )
 
+    if run_mainnet_cutover_preflight:
+        manifest = (mainnet_manifest or "").strip()
+        if not manifest:
+            checks.append(
+                CheckResult(
+                    name="mainnet_cutover_preflight",
+                    ok=False,
+                    detail="--mainnet-manifest is required when --run-mainnet-cutover-preflight is enabled",
+                )
+            )
+        else:
+            checks.append(
+                _run_mainnet_cutover_preflight(
+                    manifest=manifest,
+                    expected_chain_id=int(mainnet_expected_chain_id),
+                    project_id=mainnet_project_id,
+                    environment_name=mainnet_environment_name,
+                    expected_rpc_url=(mainnet_expected_rpc_url or "").strip() or None,
+                    railway_workspace_token=(mainnet_railway_workspace_token or "").strip() or None,
+                    timeout_seconds=timeout_seconds,
+                )
+            )
+
     overall_ok = all(c.ok for c in checks)
     return overall_ok, checks, meta
 
@@ -368,6 +482,42 @@ def main() -> int:
         help="Allowed reconcile blocked_reason for ops smoke (repeatable)",
     )
     parser.add_argument(
+        "--run-mainnet-cutover-preflight",
+        action="store_true",
+        help="Run scripts/mainnet_cutover_preflight.py as part of preflight.",
+    )
+    parser.add_argument(
+        "--mainnet-manifest",
+        default="",
+        help="Path to validated Base mainnet deployment manifest JSON.",
+    )
+    parser.add_argument(
+        "--mainnet-expected-chain-id",
+        type=int,
+        default=8453,
+        help="Expected chain id for mainnet cutover preflight (default: 8453).",
+    )
+    parser.add_argument(
+        "--mainnet-project-id",
+        default="cd76995a-d819-4b36-808b-422de3ff430e",
+        help="Railway project id for mainnet cutover env verification.",
+    )
+    parser.add_argument(
+        "--mainnet-environment-name",
+        default="production",
+        help="Railway environment name for mainnet cutover env verification.",
+    )
+    parser.add_argument(
+        "--mainnet-expected-rpc-url",
+        default="",
+        help="Optional exact RPC URL expected in Railway env during mainnet cutover preflight.",
+    )
+    parser.add_argument(
+        "--mainnet-railway-workspace-token",
+        default="",
+        help="Optional override for RAILWAY_WORKSPACE_TOKEN passed to mainnet cutover preflight.",
+    )
+    parser.add_argument(
         "--allow-warning-type",
         action="append",
         default=[],
@@ -393,6 +543,13 @@ def main() -> int:
             for x in (args.ops_smoke_allow_reconcile_blocked_reason or [])
             if x and str(x).strip()
         ],
+        run_mainnet_cutover_preflight=bool(args.run_mainnet_cutover_preflight),
+        mainnet_manifest=(args.mainnet_manifest or "").strip() or None,
+        mainnet_expected_chain_id=int(args.mainnet_expected_chain_id),
+        mainnet_project_id=str(args.mainnet_project_id),
+        mainnet_environment_name=str(args.mainnet_environment_name),
+        mainnet_expected_rpc_url=(args.mainnet_expected_rpc_url or "").strip() or None,
+        mainnet_railway_workspace_token=(args.mainnet_railway_workspace_token or "").strip() or None,
     )
 
     out = {

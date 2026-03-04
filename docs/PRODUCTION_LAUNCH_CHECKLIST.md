@@ -195,6 +195,18 @@ See:
 - `docs/BASE_MAINNET_GO_NO_GO_RUNBOOK.md`
 - `scripts/mainnet_cutover_preflight.py` (single JSON snapshot: manifest + rpc + on-chain + Railway env verification)
 
+Mainnet pre-cutover unified preflight command:
+
+```bash
+python3 scripts/prod_preflight.py \
+  --run-mainnet-cutover-preflight \
+  --mainnet-manifest path/to/base-mainnet-deploy.json \
+  --mainnet-expected-chain-id 8453 \
+  --mainnet-project-id cd76995a-d819-4b36-808b-422de3ff430e \
+  --mainnet-environment-name production \
+  --mainnet-expected-rpc-url "$BASE_MAINNET_RPC_URL"
+```
+
 Preferred cutover command:
 
 ```bash
