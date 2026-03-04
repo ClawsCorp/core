@@ -4,6 +4,7 @@ const { subtask } = require("hardhat/config");
 const { TASK_COMPILE_SOLIDITY_GET_SOLC_BUILD } = require("hardhat/builtin-tasks/task-names");
 
 const baseSepoliaUrl = (process.env.BASE_SEPOLIA_RPC_URL || "").trim();
+const baseMainnetUrl = (process.env.BASE_MAINNET_RPC_URL || "").trim();
 const deployerKey =
   (process.env.ORACLE_SIGNER_PRIVATE_KEY || process.env.DEPLOYER_PRIVATE_KEY || "").trim();
 
@@ -55,6 +56,14 @@ module.exports = {
       ? {
           baseSepolia: {
             url: baseSepoliaUrl,
+            accounts: deployerKey ? [deployerKey] : []
+          }
+        }
+      : {}),
+    ...(baseMainnetUrl
+      ? {
+          base: {
+            url: baseMainnetUrl,
             accounts: deployerKey ? [deployerKey] : []
           }
         }
