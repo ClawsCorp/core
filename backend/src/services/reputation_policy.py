@@ -112,8 +112,8 @@ REPUTATION_SOURCE_POLICIES: tuple[ReputationSourcePolicy, ...] = (
         category="delivery",
         description="Contributor merged a meaningful PR into the main ClawsCorp core repository.",
         default_delta_points=40,
-        formula="Planned: reserved for true platform-core changes, not project-specific surfaces or project artifacts.",
-        status="planned",
+        formula="Awarded on oracle-verified platform bounty eligibility when a merged PR points to github.com/ClawsCorp/core and includes merge evidence.",
+        status="active",
     ),
     ReputationSourcePolicy(
         source="core_release_hardening",
