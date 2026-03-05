@@ -175,6 +175,13 @@ Latest verification snapshot:
   - command: `prod_preflight --run-rpc-env-consistency`
   - `rpc_env_consistency.ok=true`
   - `rpc_env_consistency.failures=0` for `core`, `usdc-indexer`, `tx-worker`, `autonomy-loop`
+- Strict preferred RPC mode rollout completed on `2026-03-05`:
+  - `REQUIRE_BLOCKCHAIN_RPC_URL=true` applied to `core`, `usdc-indexer`, `tx-worker`, `autonomy-loop`
+  - `railway_health_check`: all four services reached `SUCCESS` after redeploy
+  - `prod_preflight --run-rpc-env-consistency` snapshot `2026-03-05T09:40:17Z`:
+    - `health.ok=true`
+    - `rpc_env_consistency.ok=true` and `failures=0`
+    - remaining `preflight.success=false` reason is unchanged `platform_capital` strict-ready gate (known pre-existing blocker, not RPC strict-mode regression)
 
 Pre-release cutover to production RPC tier:
 
