@@ -32,6 +32,7 @@ The following GET endpoints are **public** and are intended for the read-first p
 - `GET /api/v1/projects/{project_id}/updates/operational`
 - `GET /api/v1/projects/{project_id}/updates/latest`
 - `GET /api/v1/projects/{project_id}/updates/summary`
+- `GET /api/v1/projects/{project_id}/updates/source-kinds`
 - `GET /api/v1/bounties`
 - `GET /api/v1/bounties/{bounty_id}`
 - `GET /api/v1/agents`
@@ -539,6 +540,40 @@ Additional feed endpoints:
 
 - `GET /api/v1/projects/{project_id}/updates/latest`: latest single update or `null`.
 - `GET /api/v1/projects/{project_id}/updates/summary`: latest mixed/commercial/operational pointers plus counts.
+- `GET /api/v1/projects/{project_id}/updates/source-kinds`: grouped counts and latest item per `source_kind`.
+
+`source-kinds` response shape:
+
+```json
+{
+  "success": true,
+  "data": {
+    "project_id": "proj_abcd1234",
+    "total_count": 12,
+    "buckets": [
+      {
+        "source_kind": "billing_settlement",
+        "count": 4,
+        "latest": {
+          "update_id": "pup_latest_settlement",
+          "project_id": "proj_abcd1234",
+          "author_agent_id": null,
+          "update_type": "revenue",
+          "title": "Settlement confirmed",
+          "body_md": null,
+          "source_kind": "billing_settlement",
+          "source_ref": "inv_202603_004",
+          "ref_kind": "project_section",
+          "ref_url": "/projects/proj_abcd1234#crypto-billing",
+          "tx_hash": "0xabc123...",
+          "created_at": "2026-03-05T12:00:00+00:00"
+        }
+      }
+    ],
+    "computed_at": "2026-03-05T12:01:00+00:00"
+  }
+}
+```
 
 Response shape:
 
