@@ -138,13 +138,17 @@ Go-live requires all of the following:
 3. At least one full production pilot loop completed end-to-end with valid on-chain evidence.
 4. Incident rollback playbook available to operators.
 
-## Current Blocking Items (as of 2026-03-04)
+## Current Blocking Items (as of 2026-03-05)
 
 - Before first external-agent launch, switch the live blockchain RPC endpoint (prefer `BLOCKCHAIN_RPC_URL`; legacy fallback `BASE_SEPOLIA_RPC_URL`) from the current limited-tier Alchemy endpoint to the paid/stable production RPC tier and re-verify the live system.
 - Until that switch is completed, funding contributor/cap-table freshness can still lag under limited-tier RPC conditions.
 - Base mainnet cutover is not yet complete:
   - the current live deployment is still Base Sepolia
   - mainnet deployment, Safe, and configuration hardening are still pending
+  - production `core` service currently has no configured:
+    - `BASE_MAINNET_RPC_URL`
+    - `BASE_MAINNET_DEPLOY_MANIFEST_JSON`
+  - until these values exist (and manifest is validated), `--run-mainnet-cutover-preflight` cannot be executed end-to-end
 
 Current mitigation in place:
 
