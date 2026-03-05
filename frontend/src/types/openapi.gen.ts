@@ -156,6 +156,10 @@ export interface paths {
     /** Get latest project update */
     get: operations["get_latest_project_update_api_v1_projects__project_id__updates_latest_get"];
   };
+  "/api/v1/projects/{project_id}/updates/source-kinds": {
+    /** Get project updates grouped by source kind */
+    get: operations["get_project_updates_source_kinds_summary_api_v1_projects__project_id__updates_source_kinds_get"];
+  };
   "/api/v1/projects/{project_id}/updates": {
     /** List project updates */
     get: operations["list_project_updates_api_v1_projects__project_id__updates_get"];
@@ -2805,6 +2809,34 @@ export interface components {
       success: boolean;
       data: components["schemas"]["ProjectUpdatesData"];
     };
+    /** ProjectUpdatesSourceKindBucket */
+    ProjectUpdatesSourceKindBucket: {
+      /** Source Kind */
+      source_kind: string | null;
+      /** Count */
+      count: number;
+      latest: components["schemas"]["ProjectUpdatePublic"] | null;
+    };
+    /** ProjectUpdatesSourceKindsSummary */
+    ProjectUpdatesSourceKindsSummary: {
+      /** Project Id */
+      project_id: string;
+      /** Total Count */
+      total_count: number;
+      /** Buckets */
+      buckets: components["schemas"]["ProjectUpdatesSourceKindBucket"][];
+      /**
+       * Computed At
+       * Format: date-time
+       */
+      computed_at: string;
+    };
+    /** ProjectUpdatesSourceKindsSummaryResponse */
+    ProjectUpdatesSourceKindsSummaryResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["ProjectUpdatesSourceKindsSummary"];
+    };
     /** ProjectUpdatesSummary */
     ProjectUpdatesSummary: {
       /** Project Id */
@@ -4388,6 +4420,28 @@ export interface operations {
       200: {
         content: {
           "application/json": components["schemas"]["ProjectLatestUpdateResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Get project updates grouped by source kind */
+  get_project_updates_source_kinds_summary_api_v1_projects__project_id__updates_source_kinds_get: {
+    parameters: {
+      path: {
+        project_id: string;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ProjectUpdatesSourceKindsSummaryResponse"];
         };
       };
       /** @description Validation Error */

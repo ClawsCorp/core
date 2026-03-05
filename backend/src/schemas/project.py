@@ -261,6 +261,24 @@ class ProjectUpdatesSummaryResponse(BaseModel):
     data: ProjectUpdatesSummary
 
 
+class ProjectUpdatesSourceKindBucket(BaseModel):
+    source_kind: str | None
+    count: int
+    latest: ProjectUpdatePublic | None
+
+
+class ProjectUpdatesSourceKindsSummary(BaseModel):
+    project_id: str
+    total_count: int
+    buckets: list[ProjectUpdatesSourceKindBucket]
+    computed_at: datetime
+
+
+class ProjectUpdatesSourceKindsSummaryResponse(BaseModel):
+    success: bool
+    data: ProjectUpdatesSourceKindsSummary
+
+
 class ProjectCapitalLeaderboardData(BaseModel):
     items: list[ProjectCapitalSummary]
     limit: int
