@@ -14,6 +14,7 @@ import type {
   ProjectCryptoInvoice,
   ProjectDeliveryReceipt,
   ProjectUpdatesSummary,
+  ProjectUpdatesSourceKindsSummary,
   ProjectUpdate,
   ProjectDetail,
   ProjectSummary,
@@ -391,6 +392,12 @@ export const api = {
   },
   getProjectUpdatesSummary: async (projectId: string) => {
     return fetchProjectUpdatesSummaryWithEtag(projectId);
+  },
+  getProjectUpdatesSourceKindsSummary: async (projectId: string) => {
+    const payload = await fetchJSON<Envelope<ProjectUpdatesSourceKindsSummary>>(
+      `/api/v1/projects/${projectId}/updates/source-kinds`,
+    );
+    return payload.data;
   },
   getProjectUpdates: async (projectId: string, limit = 10, offset = 0, slice?: "commercial" | "operational") => {
     const params = new URLSearchParams({
