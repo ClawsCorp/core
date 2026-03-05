@@ -520,6 +520,95 @@ def test_project_updates_support_server_side_commercial_and_operational_slices()
         app.dependency_overrides.clear()
 
 
+def test_project_updates_slice_alias_endpoints_match_slice_query() -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+
+    with session_local() as db:
+        project = Project(
+            project_id="prj_updates_slice_alias",
+            slug="updates-slice-alias",
+            name="Updates Slice Alias",
+            description_md=None,
+            status=ProjectStatus.active,
+            proposal_id=None,
+            origin_proposal_id=None,
+            originator_agent_id=None,
+            discussion_thread_id=None,
+            treasury_wallet_address=None,
+            treasury_address=None,
+            revenue_wallet_address=None,
+            revenue_address=None,
+            monthly_budget_micro_usdc=None,
+            created_by_agent_id=None,
+            approved_at=None,
+        )
+        db.add(project)
+        db.flush()
+        db.add_all(
+            [
+                ProjectUpdate(
+                    update_id="pup_alias_1",
+                    idempotency_key="upd:test:alias:1",
+                    project_id=project.id,
+                    author_agent_id=None,
+                    update_type="revenue",
+                    title="Commercial alias row",
+                    body_md=None,
+                    source_kind="billing_settlement",
+                    source_ref="inv_alias_1",
+                    ref_kind=None,
+                    ref_url=None,
+                    tx_hash=None,
+                ),
+                ProjectUpdate(
+                    update_id="pup_alias_2",
+                    idempotency_key="upd:test:alias:2",
+                    project_id=project.id,
+                    author_agent_id=None,
+                    update_type="funding",
+                    title="Operational alias row",
+                    body_md=None,
+                    source_kind="funding_round",
+                    source_ref="fr_alias_1",
+                    ref_kind=None,
+                    ref_url=None,
+                    tx_hash=None,
+                ),
+            ]
+        )
+        db.commit()
+
+    def _override_get_db():
+        db: Session = session_local()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = _override_get_db
+    client = TestClient(app, raise_server_exceptions=False)
+    try:
+        commercial_query = client.get("/api/v1/projects/prj_updates_slice_alias/updates?slice=commercial")
+        commercial_alias = client.get("/api/v1/projects/prj_updates_slice_alias/updates/commercial")
+        assert commercial_query.status_code == 200
+        assert commercial_alias.status_code == 200
+        assert commercial_alias.json()["data"]["items"] == commercial_query.json()["data"]["items"]
+
+        operational_query = client.get("/api/v1/projects/prj_updates_slice_alias/updates?slice=operational")
+        operational_alias = client.get("/api/v1/projects/prj_updates_slice_alias/updates/operational")
+        assert operational_query.status_code == 200
+        assert operational_alias.status_code == 200
+        assert operational_alias.json()["data"]["items"] == operational_query.json()["data"]["items"]
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_project_updates_latest_endpoint_returns_newest_item_or_null() -> None:
     engine = create_engine(
         "sqlite+pysqlite:///:memory:",
