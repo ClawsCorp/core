@@ -37,6 +37,9 @@ from src.schemas.project import (
     ProjectLatestUpdateResponse,
     ProjectUpdatesSummary,
     ProjectUpdatesSummaryResponse,
+    ProjectUpdatesSourceKindBucket,
+    ProjectUpdatesSourceKindsSummary,
+    ProjectUpdatesSourceKindsSummaryResponse,
     ProjectUpdatePublic,
     ProjectUpdatesData,
     ProjectUpdatesResponse,
@@ -558,6 +561,83 @@ def get_latest_project_update(
     return ProjectLatestUpdateResponse(
         success=True,
         data=_project_update_public(project, row, author_agent_id),
+    )
+
+
+@router.get(
+    "/{project_id}/updates/source-kinds",
+    response_model=ProjectUpdatesSourceKindsSummaryResponse,
+    summary="Get project updates grouped by source kind",
+)
+def get_project_updates_source_kinds_summary(
+    project_id: str,
+    db: Session = Depends(get_db),
+) -> ProjectUpdatesSourceKindsSummaryResponse:
+    project = _find_project_by_identifier(db, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    grouped_rows = (
+        db.query(
+            ProjectUpdate.source_kind,
+            func.count(ProjectUpdate.id).label("count"),
+        )
+        .filter(ProjectUpdate.project_id == project.id)
+        .group_by(ProjectUpdate.source_kind)
+        .all()
+    )
+
+    total_count = int(sum(int(row.count or 0) for row in grouped_rows))
+    author_cache: dict[int, str] = {}
+    buckets: list[ProjectUpdatesSourceKindBucket] = []
+
+    def _author_public_id(agent_db_id: int | None) -> str | None:
+        if agent_db_id is None:
+            return None
+        cached = author_cache.get(int(agent_db_id))
+        if cached is not None:
+            return cached
+        author = db.query(Agent).filter(Agent.id == int(agent_db_id)).first()
+        if author is None:
+            return None
+        author_cache[int(agent_db_id)] = str(author.agent_id)
+        return author_cache[int(agent_db_id)]
+
+    for row in grouped_rows:
+        source_kind = row.source_kind
+        latest_row = (
+            db.query(ProjectUpdate)
+            .filter(
+                ProjectUpdate.project_id == project.id,
+                ProjectUpdate.source_kind.is_(None) if source_kind is None else ProjectUpdate.source_kind == source_kind,
+            )
+            .order_by(ProjectUpdate.created_at.desc(), ProjectUpdate.id.desc())
+            .first()
+        )
+        latest_public = None
+        if latest_row is not None:
+            latest_public = _project_update_public(
+                project,
+                latest_row,
+                _author_public_id(int(latest_row.author_agent_id)) if latest_row.author_agent_id is not None else None,
+            )
+        buckets.append(
+            ProjectUpdatesSourceKindBucket(
+                source_kind=(str(source_kind) if source_kind is not None else None),
+                count=int(row.count or 0),
+                latest=latest_public,
+            )
+        )
+
+    buckets.sort(key=lambda item: (-int(item.count), item.source_kind or "~"))
+    return ProjectUpdatesSourceKindsSummaryResponse(
+        success=True,
+        data=ProjectUpdatesSourceKindsSummary(
+            project_id=project.project_id,
+            total_count=total_count,
+            buckets=buckets,
+            computed_at=datetime.now(timezone.utc),
+        ),
     )
 
 
