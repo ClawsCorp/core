@@ -11,7 +11,14 @@ import { getExplorerTxUrl } from "@/lib/env";
 import { formatDateTimeShort, formatMicroUsdc } from "@/lib/format";
 import { getSurface } from "@/product_surfaces";
 import { DemoSurface } from "@/product_surfaces/demo";
-import type { ProjectDeliveryReceipt, ProjectDetail, ProjectFundingSummary, ProjectUpdate, ProjectUpdatesSummary } from "@/types";
+import type {
+  ProjectDeliveryReceipt,
+  ProjectDetail,
+  ProjectFundingSummary,
+  ProjectUpdate,
+  ProjectUpdatesSourceKindsSummary,
+  ProjectUpdatesSummary,
+} from "@/types";
 
 export default function AppBySlugPage({ params }: { params: { slug: string } }) {
   const [loading, setLoading] = useState(true);
@@ -20,6 +27,7 @@ export default function AppBySlugPage({ params }: { params: { slug: string } }) 
   const [deliveryReceipt, setDeliveryReceipt] = useState<ProjectDeliveryReceipt | null>(null);
   const [fundingSummary, setFundingSummary] = useState<ProjectFundingSummary | null>(null);
   const [updatesSummary, setUpdatesSummary] = useState<ProjectUpdatesSummary | null>(null);
+  const [sourceKindsSummary, setSourceKindsSummary] = useState<ProjectUpdatesSourceKindsSummary | null>(null);
   const [projectUpdates, setProjectUpdates] = useState<ProjectUpdate[]>([]);
 
   const load = useCallback(async () => {
@@ -47,6 +55,12 @@ export default function AppBySlugPage({ params }: { params: { slug: string } }) 
         setUpdatesSummary(null);
       }
       try {
+        const nextKinds = await api.getProjectUpdatesSourceKindsSummary(nextProject.project_id);
+        setSourceKindsSummary(nextKinds);
+      } catch {
+        setSourceKindsSummary(null);
+      }
+      try {
         const [nextCommercial, nextOperational] = await Promise.all([
           api.getProjectUpdates(nextProject.project_id, 3, 0, "commercial"),
           api.getProjectUpdates(nextProject.project_id, 3, 0, "operational"),
@@ -65,6 +79,7 @@ export default function AppBySlugPage({ params }: { params: { slug: string } }) 
         setDeliveryReceipt(null);
         setFundingSummary(null);
         setUpdatesSummary(null);
+        setSourceKindsSummary(null);
         setProjectUpdates([]);
       } else {
         setError(readErrorMessage(err));
@@ -154,6 +169,13 @@ export default function AppBySlugPage({ params }: { params: { slug: string } }) 
     return getExplorerTxUrl(txMatch[0]);
   }, []);
 
+  const sourceKindTitle = useCallback((sourceKind: string | null) => {
+    if (!sourceKind) {
+      return "unspecified";
+    }
+    return sourceKind.replaceAll("_", " ");
+  }, []);
+
   return (
     <PageContainer title={`App / ${params.slug}`}>
       {loading ? <Loading message="Loading app surface..." /> : null}
@@ -203,6 +225,27 @@ export default function AppBySlugPage({ params }: { params: { slug: string } }) 
               <p>commercial: {updatesSummary.commercial_count}</p>
               <p>operational: {updatesSummary.operational_count}</p>
               <p>computed: {formatDateTimeShort(updatesSummary.computed_at)}</p>
+            </DataCard>
+          ) : null}
+          {sourceKindsSummary && sourceKindsSummary.buckets.length > 0 ? (
+            <DataCard title="Top activity kinds">
+              <p>Grouped by source kind to highlight where operations are concentrated.</p>
+              <ul>
+                {sourceKindsSummary.buckets.slice(0, 5).map((bucket) => (
+                  <li key={bucket.source_kind ?? "none"}>
+                    {sourceKindTitle(bucket.source_kind)}: {bucket.count}
+                    {bucket.latest ? (
+                      <>
+                        {" · latest: "}
+                        {bucket.latest.title} ({formatDateTimeShort(bucket.latest.created_at)})
+                        {" · "}
+                        <Link href={updatePrimaryHref(bucket.latest)}>Open ref</Link>
+                      </>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+              <p>computed: {formatDateTimeShort(sourceKindsSummary.computed_at)}</p>
             </DataCard>
           ) : null}
           {fundingSummary ? (

@@ -348,6 +348,19 @@ export interface ProjectUpdatesSummary {
   computed_at: string;
 }
 
+export interface ProjectUpdatesSourceKindBucket {
+  source_kind: string | null;
+  count: number;
+  latest: ProjectUpdate | null;
+}
+
+export interface ProjectUpdatesSourceKindsSummary {
+  project_id: string;
+  total_count: number;
+  buckets: ProjectUpdatesSourceKindBucket[];
+  computed_at: string;
+}
+
 export interface ProjectDomainPublic {
   domain_id: string;
   project_id: string;
