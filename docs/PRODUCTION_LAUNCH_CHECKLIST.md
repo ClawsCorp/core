@@ -192,6 +192,14 @@ Latest verification snapshot:
     - `health.ok=true`
     - `platform_capital.ok=true` (`ready=true`, `delta=0`, `stale=false`)
     - `rpc_env_consistency.ok=true` and `failures=0`
+- Full production preflight gate passed on `2026-03-05T10:52:36Z`:
+  - command:
+    - `prod_preflight --run-rpc-env-consistency --run-ops-smoke --fail-on-warning`
+  - result:
+    - `success=true`
+    - `alerts`: `critical_count=0`, `warning_count=0`
+    - `ops_smoke.ok=true` (return_code=0)
+    - `rpc_env_consistency.ok=true` (failures=0)
 
 Pre-release cutover to production RPC tier:
 
