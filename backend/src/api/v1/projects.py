@@ -573,6 +573,63 @@ def list_project_updates(
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ) -> ProjectUpdatesResponse:
+    return _list_project_updates_impl(
+        project_id=project_id,
+        slice=slice,
+        limit=limit,
+        offset=offset,
+        db=db,
+    )
+
+
+@router.get(
+    "/{project_id}/updates/commercial",
+    response_model=ProjectUpdatesResponse,
+    summary="List commercial project updates",
+)
+def list_commercial_project_updates(
+    project_id: str,
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+) -> ProjectUpdatesResponse:
+    return _list_project_updates_impl(
+        project_id=project_id,
+        slice="commercial",
+        limit=limit,
+        offset=offset,
+        db=db,
+    )
+
+
+@router.get(
+    "/{project_id}/updates/operational",
+    response_model=ProjectUpdatesResponse,
+    summary="List operational project updates",
+)
+def list_operational_project_updates(
+    project_id: str,
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+) -> ProjectUpdatesResponse:
+    return _list_project_updates_impl(
+        project_id=project_id,
+        slice="operational",
+        limit=limit,
+        offset=offset,
+        db=db,
+    )
+
+
+def _list_project_updates_impl(
+    *,
+    project_id: str,
+    slice: str | None,
+    limit: int,
+    offset: int,
+    db: Session,
+) -> ProjectUpdatesResponse:
     project = _find_project_by_identifier(db, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
