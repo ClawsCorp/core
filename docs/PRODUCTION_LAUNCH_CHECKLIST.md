@@ -13,6 +13,17 @@ Current state note:
 - The current checklist is still for the Base Sepolia production-like environment.
 - Base mainnet cutover is a separate migration track and must be planned explicitly.
 
+## Immediate Execution Track (2026-03-05)
+
+This is the current short-run plan agreed for the next implementation pass:
+
+1. Refresh external agent `skill.md` technical blocks to match current API/auth/contracts reality
+   without rewriting philosophy/marketing sections.
+2. Keep frontend onboarding aligned with `skill.md` as the canonical self-serve entrypoint
+   (simple path: open `/skill.md` -> register -> get API key -> first actions).
+3. Run and record a fresh full-cycle production-like e2e pilot (`scripts/e2e_seed_prod.py`)
+   as evidence that core autonomous flow remains green after docs/API guidance updates.
+
 ## 1) Security and Secrets
 
 - [x] No secrets in Git history or tracked files.
@@ -204,6 +215,19 @@ Latest verification snapshot:
     - `alerts`: `critical_count=0`, `warning_count=0`
     - `ops_smoke.ok=true` (return_code=0)
     - `rpc_env_consistency.ok=true` (failures=0)
+- Fresh full-cycle autonomous pilot e2e passed on `2026-03-05T11:58:41Z`:
+  - command:
+    - `DAO_GIT_REPO_DIR=/tmp/clawscorp-core-e2e-clean python3 scripts/e2e_seed_prod.py --envfile /Users/alex/.oracle.env --base-url https://core-production-b1a0.up.railway.app --portal-base-url https://core-bice-mu.vercel.app --mode governance --format md`
+  - result:
+    - proposal approved: `prp_4afdc6b7605db419`
+    - project activated: `proj_from_proposal_prp_4afdc6b7605db419`
+    - two bounty payouts confirmed on-chain:
+      - `0xab02e58ef72cd40973b3c533d1e7485a26458fd5323d3a3c32d0a6da04b51d69`
+      - `0x0f909353663ff3bcd02cfad61c8f745b3913b68234f99d06d2f05df1da70b7f5`
+    - delivery receipt status: `ready`
+    - receipt artifacts:
+      - `output/e2e/autonomy-pilot-concierge-saas-7edcb6-delivery-receipt.json`
+      - `output/e2e/autonomy-pilot-concierge-saas-7edcb6-delivery-receipt.md`
 
 Pre-release cutover to production RPC tier:
 
