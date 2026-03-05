@@ -171,6 +171,10 @@ Latest verification snapshot:
   - command: `python3 scripts/secrets_history_scan.py --json`
   - `revisions_scanned=668`
   - `findings_count=0`
+- `prod_preflight` with RPC env gate passed on `2026-03-05T08:53:11Z`:
+  - command: `prod_preflight --run-rpc-env-consistency`
+  - `rpc_env_consistency.ok=true`
+  - `rpc_env_consistency.failures=0` for `core`, `usdc-indexer`, `tx-worker`, `autonomy-loop`
 
 Pre-release cutover to production RPC tier:
 
