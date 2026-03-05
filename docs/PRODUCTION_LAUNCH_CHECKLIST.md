@@ -182,6 +182,16 @@ Latest verification snapshot:
     - `health.ok=true`
     - `rpc_env_consistency.ok=true` and `failures=0`
     - remaining `preflight.success=false` reason is unchanged `platform_capital` strict-ready gate (known pre-existing blocker, not RPC strict-mode regression)
+- Platform capital strict-ready restored on `2026-03-05`:
+  - runner commands executed:
+    - `sync-platform-capital`
+    - `reconcile-platform-capital`
+  - reconciliation result: `ready=true`, `delta_micro_usdc=0`, `blocked_reason=null`
+  - new preflight snapshot `2026-03-05T09:43:31Z`:
+    - `prod_preflight.success=true`
+    - `health.ok=true`
+    - `platform_capital.ok=true` (`ready=true`, `delta=0`, `stale=false`)
+    - `rpc_env_consistency.ok=true` and `failures=0`
 
 Pre-release cutover to production RPC tier:
 
