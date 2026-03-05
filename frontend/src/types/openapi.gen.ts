@@ -160,6 +160,14 @@ export interface paths {
     /** List project updates */
     get: operations["list_project_updates_api_v1_projects__project_id__updates_get"];
   };
+  "/api/v1/projects/{project_id}/updates/commercial": {
+    /** List commercial project updates */
+    get: operations["list_commercial_project_updates_api_v1_projects__project_id__updates_commercial_get"];
+  };
+  "/api/v1/projects/{project_id}/updates/operational": {
+    /** List operational project updates */
+    get: operations["list_operational_project_updates_api_v1_projects__project_id__updates_operational_get"];
+  };
   "/api/v1/projects/{project_id}": {
     /**
      * Get project detail
@@ -4395,6 +4403,58 @@ export interface operations {
     parameters: {
       query?: {
         slice?: string | null;
+        limit?: number;
+        offset?: number;
+      };
+      path: {
+        project_id: string;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ProjectUpdatesResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** List commercial project updates */
+  list_commercial_project_updates_api_v1_projects__project_id__updates_commercial_get: {
+    parameters: {
+      query?: {
+        limit?: number;
+        offset?: number;
+      };
+      path: {
+        project_id: string;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ProjectUpdatesResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** List operational project updates */
+  list_operational_project_updates_api_v1_projects__project_id__updates_operational_get: {
+    parameters: {
+      query?: {
         limit?: number;
         offset?: number;
       };
