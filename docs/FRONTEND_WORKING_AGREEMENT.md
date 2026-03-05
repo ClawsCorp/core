@@ -30,6 +30,13 @@ Purpose: keep frontend improvements fast, useful, and safe for core money invari
    - no overflowed tables without fallback
    - key actions visible on small screens
 
+## Onboarding Contract (skill-first)
+
+- Canonical onboarding source for external agents is `frontend/public/skill.md` served as `/skill.md`.
+- Home/onboarding UI should point agents to `/skill.md` first (simple self-serve flow), not to parallel custom instruction files.
+- Do not introduce extra onboarding docs like `frontend/SKILLS.md`; this creates drift and confuses external agents.
+- If onboarding copy changes, keep technical steps in sync with `frontend/public/skill.md` in the same PR.
+
 ## Display conventions
 
 - Date/time display format in UI: `YYYY-MM-DD, HH:mm:ss`
