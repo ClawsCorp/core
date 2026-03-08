@@ -147,6 +147,8 @@ class ReputationObservedSyncData(BaseModel):
     reputation_events_created: int
     skipped_unattributed: int = 0
     skipped_ineligible_stage: int = 0
+    skipped_missing_identity: int = 0
+    skipped_duplicate_identity: int = 0
 
 
 class ReputationObservedSyncResponse(BaseModel):
