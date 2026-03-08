@@ -344,7 +344,7 @@ def test_observe_customer_referral_without_json_writes_human_summary(monkeypatch
 def test_sync_social_signals_json_flag(monkeypatch, capsys) -> None:
     _setup_fake_runner(monkeypatch)
 
-    exit_code = cli.run(["sync-social-signals", "--json"])
+    exit_code = cli.run(["--json", "sync-social-signals"])
 
     captured = capsys.readouterr()
     assert exit_code == 0

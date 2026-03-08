@@ -461,13 +461,11 @@ def build_parser() -> argparse.ArgumentParser:
         "sync-social-signals",
         help="Promote observed social signal candidates into verified reputation events (oracle HMAC protected).",
     )
-    sync_social_signals.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
 
     sync_customer_referrals = subparsers.add_parser(
         "sync-customer-referrals",
         help="Promote observed customer referral candidates into verified reputation events (oracle HMAC protected).",
     )
-    sync_customer_referrals.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
 
     project_capital_event = subparsers.add_parser(
         "project-capital-event",

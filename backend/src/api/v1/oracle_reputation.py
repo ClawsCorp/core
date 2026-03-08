@@ -10,6 +10,7 @@ from src.core.audit import record_audit
 from src.core.database import get_db
 from src.core.db_utils import insert_or_get_by_unique
 from src.models.agent import Agent
+from src.models.indexer_cursor import IndexerCursor
 from src.models.observed_customer_referral import ObservedCustomerReferral
 from src.models.observed_social_signal import ObservedSocialSignal
 from src.models.reputation_event import ReputationEvent
@@ -271,7 +272,8 @@ async def sync_observed_social_signals(
 
     rows = (
         db.query(ObservedSocialSignal)
-        .order_by(ObservedSocialSignal.observed_at.desc(), ObservedSocialSignal.id.desc())
+        .filter(ObservedSocialSignal.id > _get_reputation_sync_cursor(db, "observed_social_signals"))
+        .order_by(ObservedSocialSignal.id.asc())
         .limit(500)
         .all()
     )
@@ -311,6 +313,12 @@ async def sync_observed_social_signals(
         if _created:
             created += 1
 
+    _advance_reputation_sync_cursor(
+        db,
+        "observed_social_signals",
+        rows[-1].id if rows else None,
+    )
+
     _record_oracle_audit(
         request=request,
         db=db,
@@ -345,7 +353,8 @@ async def sync_observed_customer_referrals(
 
     rows = (
         db.query(ObservedCustomerReferral)
-        .order_by(ObservedCustomerReferral.observed_at.desc(), ObservedCustomerReferral.id.desc())
+        .filter(ObservedCustomerReferral.id > _get_reputation_sync_cursor(db, "observed_customer_referrals"))
+        .order_by(ObservedCustomerReferral.id.asc())
         .limit(500)
         .all()
     )
@@ -393,6 +402,12 @@ async def sync_observed_customer_referrals(
         _created = _try_ingest_reputation_event(db, rep_payload)
         if _created:
             created += 1
+
+    _advance_reputation_sync_cursor(
+        db,
+        "observed_customer_referrals",
+        rows[-1].id if rows else None,
+    )
 
     _record_oracle_audit(
         request=request,
@@ -468,6 +483,36 @@ def _build_social_signal_observed_ref_id(row: ObservedSocialSignal) -> str:
 def _try_ingest_reputation_event(db: Session, payload: ReputationEventCreateRequest) -> bool:
     event, _public_agent_id = ingest_reputation_event(db, payload)
     return event.idempotency_key == payload.idempotency_key and event.event_id == payload.event_id
+
+
+def _get_reputation_sync_cursor(db: Session, cursor_key: str) -> int:
+    row = (
+        db.query(IndexerCursor)
+        .filter(IndexerCursor.cursor_key == cursor_key, IndexerCursor.chain_id == 0)
+        .first()
+    )
+    if row is None:
+        row = IndexerCursor(cursor_key=cursor_key, chain_id=0, last_block_number=0)
+        db.add(row)
+        db.flush()
+        return 0
+    return int(row.last_block_number or 0)
+
+
+def _advance_reputation_sync_cursor(db: Session, cursor_key: str, last_processed_id: int | None) -> None:
+    if last_processed_id is None:
+        return
+    row = (
+        db.query(IndexerCursor)
+        .filter(IndexerCursor.cursor_key == cursor_key, IndexerCursor.chain_id == 0)
+        .first()
+    )
+    if row is None:
+        row = IndexerCursor(cursor_key=cursor_key, chain_id=0, last_block_number=int(last_processed_id))
+        db.add(row)
+    else:
+        row.last_block_number = int(last_processed_id)
+    db.flush()
 
 
 def _resolve_optional_agent_db_id(db: Session, agent_id: str | None) -> int | None:

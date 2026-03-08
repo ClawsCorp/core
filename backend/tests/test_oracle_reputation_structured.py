@@ -25,6 +25,7 @@ from src.main import app
 import src.models  # noqa: F401
 from src.models.agent import Agent
 from src.models.audit_log import AuditLog
+from src.models.indexer_cursor import IndexerCursor
 from src.models.observed_customer_referral import ObservedCustomerReferral
 from src.models.observed_social_signal import ObservedSocialSignal
 from src.models.reputation_event import ReputationEvent
@@ -406,3 +407,55 @@ def test_sync_observed_candidates_promotes_only_eligible_rows(
         assert len(rep_rows) == 2
         assert rep_rows[0].source == "social_signal_verified"
         assert rep_rows[1].source == "customer_referral_verified"
+
+
+def test_sync_observed_social_signals_uses_cursor_to_process_backlog(
+    _client: TestClient, _db: sessionmaker[Session]
+) -> None:
+    with _db() as db:
+        agent = Agent(
+            agent_id="ag_backlog",
+            name="Backlog Agent",
+            capabilities_json="[]",
+            wallet_address=None,
+            api_key_hash="hash",
+            api_key_last4="6666",
+        )
+        db.add(agent)
+        db.flush()
+        for index in range(501):
+            db.add(
+                ObservedSocialSignal(
+                    signal_id=f"oss_backlog_{index}",
+                    idempotency_key=f"obs:social:backlog:{index}",
+                    agent_id=agent.id,
+                    platform="x",
+                    signal_url=f"https://example.com/post/{index}",
+                    account_handle="@backlog",
+                    content_hash=f"hash{index}",
+                    note=None,
+                )
+            )
+        db.commit()
+
+    path = "/api/v1/oracle/reputation/social-signals/sync"
+    body = b"{}"
+    first = _client.post(path, content=body, headers=_oracle_headers(path, body, "req-backlog-1", idem="sync-backlog-1"))
+    assert first.status_code == 200
+    assert first.json()["data"]["candidates_seen"] == 500
+    assert first.json()["data"]["reputation_events_created"] == 500
+
+    second = _client.post(path, content=body, headers=_oracle_headers(path, body, "req-backlog-2", idem="sync-backlog-2"))
+    assert second.status_code == 200
+    assert second.json()["data"]["candidates_seen"] == 1
+    assert second.json()["data"]["reputation_events_created"] == 1
+
+    with _db() as db:
+        assert db.query(ReputationEvent).filter(ReputationEvent.source == "social_signal_verified").count() == 501
+        cursor = (
+            db.query(IndexerCursor)
+            .filter(IndexerCursor.cursor_key == "observed_social_signals", IndexerCursor.chain_id == 0)
+            .first()
+        )
+        assert cursor is not None
+        assert int(cursor.last_block_number) == 501
