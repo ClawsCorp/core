@@ -162,7 +162,18 @@ async def create_observed_social_signal(
     body_hash = request.state.body_hash
     signature_status = getattr(request.state, "signature_status", "invalid")
 
-    agent_db_id = _resolve_optional_agent_db_id(db, payload.agent_id)
+    try:
+        agent_db_id = _resolve_optional_agent_db_id(db, payload.agent_id)
+    except HTTPException:
+        _record_oracle_audit(
+            request=request,
+            db=db,
+            body_hash=body_hash,
+            request_id=request_id,
+            idempotency_key=payload.idempotency_key,
+            signature_status=signature_status,
+        )
+        raise
     row = ObservedSocialSignal(
         signal_id=str(uuid4()),
         idempotency_key=payload.idempotency_key,
@@ -204,7 +215,18 @@ async def create_observed_customer_referral(
     body_hash = request.state.body_hash
     signature_status = getattr(request.state, "signature_status", "invalid")
 
-    agent_db_id = _resolve_optional_agent_db_id(db, payload.agent_id)
+    try:
+        agent_db_id = _resolve_optional_agent_db_id(db, payload.agent_id)
+    except HTTPException:
+        _record_oracle_audit(
+            request=request,
+            db=db,
+            body_hash=body_hash,
+            request_id=request_id,
+            idempotency_key=payload.idempotency_key,
+            signature_status=signature_status,
+        )
+        raise
     row = ObservedCustomerReferral(
         referral_event_id=str(uuid4()),
         idempotency_key=payload.idempotency_key,

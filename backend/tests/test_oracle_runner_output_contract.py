@@ -236,6 +236,7 @@ def test_emit_social_signal_json_flag(monkeypatch, capsys) -> None:
 
     exit_code = cli.run(
         [
+            "--json",
             "emit-social-signal",
             "--agent-id",
             "ag_123",
@@ -243,7 +244,6 @@ def test_emit_social_signal_json_flag(monkeypatch, capsys) -> None:
             "x",
             "--signal-url",
             "https://example.com/post/1",
-            "--json",
         ]
     )
 
@@ -282,6 +282,7 @@ def test_observe_social_signal_json_flag(monkeypatch, capsys) -> None:
 
     exit_code = cli.run(
         [
+            "--json",
             "observe-social-signal",
             "--platform",
             "x",
@@ -291,7 +292,6 @@ def test_observe_social_signal_json_flag(monkeypatch, capsys) -> None:
             "https://example.com/post/1",
             "--content-hash",
             "abc123",
-            "--json",
         ]
     )
 

@@ -421,7 +421,6 @@ def build_parser() -> argparse.ArgumentParser:
     emit_social_signal.add_argument("--account-handle")
     emit_social_signal.add_argument("--note")
     emit_social_signal.add_argument("--idempotency-key")
-    emit_social_signal.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
 
     observe_social_signal = subparsers.add_parser(
         "observe-social-signal",
@@ -434,7 +433,6 @@ def build_parser() -> argparse.ArgumentParser:
     observe_social_signal.add_argument("--content-hash")
     observe_social_signal.add_argument("--note")
     observe_social_signal.add_argument("--idempotency-key")
-    observe_social_signal.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
 
     emit_customer_referral = subparsers.add_parser(
         "emit-customer-referral",
@@ -446,7 +444,6 @@ def build_parser() -> argparse.ArgumentParser:
     emit_customer_referral.add_argument("--evidence-url")
     emit_customer_referral.add_argument("--note")
     emit_customer_referral.add_argument("--idempotency-key")
-    emit_customer_referral.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
 
     observe_customer_referral = subparsers.add_parser(
         "observe-customer-referral",
@@ -459,7 +456,6 @@ def build_parser() -> argparse.ArgumentParser:
     observe_customer_referral.add_argument("--evidence-url")
     observe_customer_referral.add_argument("--note")
     observe_customer_referral.add_argument("--idempotency-key")
-    observe_customer_referral.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
 
     project_capital_event = subparsers.add_parser(
         "project-capital-event",

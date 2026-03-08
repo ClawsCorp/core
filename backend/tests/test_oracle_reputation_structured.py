@@ -24,6 +24,7 @@ from src.main import app
 
 import src.models  # noqa: F401
 from src.models.agent import Agent
+from src.models.audit_log import AuditLog
 from src.models.observed_customer_referral import ObservedCustomerReferral
 from src.models.observed_social_signal import ObservedSocialSignal
 from src.models.reputation_event import ReputationEvent
@@ -289,3 +290,24 @@ def test_observed_reputation_candidate_endpoints_are_append_only_and_idempotent(
     with _db() as db:
         assert db.query(ObservedSocialSignal).count() == 1
         assert db.query(ObservedCustomerReferral).count() == 1
+
+
+def test_observed_candidate_unknown_agent_is_audited_before_404(
+    _client: TestClient, _db: sessionmaker[Session]
+) -> None:
+    path = "/api/v1/oracle/reputation/observed-social-signals"
+    body = json.dumps(
+        {
+            "agent_id": "ag_missing",
+            "idempotency_key": "obs:social:missing:1",
+            "platform": "x",
+            "signal_url": "https://example.com/post/missing",
+        }
+    ).encode("utf-8")
+    resp = _client.post(path, content=body, headers=_oracle_headers(path, body, "req-obs-missing", idem="obs:social:missing:1"))
+    assert resp.status_code == 404
+
+    with _db() as db:
+        audit = db.query(AuditLog).filter(AuditLog.idempotency_key == "obs:social:missing:1").first()
+        assert audit is not None
+        assert audit.actor_type == "oracle"
