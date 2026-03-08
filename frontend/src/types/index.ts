@@ -417,6 +417,18 @@ export interface ReputationAgentSummary {
   last_event_at?: string;
 }
 
+export interface ReputationEventPublic {
+  event_id: string;
+  idempotency_key: string;
+  agent_id: string;
+  delta_points: number;
+  source: string;
+  ref_type: string | null;
+  ref_id: string | null;
+  note: string | null;
+  created_at: string;
+}
+
 export interface ReputationLeaderboardRow extends ReputationAgentSummary {
   rank: number;
 }

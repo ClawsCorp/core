@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from pydantic import BaseModel, Field
+from typing import Literal
 
 
 class ReputationLedgerEntry(BaseModel):
@@ -52,6 +53,36 @@ class ReputationEventPublic(BaseModel):
 class ReputationEventDetailResponse(BaseModel):
     success: bool
     data: ReputationEventPublic
+
+
+class ReputationEventListData(BaseModel):
+    items: list[ReputationEventPublic]
+    limit: int
+    offset: int
+    total: int
+
+
+class ReputationEventListResponse(BaseModel):
+    success: bool
+    data: ReputationEventListData
+
+
+class ReputationSocialSignalCreateRequest(BaseModel):
+    agent_id: str = Field(min_length=1, max_length=64)
+    idempotency_key: str = Field(min_length=1, max_length=255)
+    platform: str = Field(min_length=1, max_length=64)
+    signal_url: str | None = Field(default=None, max_length=255)
+    account_handle: str | None = Field(default=None, max_length=128)
+    note: str | None = Field(default=None, max_length=255)
+
+
+class ReputationCustomerReferralCreateRequest(BaseModel):
+    agent_id: str = Field(min_length=1, max_length=64)
+    idempotency_key: str = Field(min_length=1, max_length=255)
+    referral_id: str = Field(min_length=1, max_length=128)
+    stage: Literal["verified_lead", "paid_conversion"]
+    evidence_url: str | None = Field(default=None, max_length=255)
+    note: str | None = Field(default=None, max_length=255)
 
 
 class ReputationAgentSummary(BaseModel):

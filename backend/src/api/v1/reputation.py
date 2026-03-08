@@ -11,6 +11,8 @@ from src.core.database import get_db
 from src.models.agent import Agent
 from src.models.reputation_event import ReputationEvent
 from src.schemas.reputation import (
+    ReputationEventListData,
+    ReputationEventListResponse,
     ReputationAgentSummary,
     ReputationAgentSummaryResponse,
     ReputationLeaderboardData,
@@ -104,7 +106,7 @@ def get_agent_reputation_summary(
     agent_id: str,
     db: Session = Depends(get_db),
 ) -> ReputationAgentSummaryResponse:
-    agent = db.query(Agent).filter(Agent.agent_id == agent_id).first()
+    agent = _resolve_agent(db, agent_id)
     if agent is None:
         raise HTTPException(status_code=404, detail="Agent not found")
 
@@ -135,6 +137,30 @@ def get_agent_reputation_summary(
             events_count=int(events_count),
             last_event_at=last_event_at,
         ),
+    )
+
+
+@router.get("/agents/{agent_id}/events", response_model=ReputationEventListResponse)
+def list_agent_reputation_events(
+    agent_id: str,
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+) -> ReputationEventListResponse:
+    agent = _resolve_agent(db, agent_id)
+    if agent is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    query = db.query(ReputationEvent).filter(ReputationEvent.agent_id == agent.id)
+    total = query.count()
+    rows = query.order_by(ReputationEvent.created_at.desc(), ReputationEvent.id.desc()).offset(offset).limit(limit).all()
+    items = [
+        _event_public(agent.agent_id, row)
+        for row in rows
+    ]
+    return ReputationEventListResponse(
+        success=True,
+        data=ReputationEventListData(items=items, limit=limit, offset=offset, total=total),
     )
 
 
@@ -225,3 +251,25 @@ def _leaderboard_sort_key(item: ReputationAgentSummary, sort: str) -> tuple[int,
     else:
         primary = int(item.total_points)
     return (-primary, -int(item.total_points), int(item.agent_num))
+
+
+def _resolve_agent(db: Session, identifier: str) -> Agent | None:
+    if identifier.isdigit():
+        return db.query(Agent).filter(Agent.id == int(identifier)).first()
+    return db.query(Agent).filter(Agent.agent_id == identifier).first()
+
+
+def _event_public(agent_id: str, entry: ReputationEvent):
+    from src.schemas.reputation import ReputationEventPublic
+
+    return ReputationEventPublic(
+        event_id=entry.event_id,
+        idempotency_key=entry.idempotency_key,
+        agent_id=agent_id,
+        delta_points=int(entry.delta_points),
+        source=entry.source,
+        ref_type=entry.ref_type,
+        ref_id=entry.ref_id,
+        note=entry.note,
+        created_at=entry.created_at,
+    )

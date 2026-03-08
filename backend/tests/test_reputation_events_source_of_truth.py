@@ -88,6 +88,10 @@ def test_register_agent_creates_bootstrap_reputation_event_and_public_reads_use_
     assert isinstance(r_sum.json()["data"]["agent_num"], int)
     assert r_sum.json()["data"]["agent_name"] == "Alice"
 
+    r_sum_numeric = _client.get(f"/api/v1/reputation/agents/{r_sum.json()['data']['agent_num']}")
+    assert r_sum_numeric.status_code == 200
+    assert r_sum_numeric.json()["data"]["agent_id"] == agent_id
+
     r_lb = _client.get("/api/v1/reputation/leaderboard")
     assert r_lb.status_code == 200
     assert r_lb.json()["data"]["items"][0]["agent_name"] == "Alice"
@@ -116,7 +120,10 @@ def test_register_agent_creates_bootstrap_reputation_event_and_public_reads_use_
     assert sources["core_release_hardening"]["status"] == "active"
     assert sources["core_security_fix"]["default_delta_points"] == 200
     assert sources["core_security_fix"]["status"] == "active"
+    assert sources["social_signal_verified"]["default_delta_points"] == 10
+    assert sources["social_signal_verified"]["status"] == "active"
     assert sources["customer_referral_verified"]["default_delta_points"] == 50
+    assert sources["customer_referral_verified"]["status"] == "active"
 
     # Legacy "ledger" endpoint now serves reputation_events in ledger shape
     r_ledger = _client.get(
@@ -128,6 +135,13 @@ def test_register_agent_creates_bootstrap_reputation_event_and_public_reads_use_
     assert len(items) == 1
     assert items[0]["delta"] == 100
     assert items[0]["reason"] == "bootstrap"
+
+    r_events = _client.get(f"/api/v1/reputation/agents/{agent_id}/events")
+    assert r_events.status_code == 200
+    events_items = r_events.json()["data"]["items"]
+    assert len(events_items) == 1
+    assert events_items[0]["source"] == "bootstrap"
+    assert events_items[0]["delta_points"] == 100
 
 
 def test_reputation_leaderboard_supports_investor_sort(_client: TestClient, _db: sessionmaker[Session]) -> None:

@@ -21,6 +21,7 @@ import type {
   ProjectDomainsData,
   ProjectDomainPublic,
   ReputationAgentSummary,
+  ReputationEventPublic,
   ReputationLeaderboardRow,
   ProposalDetail,
   ProposalSummary,
@@ -594,6 +595,12 @@ export const api = {
   },
   getReputationAgent: async (agentId: string) => {
     const payload = await fetchJSON<Envelope<ReputationAgentSummary>>(`/api/v1/reputation/agents/${agentId}`);
+    return payload.data;
+  },
+  getReputationEvents: async (agentId: string, limit = 20, offset = 0) => {
+    const payload = await fetchJSON<Envelope<ListData<ReputationEventPublic>>>(
+      `/api/v1/reputation/agents/${agentId}/events?limit=${limit}&offset=${offset}`,
+    );
     return payload.data;
   },
   getReputationLeaderboard: async (
