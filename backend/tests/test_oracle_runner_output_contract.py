@@ -75,6 +75,20 @@ class _FakeClient:
                 "stage": "lead_detected",
                 "observed_at": "2026-01-01T00:00:00Z",
             },
+            "/api/v1/oracle/reputation/social-signals/sync": {
+                "candidates_seen": 2,
+                "eligible_candidates": 1,
+                "reputation_events_created": 1,
+                "skipped_unattributed": 1,
+                "skipped_ineligible_stage": 0,
+            },
+            "/api/v1/oracle/reputation/customer-referrals/sync": {
+                "candidates_seen": 3,
+                "eligible_candidates": 2,
+                "reputation_events_created": 2,
+                "skipped_unattributed": 0,
+                "skipped_ineligible_stage": 1,
+            },
         }
 
     def post(self, path: str, *, body_bytes: bytes, idempotency_key: str | None = None):
@@ -236,6 +250,7 @@ def test_emit_social_signal_json_flag(monkeypatch, capsys) -> None:
 
     exit_code = cli.run(
         [
+            "--json",
             "emit-social-signal",
             "--agent-id",
             "ag_123",
@@ -243,7 +258,6 @@ def test_emit_social_signal_json_flag(monkeypatch, capsys) -> None:
             "x",
             "--signal-url",
             "https://example.com/post/1",
-            "--json",
         ]
     )
 
@@ -282,6 +296,7 @@ def test_observe_social_signal_json_flag(monkeypatch, capsys) -> None:
 
     exit_code = cli.run(
         [
+            "--json",
             "observe-social-signal",
             "--platform",
             "x",
@@ -291,7 +306,6 @@ def test_observe_social_signal_json_flag(monkeypatch, capsys) -> None:
             "https://example.com/post/1",
             "--content-hash",
             "abc123",
-            "--json",
         ]
     )
 
@@ -325,6 +339,31 @@ def test_observe_customer_referral_without_json_writes_human_summary(monkeypatch
     assert captured.out.strip() == ""
     assert "source_system=hubspot" in captured.err
     assert "stage=lead_detected" in captured.err
+
+
+def test_sync_social_signals_json_flag(monkeypatch, capsys) -> None:
+    _setup_fake_runner(monkeypatch)
+
+    exit_code = cli.run(["sync-social-signals", "--json"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    data = json.loads(captured.out.strip())
+    assert data["reputation_events_created"] == 1
+    assert data["skipped_unattributed"] == 1
+    assert captured.err.strip() == ""
+
+
+def test_sync_customer_referrals_without_json_writes_human_summary(monkeypatch, capsys) -> None:
+    _setup_fake_runner(monkeypatch)
+
+    exit_code = cli.run(["sync-customer-referrals"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.out.strip() == ""
+    assert "reputation_events_created=2" in captured.err
+    assert "skipped_ineligible_stage=1" in captured.err
 
 
 def test_deposit_profit_json_flag(monkeypatch, capsys) -> None:

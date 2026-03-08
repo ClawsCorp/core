@@ -421,7 +421,6 @@ def build_parser() -> argparse.ArgumentParser:
     emit_social_signal.add_argument("--account-handle")
     emit_social_signal.add_argument("--note")
     emit_social_signal.add_argument("--idempotency-key")
-    emit_social_signal.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
 
     observe_social_signal = subparsers.add_parser(
         "observe-social-signal",
@@ -434,7 +433,6 @@ def build_parser() -> argparse.ArgumentParser:
     observe_social_signal.add_argument("--content-hash")
     observe_social_signal.add_argument("--note")
     observe_social_signal.add_argument("--idempotency-key")
-    observe_social_signal.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
 
     emit_customer_referral = subparsers.add_parser(
         "emit-customer-referral",
@@ -446,7 +444,6 @@ def build_parser() -> argparse.ArgumentParser:
     emit_customer_referral.add_argument("--evidence-url")
     emit_customer_referral.add_argument("--note")
     emit_customer_referral.add_argument("--idempotency-key")
-    emit_customer_referral.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
 
     observe_customer_referral = subparsers.add_parser(
         "observe-customer-referral",
@@ -459,7 +456,18 @@ def build_parser() -> argparse.ArgumentParser:
     observe_customer_referral.add_argument("--evidence-url")
     observe_customer_referral.add_argument("--note")
     observe_customer_referral.add_argument("--idempotency-key")
-    observe_customer_referral.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
+
+    sync_social_signals = subparsers.add_parser(
+        "sync-social-signals",
+        help="Promote observed social signal candidates into verified reputation events (oracle HMAC protected).",
+    )
+    sync_social_signals.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
+
+    sync_customer_referrals = subparsers.add_parser(
+        "sync-customer-referrals",
+        help="Promote observed customer referral candidates into verified reputation events (oracle HMAC protected).",
+    )
+    sync_customer_referrals.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
 
     project_capital_event = subparsers.add_parser(
         "project-capital-event",
@@ -1222,6 +1230,31 @@ def run(argv: list[str] | None = None) -> int:
                 _print_json(data)
             else:
                 _print_fields(data, ["agent_id", "source_system", "external_ref", "stage", "observed_at"])
+            return 0
+
+        if args.command == "sync-social-signals":
+            data = _post_action(client, "/api/v1/oracle/reputation/social-signals/sync", b"{}")
+            if json_mode:
+                _print_json(data)
+            else:
+                _print_fields(data, ["candidates_seen", "eligible_candidates", "reputation_events_created", "skipped_unattributed"])
+            return 0
+
+        if args.command == "sync-customer-referrals":
+            data = _post_action(client, "/api/v1/oracle/reputation/customer-referrals/sync", b"{}")
+            if json_mode:
+                _print_json(data)
+            else:
+                _print_fields(
+                    data,
+                    [
+                        "candidates_seen",
+                        "eligible_candidates",
+                        "reputation_events_created",
+                        "skipped_unattributed",
+                        "skipped_ineligible_stage",
+                    ],
+                )
             return 0
 
         if args.command == "project-capital-event":
