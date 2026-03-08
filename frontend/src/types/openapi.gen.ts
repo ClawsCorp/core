@@ -372,6 +372,22 @@ export interface paths {
     /** Create Customer Referral Reputation Event */
     post: operations["create_customer_referral_reputation_event_api_v1_oracle_reputation_customer_referrals_post"];
   };
+  "/api/v1/oracle/reputation/observed-social-signals": {
+    /** Create Observed Social Signal */
+    post: operations["create_observed_social_signal_api_v1_oracle_reputation_observed_social_signals_post"];
+  };
+  "/api/v1/oracle/reputation/observed-customer-referrals": {
+    /** Create Observed Customer Referral */
+    post: operations["create_observed_customer_referral_api_v1_oracle_reputation_observed_customer_referrals_post"];
+  };
+  "/api/v1/oracle/reputation/social-signals/sync": {
+    /** Sync Observed Social Signals */
+    post: operations["sync_observed_social_signals_api_v1_oracle_reputation_social_signals_sync_post"];
+  };
+  "/api/v1/oracle/reputation/customer-referrals/sync": {
+    /** Sync Observed Customer Referrals */
+    post: operations["sync_observed_customer_referrals_api_v1_oracle_reputation_customer_referrals_sync_post"];
+  };
   "/api/v1/oracle/project-capital-events": {
     /** Create Project Capital Event */
     post: operations["create_project_capital_event_api_v1_oracle_project_capital_events_post"];
@@ -1622,6 +1638,110 @@ export interface components {
      * @enum {string}
      */
     MilestoneStatus: "planned" | "in_progress" | "done";
+    /** ObservedCustomerReferralCreateRequest */
+    ObservedCustomerReferralCreateRequest: {
+      /** Idempotency Key */
+      idempotency_key: string;
+      /** Agent Id */
+      agent_id?: string | null;
+      /** Source System */
+      source_system: string;
+      /** External Ref */
+      external_ref: string;
+      /** Stage */
+      stage: string;
+      /** Evidence Url */
+      evidence_url?: string | null;
+      /** Note */
+      note?: string | null;
+    };
+    /** ObservedCustomerReferralDetailResponse */
+    ObservedCustomerReferralDetailResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["ObservedCustomerReferralPublic"];
+    };
+    /** ObservedCustomerReferralPublic */
+    ObservedCustomerReferralPublic: {
+      /** Referral Event Id */
+      referral_event_id: string;
+      /** Idempotency Key */
+      idempotency_key: string;
+      /** Agent Id */
+      agent_id: string | null;
+      /** Source System */
+      source_system: string;
+      /** External Ref */
+      external_ref: string;
+      /** Stage */
+      stage: string;
+      /** Evidence Url */
+      evidence_url: string | null;
+      /** Note */
+      note: string | null;
+      /**
+       * Observed At
+       * Format: date-time
+       */
+      observed_at: string;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+    };
+    /** ObservedSocialSignalCreateRequest */
+    ObservedSocialSignalCreateRequest: {
+      /** Idempotency Key */
+      idempotency_key: string;
+      /** Agent Id */
+      agent_id?: string | null;
+      /** Platform */
+      platform: string;
+      /** Signal Url */
+      signal_url?: string | null;
+      /** Account Handle */
+      account_handle?: string | null;
+      /** Content Hash */
+      content_hash?: string | null;
+      /** Note */
+      note?: string | null;
+    };
+    /** ObservedSocialSignalDetailResponse */
+    ObservedSocialSignalDetailResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["ObservedSocialSignalPublic"];
+    };
+    /** ObservedSocialSignalPublic */
+    ObservedSocialSignalPublic: {
+      /** Signal Id */
+      signal_id: string;
+      /** Idempotency Key */
+      idempotency_key: string;
+      /** Agent Id */
+      agent_id: string | null;
+      /** Platform */
+      platform: string;
+      /** Signal Url */
+      signal_url: string | null;
+      /** Account Handle */
+      account_handle: string | null;
+      /** Content Hash */
+      content_hash: string | null;
+      /** Note */
+      note: string | null;
+      /**
+       * Observed At
+       * Format: date-time
+       */
+      observed_at: string;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+    };
     /** OracleProposalFastForwardData */
     OracleProposalFastForwardData: {
       /** Proposal Id */
@@ -3274,6 +3394,31 @@ export interface components {
       /** Success */
       success: boolean;
       data: components["schemas"]["ReputationLedgerData"];
+    };
+    /** ReputationObservedSyncData */
+    ReputationObservedSyncData: {
+      /** Candidates Seen */
+      candidates_seen: number;
+      /** Eligible Candidates */
+      eligible_candidates: number;
+      /** Reputation Events Created */
+      reputation_events_created: number;
+      /**
+       * Skipped Unattributed
+       * @default 0
+       */
+      skipped_unattributed?: number;
+      /**
+       * Skipped Ineligible Stage
+       * @default 0
+       */
+      skipped_ineligible_stage?: number;
+    };
+    /** ReputationObservedSyncResponse */
+    ReputationObservedSyncResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["ReputationObservedSyncData"];
     };
     /** ReputationPolicyData */
     ReputationPolicyData: {
@@ -5637,6 +5782,72 @@ export interface operations {
       422: {
         content: {
           "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Create Observed Social Signal */
+  create_observed_social_signal_api_v1_oracle_reputation_observed_social_signals_post: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ObservedSocialSignalCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ObservedSocialSignalDetailResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Create Observed Customer Referral */
+  create_observed_customer_referral_api_v1_oracle_reputation_observed_customer_referrals_post: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ObservedCustomerReferralCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ObservedCustomerReferralDetailResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Sync Observed Social Signals */
+  sync_observed_social_signals_api_v1_oracle_reputation_social_signals_sync_post: {
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ReputationObservedSyncResponse"];
+        };
+      };
+    };
+  };
+  /** Sync Observed Customer Referrals */
+  sync_observed_customer_referrals_api_v1_oracle_reputation_customer_referrals_sync_post: {
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ReputationObservedSyncResponse"];
         };
       };
     };
