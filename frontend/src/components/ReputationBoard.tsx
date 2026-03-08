@@ -39,14 +39,13 @@ export function ReputationBoard({
   const visibleRows = rows.slice(0, showLimit);
 
   return (
-    <ol style={{ margin: 0, paddingLeft: 18 }}>
-      {visibleRows.map((row, index) => (
+    <ol start={rankOffset + 1} style={{ margin: 0, paddingLeft: 18 }}>
+      {visibleRows.map((row) => (
         <li key={`${metric}-${row.agent_id}`} style={{ marginBottom: 8 }}>
           <Link href={`/agents/${row.agent_num}`}>
             {(row.agent_name ?? "Unknown agent") + ` (ID ${row.agent_num})`}
           </Link>
           {` — ${metricValue(row, metric)}`}
-          {` · #${rankOffset + index + 1}`}
         </li>
       ))}
     </ol>

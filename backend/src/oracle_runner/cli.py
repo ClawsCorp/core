@@ -423,6 +423,19 @@ def build_parser() -> argparse.ArgumentParser:
     emit_social_signal.add_argument("--idempotency-key")
     emit_social_signal.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
 
+    observe_social_signal = subparsers.add_parser(
+        "observe-social-signal",
+        help="Append an observed social signal candidate (oracle HMAC protected).",
+    )
+    observe_social_signal.add_argument("--platform", required=True)
+    observe_social_signal.add_argument("--agent-id")
+    observe_social_signal.add_argument("--signal-url")
+    observe_social_signal.add_argument("--account-handle")
+    observe_social_signal.add_argument("--content-hash")
+    observe_social_signal.add_argument("--note")
+    observe_social_signal.add_argument("--idempotency-key")
+    observe_social_signal.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
+
     emit_customer_referral = subparsers.add_parser(
         "emit-customer-referral",
         help="Append a verified customer referral reputation signal (oracle HMAC protected).",
@@ -434,6 +447,19 @@ def build_parser() -> argparse.ArgumentParser:
     emit_customer_referral.add_argument("--note")
     emit_customer_referral.add_argument("--idempotency-key")
     emit_customer_referral.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
+
+    observe_customer_referral = subparsers.add_parser(
+        "observe-customer-referral",
+        help="Append an observed customer referral candidate (oracle HMAC protected).",
+    )
+    observe_customer_referral.add_argument("--source-system", required=True)
+    observe_customer_referral.add_argument("--external-ref", required=True)
+    observe_customer_referral.add_argument("--stage", required=True)
+    observe_customer_referral.add_argument("--agent-id")
+    observe_customer_referral.add_argument("--evidence-url")
+    observe_customer_referral.add_argument("--note")
+    observe_customer_referral.add_argument("--idempotency-key")
+    observe_customer_referral.add_argument("--json", action="store_true", help="Print machine-readable JSON output to stdout.")
 
     project_capital_event = subparsers.add_parser(
         "project-capital-event",
@@ -1103,6 +1129,36 @@ def run(argv: list[str] | None = None) -> int:
                 _print_fields(data, ["agent_id", "source", "delta_points", "ref_id", "created_at"])
             return 0
 
+        if args.command == "observe-social-signal":
+            payload: dict[str, Any] = {
+                "platform": str(args.platform).strip(),
+                "agent_id": args.agent_id,
+                "signal_url": args.signal_url,
+                "account_handle": args.account_handle,
+                "content_hash": args.content_hash,
+                "note": args.note,
+                "idempotency_key": args.idempotency_key or "",
+            }
+            payload = {k: v for k, v in payload.items() if v is not None}
+            if not payload["platform"]:
+                raise OracleRunnerError("--platform is required.")
+            if not payload.get("idempotency_key"):
+                derived = dict(payload)
+                derived.pop("idempotency_key", None)
+                payload["idempotency_key"] = _derive_idempotency_key("observe_social_signal", derived)
+            body_bytes = json.dumps(payload, separators=(",", ":"), ensure_ascii=True, sort_keys=True).encode("utf-8")
+            data = _post_action(
+                client,
+                "/api/v1/oracle/reputation/observed-social-signals",
+                body_bytes,
+                idempotency_key=payload["idempotency_key"],
+            )
+            if json_mode:
+                _print_json(data)
+            else:
+                _print_fields(data, ["agent_id", "platform", "signal_url", "content_hash", "observed_at"])
+            return 0
+
         if args.command == "emit-customer-referral":
             payload = {
                 "agent_id": str(args.agent_id).strip(),
@@ -1132,6 +1188,40 @@ def run(argv: list[str] | None = None) -> int:
                 _print_json(data)
             else:
                 _print_fields(data, ["agent_id", "source", "delta_points", "ref_id", "created_at"])
+            return 0
+
+        if args.command == "observe-customer-referral":
+            payload = {
+                "source_system": str(args.source_system).strip(),
+                "external_ref": str(args.external_ref).strip(),
+                "stage": str(args.stage).strip(),
+                "agent_id": args.agent_id,
+                "evidence_url": args.evidence_url,
+                "note": args.note,
+                "idempotency_key": args.idempotency_key or "",
+            }
+            payload = {k: v for k, v in payload.items() if v is not None}
+            if not payload["source_system"]:
+                raise OracleRunnerError("--source-system is required.")
+            if not payload["external_ref"]:
+                raise OracleRunnerError("--external-ref is required.")
+            if not payload["stage"]:
+                raise OracleRunnerError("--stage is required.")
+            if not payload.get("idempotency_key"):
+                derived = dict(payload)
+                derived.pop("idempotency_key", None)
+                payload["idempotency_key"] = _derive_idempotency_key("observe_customer_referral", derived)
+            body_bytes = json.dumps(payload, separators=(",", ":"), ensure_ascii=True, sort_keys=True).encode("utf-8")
+            data = _post_action(
+                client,
+                "/api/v1/oracle/reputation/observed-customer-referrals",
+                body_bytes,
+                idempotency_key=payload["idempotency_key"],
+            )
+            if json_mode:
+                _print_json(data)
+            else:
+                _print_fields(data, ["agent_id", "source_system", "external_ref", "stage", "observed_at"])
             return 0
 
         if args.command == "project-capital-event":

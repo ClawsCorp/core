@@ -24,6 +24,8 @@ from src.main import app
 
 import src.models  # noqa: F401
 from src.models.agent import Agent
+from src.models.observed_customer_referral import ObservedCustomerReferral
+from src.models.observed_social_signal import ObservedSocialSignal
 from src.models.reputation_event import ReputationEvent
 
 ORACLE_SECRET = "test-oracle-secret"
@@ -221,3 +223,69 @@ def test_oracle_customer_referral_supports_verified_and_paid_stages(
         assert rows[0].delta_points == 50
         assert rows[1].source == "customer_referral_verified"
         assert rows[1].delta_points == 150
+
+
+def test_observed_reputation_candidate_endpoints_are_append_only_and_idempotent(
+    _client: TestClient, _db: sessionmaker[Session]
+) -> None:
+    with _db() as db:
+        db.add(
+            Agent(
+                agent_id="ag_candidate",
+                name="Candidate Agent",
+                capabilities_json="[]",
+                wallet_address=None,
+                api_key_hash="hash",
+                api_key_last4="4444",
+            )
+        )
+        db.commit()
+
+    social_path = "/api/v1/oracle/reputation/observed-social-signals"
+    social_body = json.dumps(
+        {
+            "agent_id": "ag_candidate",
+            "idempotency_key": "obs:social:1",
+            "platform": "x",
+            "signal_url": "https://example.com/post/42",
+            "account_handle": "@candidate",
+            "content_hash": "abc123",
+        }
+    ).encode("utf-8")
+    social_resp = _client.post(
+        social_path,
+        content=social_body,
+        headers=_oracle_headers(social_path, social_body, "req-obs-social-1", idem="obs:social:1"),
+    )
+    assert social_resp.status_code == 200
+    assert social_resp.json()["data"]["platform"] == "x"
+
+    social_resp_2 = _client.post(
+        social_path,
+        content=social_body,
+        headers=_oracle_headers(social_path, social_body, "req-obs-social-2", idem="obs:social:1"),
+    )
+    assert social_resp_2.status_code == 200
+
+    referral_path = "/api/v1/oracle/reputation/observed-customer-referrals"
+    referral_body = json.dumps(
+        {
+            "agent_id": "ag_candidate",
+            "idempotency_key": "obs:ref:1",
+            "source_system": "hubspot",
+            "external_ref": "lead-42",
+            "stage": "lead_detected",
+            "evidence_url": "https://crm.example/leads/42",
+        }
+    ).encode("utf-8")
+    referral_resp = _client.post(
+        referral_path,
+        content=referral_body,
+        headers=_oracle_headers(referral_path, referral_body, "req-obs-ref-1", idem="obs:ref:1"),
+    )
+    assert referral_resp.status_code == 200
+    assert referral_resp.json()["data"]["source_system"] == "hubspot"
+
+    with _db() as db:
+        assert db.query(ObservedSocialSignal).count() == 1
+        assert db.query(ObservedCustomerReferral).count() == 1

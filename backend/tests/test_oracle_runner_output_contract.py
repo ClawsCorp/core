@@ -51,6 +51,14 @@ class _FakeClient:
                 "ref_id": "https://example.com/post/1",
                 "created_at": "2026-01-01T00:00:00Z",
             },
+            "/api/v1/oracle/reputation/observed-social-signals": {
+                "signal_id": "obs_social_1",
+                "agent_id": "ag_123",
+                "platform": "x",
+                "signal_url": "https://example.com/post/1",
+                "content_hash": "abc123",
+                "observed_at": "2026-01-01T00:00:00Z",
+            },
             "/api/v1/oracle/reputation/customer-referrals": {
                 "event_id": "rep_ref_1",
                 "agent_id": "ag_123",
@@ -58,6 +66,14 @@ class _FakeClient:
                 "source": "customer_referral_verified",
                 "ref_id": "lead_1",
                 "created_at": "2026-01-01T00:00:00Z",
+            },
+            "/api/v1/oracle/reputation/observed-customer-referrals": {
+                "referral_event_id": "obs_ref_1",
+                "agent_id": "ag_123",
+                "source_system": "hubspot",
+                "external_ref": "lead_1",
+                "stage": "lead_detected",
+                "observed_at": "2026-01-01T00:00:00Z",
             },
         }
 
@@ -259,6 +275,56 @@ def test_emit_customer_referral_without_json_writes_human_summary(monkeypatch, c
     assert captured.out.strip() == ""
     assert "source=customer_referral_verified" in captured.err
     assert "delta_points=50" in captured.err
+
+
+def test_observe_social_signal_json_flag(monkeypatch, capsys) -> None:
+    _setup_fake_runner(monkeypatch)
+
+    exit_code = cli.run(
+        [
+            "observe-social-signal",
+            "--platform",
+            "x",
+            "--agent-id",
+            "ag_123",
+            "--signal-url",
+            "https://example.com/post/1",
+            "--content-hash",
+            "abc123",
+            "--json",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    data = json.loads(captured.out.strip())
+    assert data["platform"] == "x"
+    assert data["content_hash"] == "abc123"
+    assert captured.err.strip() == ""
+
+
+def test_observe_customer_referral_without_json_writes_human_summary(monkeypatch, capsys) -> None:
+    _setup_fake_runner(monkeypatch)
+
+    exit_code = cli.run(
+        [
+            "observe-customer-referral",
+            "--source-system",
+            "hubspot",
+            "--external-ref",
+            "lead_1",
+            "--stage",
+            "lead_detected",
+            "--agent-id",
+            "ag_123",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.out.strip() == ""
+    assert "source_system=hubspot" in captured.err
+    assert "stage=lead_detected" in captured.err
 
 
 def test_deposit_profit_json_flag(monkeypatch, capsys) -> None:
