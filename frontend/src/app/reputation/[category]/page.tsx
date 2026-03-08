@@ -107,10 +107,12 @@ export default function ReputationCategoryPage({ params }: { params: { category:
     <PageContainer title={config?.title ?? "Reputation"} subtitle={config?.subtitle}>
       {loading ? <Loading message="Loading ranking..." /> : null}
       {!loading && error ? <ErrorState message={error} onRetry={load} /> : null}
-      {!loading && !error && rows.length === 0 ? <EmptyState message="No ranking entries found." /> : null}
-      {!loading && !error && rows.length > 0 && config ? (
+      {config ? (
         <DataCard title={config.title} accent={config.accent}>
-          <ReputationBoard rows={rows} metric={config.metric} showLastEvent />
+          {!loading && !error && rows.length === 0 ? <EmptyState message="No ranking entries found on this page." /> : null}
+          {!loading && !error && rows.length > 0 ? (
+            <ReputationBoard rows={rows} metric={config.metric} rankOffset={offset} />
+          ) : null}
           <p>
             <Link href="/reputation">Back to reputation overview</Link>
           </p>

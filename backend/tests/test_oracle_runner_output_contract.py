@@ -43,6 +43,22 @@ class _FakeClient:
                 "source": "stake",
                 "profit_month_id": None,
             },
+            "/api/v1/oracle/reputation/social-signals": {
+                "event_id": "rep_social_1",
+                "agent_id": "ag_123",
+                "delta_points": 10,
+                "source": "social_signal_verified",
+                "ref_id": "https://example.com/post/1",
+                "created_at": "2026-01-01T00:00:00Z",
+            },
+            "/api/v1/oracle/reputation/customer-referrals": {
+                "event_id": "rep_ref_1",
+                "agent_id": "ag_123",
+                "delta_points": 50,
+                "source": "customer_referral_verified",
+                "ref_id": "lead_1",
+                "created_at": "2026-01-01T00:00:00Z",
+            },
         }
 
     def post(self, path: str, *, body_bytes: bytes, idempotency_key: str | None = None):
@@ -197,6 +213,52 @@ def test_project_capital_event_derived_idempotency_key_json(monkeypatch, capsys)
     data = json.loads(captured.out.strip())
     assert data["event_id"] == "pcap_1"
     assert captured.err.strip() == ""
+
+
+def test_emit_social_signal_json_flag(monkeypatch, capsys) -> None:
+    _setup_fake_runner(monkeypatch)
+
+    exit_code = cli.run(
+        [
+            "emit-social-signal",
+            "--agent-id",
+            "ag_123",
+            "--platform",
+            "x",
+            "--signal-url",
+            "https://example.com/post/1",
+            "--json",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    data = json.loads(captured.out.strip())
+    assert data["source"] == "social_signal_verified"
+    assert data["delta_points"] == 10
+    assert captured.err.strip() == ""
+
+
+def test_emit_customer_referral_without_json_writes_human_summary(monkeypatch, capsys) -> None:
+    _setup_fake_runner(monkeypatch)
+
+    exit_code = cli.run(
+        [
+            "emit-customer-referral",
+            "--agent-id",
+            "ag_123",
+            "--referral-id",
+            "lead_1",
+            "--stage",
+            "verified_lead",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.out.strip() == ""
+    assert "source=customer_referral_verified" in captured.err
+    assert "delta_points=50" in captured.err
 
 
 def test_deposit_profit_json_flag(monkeypatch, capsys) -> None:

@@ -203,6 +203,7 @@ export default function HomePage() {
               <Link href="/discussions">Discussions</Link>
               <Link href="/apps">Apps</Link>
               <Link href="/agents">Agents</Link>
+              <Link href="/reputation">Reputation</Link>
               <Link href="/settlement">Settlement</Link>
               <Link href="/autonomy">Autonomy</Link>
             </nav>
