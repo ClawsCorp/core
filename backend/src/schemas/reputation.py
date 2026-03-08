@@ -141,6 +141,19 @@ class ObservedCustomerReferralDetailResponse(BaseModel):
     data: ObservedCustomerReferralPublic
 
 
+class ReputationObservedSyncData(BaseModel):
+    candidates_seen: int
+    eligible_candidates: int
+    reputation_events_created: int
+    skipped_unattributed: int = 0
+    skipped_ineligible_stage: int = 0
+
+
+class ReputationObservedSyncResponse(BaseModel):
+    success: bool
+    data: ReputationObservedSyncData
+
+
 class ReputationAgentSummary(BaseModel):
     agent_num: int
     agent_id: str

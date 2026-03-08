@@ -311,3 +311,98 @@ def test_observed_candidate_unknown_agent_is_audited_before_404(
         audit = db.query(AuditLog).filter(AuditLog.idempotency_key == "obs:social:missing:1").first()
         assert audit is not None
         assert audit.actor_type == "oracle"
+
+
+def test_sync_observed_candidates_promotes_only_eligible_rows(
+    _client: TestClient, _db: sessionmaker[Session]
+) -> None:
+    with _db() as db:
+        agent = Agent(
+            agent_id="ag_sync",
+            name="Sync Agent",
+            capabilities_json="[]",
+            wallet_address=None,
+            api_key_hash="hash",
+            api_key_last4="5555",
+        )
+        db.add(agent)
+        db.flush()
+        db.add_all(
+            [
+                ObservedSocialSignal(
+                    signal_id="oss_1",
+                    idempotency_key="obs:social:sync:1",
+                    agent_id=agent.id,
+                    platform="x",
+                    signal_url="https://example.com/post/1",
+                    account_handle="@sync",
+                    content_hash="abc",
+                    note=None,
+                ),
+                ObservedSocialSignal(
+                    signal_id="oss_2",
+                    idempotency_key="obs:social:sync:2",
+                    agent_id=None,
+                    platform="x",
+                    signal_url="https://example.com/post/2",
+                    account_handle="@sync",
+                    content_hash="def",
+                    note=None,
+                ),
+                ObservedCustomerReferral(
+                    referral_event_id="ocr_1",
+                    idempotency_key="obs:ref:sync:1",
+                    agent_id=agent.id,
+                    source_system="hubspot",
+                    external_ref="lead_1",
+                    stage="verified_lead",
+                    evidence_url=None,
+                    note=None,
+                ),
+                ObservedCustomerReferral(
+                    referral_event_id="ocr_2",
+                    idempotency_key="obs:ref:sync:2",
+                    agent_id=agent.id,
+                    source_system="hubspot",
+                    external_ref="lead_2",
+                    stage="lead_detected",
+                    evidence_url=None,
+                    note=None,
+                ),
+            ]
+        )
+        db.commit()
+
+    social_sync_path = "/api/v1/oracle/reputation/social-signals/sync"
+    social_sync_body = b"{}"
+    social_resp = _client.post(
+        social_sync_path,
+        content=social_sync_body,
+        headers=_oracle_headers(social_sync_path, social_sync_body, "req-sync-social", idem="sync-social-1"),
+    )
+    assert social_resp.status_code == 200
+    social_data = social_resp.json()["data"]
+    assert social_data["candidates_seen"] == 2
+    assert social_data["eligible_candidates"] == 1
+    assert social_data["reputation_events_created"] == 1
+    assert social_data["skipped_unattributed"] == 1
+
+    referral_sync_path = "/api/v1/oracle/reputation/customer-referrals/sync"
+    referral_sync_body = b"{}"
+    referral_resp = _client.post(
+        referral_sync_path,
+        content=referral_sync_body,
+        headers=_oracle_headers(referral_sync_path, referral_sync_body, "req-sync-ref", idem="sync-ref-1"),
+    )
+    assert referral_resp.status_code == 200
+    referral_data = referral_resp.json()["data"]
+    assert referral_data["candidates_seen"] == 2
+    assert referral_data["eligible_candidates"] == 1
+    assert referral_data["reputation_events_created"] == 1
+    assert referral_data["skipped_ineligible_stage"] == 1
+
+    with _db() as db:
+        rep_rows = db.query(ReputationEvent).order_by(ReputationEvent.id.asc()).all()
+        assert len(rep_rows) == 2
+        assert rep_rows[0].source == "social_signal_verified"
+        assert rep_rows[1].source == "customer_referral_verified"
