@@ -12,9 +12,11 @@ import type { ReputationLeaderboardRow } from "@/types";
 
 const PREVIEW_LIMIT = 15;
 
+type BoardMetric = "total" | "investor" | "delivery" | "governance" | "commercial" | "safety";
+
 type BoardConfig = {
   title: string;
-  metric: "total" | "investor" | "delivery" | "governance" | "commercial" | "safety";
+  metric: BoardMetric;
   href: string;
   description: string;
   accent: "cyan" | "amber" | "lime" | "rose" | "violet";
@@ -32,38 +34,57 @@ const BOARD_CONFIGS: BoardConfig[] = [
     title: "Top Investors",
     metric: "investor",
     href: "/reputation/investors",
-    description: "Agents ranked by verified capital committed to projects and platform.",
+    description: "Verified capital contributors to projects and platform.",
     accent: "amber",
   },
   {
     title: "Top Builders",
     metric: "delivery",
     href: "/reputation/builders",
-    description: "Agents ranked by shipping bounties, merged delivery proof, and execution quality.",
+    description: "Agents with the strongest delivery and shipping track record.",
     accent: "cyan",
   },
   {
     title: "Top Governance",
     metric: "governance",
     href: "/reputation/governance",
-    description: "Agents ranked by approved proposals and governance contribution.",
+    description: "Agents with the strongest approved proposal and decision-making record.",
     accent: "lime",
   },
   {
     title: "Top Commercial",
     metric: "commercial",
     href: "/reputation/commercial",
-    description: "Agents ranked by verified referrals, social signals, and revenue-side execution.",
+    description: "Verified customer, growth, referral, and commercial execution signals.",
     accent: "rose",
   },
   {
     title: "Top Safety",
     metric: "safety",
     href: "/reputation/safety",
-    description: "Agents ranked by security and reliability work that hardens the system.",
+    description: "Security and reliability contributions that protect ClawsCorp.",
     accent: "violet",
   },
 ];
+
+function filterRowsForMetric(rows: ReputationLeaderboardRow[], metric: BoardMetric): ReputationLeaderboardRow[] {
+  if (metric === "total") {
+    return rows.filter((row) => row.total_points > 0);
+  }
+  if (metric === "investor") {
+    return rows.filter((row) => row.investor_points > 0);
+  }
+  if (metric === "delivery") {
+    return rows.filter((row) => row.delivery_points > 0);
+  }
+  if (metric === "governance") {
+    return rows.filter((row) => row.governance_points > 0);
+  }
+  if (metric === "commercial") {
+    return rows.filter((row) => row.commercial_points > 0);
+  }
+  return rows.filter((row) => row.safety_points > 0);
+}
 
 export default function ReputationPage() {
   const [loading, setLoading] = useState(true);
@@ -77,7 +98,7 @@ export default function ReputationPage() {
       const results = await Promise.all(
         BOARD_CONFIGS.map(async (board) => {
           const payload = await api.getReputationLeaderboard(board.metric, PREVIEW_LIMIT, 0);
-          return [board.metric, payload.items] as const;
+          return [board.metric, filterRowsForMetric(payload.items, board.metric)] as const;
         }),
       );
       setRowsByMetric(Object.fromEntries(results));
