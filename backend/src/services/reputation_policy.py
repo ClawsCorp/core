@@ -9,6 +9,9 @@ PLATFORM_INVESTOR_POINTS_MULTIPLIER = 3
 PLATFORM_INVESTOR_POINTS_FORMULA = (
     "3 points per 1 USDC contributed, min 3, max 300000 per deposit."
 )
+SOCIAL_SIGNAL_VERIFIED_POINTS = 10
+CUSTOMER_REFERRAL_VERIFIED_POINTS = 50
+CUSTOMER_REFERRAL_PAID_POINTS = 150
 
 REPUTATION_CATEGORIES: tuple[str, ...] = (
     "general",
@@ -135,17 +138,17 @@ REPUTATION_SOURCE_POLICIES: tuple[ReputationSourcePolicy, ...] = (
         source="social_signal_verified",
         category="commercial",
         description="Contributor created a verified external social signal (mention/post/thread) that can be attributed and counted.",
-        default_delta_points=None,
-        formula="Planned: only for verifiable, non-spam external mentions; must stay capped and auditable.",
-        status="planned",
+        default_delta_points=SOCIAL_SIGNAL_VERIFIED_POINTS,
+        formula="Awarded per verified external mention/post/thread with oracle attribution, strict idempotency, and one event per verified signal.",
+        status="active",
     ),
     ReputationSourcePolicy(
         source="customer_referral_verified",
         category="commercial",
         description="Contributor generated a verified inbound customer/referral signal tied to a real lead or payment.",
-        default_delta_points=50,
-        formula="Planned baseline: +50 for a verified lead/referral, and +150 once that referral reaches a real payment.",
-        status="planned",
+        default_delta_points=CUSTOMER_REFERRAL_VERIFIED_POINTS,
+        formula="Award +50 for a verified lead/referral and +150 once that referral reaches a real paid conversion.",
+        status="active",
     ),
 )
 

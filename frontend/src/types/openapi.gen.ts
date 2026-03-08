@@ -264,6 +264,10 @@ export interface paths {
     /** Get Agent Reputation Summary */
     get: operations["get_agent_reputation_summary_api_v1_reputation_agents__agent_id__get"];
   };
+  "/api/v1/reputation/agents/{agent_id}/events": {
+    /** List Agent Reputation Events */
+    get: operations["list_agent_reputation_events_api_v1_reputation_agents__agent_id__events_get"];
+  };
   "/api/v1/reputation/leaderboard": {
     /** Get Reputation Leaderboard */
     get: operations["get_reputation_leaderboard_api_v1_reputation_leaderboard_get"];
@@ -359,6 +363,14 @@ export interface paths {
   "/api/v1/oracle/reputation-events": {
     /** Create Reputation Event */
     post: operations["create_reputation_event_api_v1_oracle_reputation_events_post"];
+  };
+  "/api/v1/oracle/reputation/social-signals": {
+    /** Create Social Signal Reputation Event */
+    post: operations["create_social_signal_reputation_event_api_v1_oracle_reputation_social_signals_post"];
+  };
+  "/api/v1/oracle/reputation/customer-referrals": {
+    /** Create Customer Referral Reputation Event */
+    post: operations["create_customer_referral_reputation_event_api_v1_oracle_reputation_customer_referrals_post"];
   };
   "/api/v1/oracle/project-capital-events": {
     /** Create Project Capital Event */
@@ -3127,6 +3139,24 @@ export interface components {
       success: boolean;
       data: components["schemas"]["ReputationAgentSummary"];
     };
+    /** ReputationCustomerReferralCreateRequest */
+    ReputationCustomerReferralCreateRequest: {
+      /** Agent Id */
+      agent_id: string;
+      /** Idempotency Key */
+      idempotency_key: string;
+      /** Referral Id */
+      referral_id: string;
+      /**
+       * Stage
+       * @enum {string}
+       */
+      stage: "verified_lead" | "paid_conversion";
+      /** Evidence Url */
+      evidence_url?: string | null;
+      /** Note */
+      note?: string | null;
+    };
     /** ReputationEventCreateRequest */
     ReputationEventCreateRequest: {
       /** Event Id */
@@ -3151,6 +3181,23 @@ export interface components {
       /** Success */
       success: boolean;
       data: components["schemas"]["ReputationEventPublic"];
+    };
+    /** ReputationEventListData */
+    ReputationEventListData: {
+      /** Items */
+      items: components["schemas"]["ReputationEventPublic"][];
+      /** Limit */
+      limit: number;
+      /** Offset */
+      offset: number;
+      /** Total */
+      total: number;
+    };
+    /** ReputationEventListResponse */
+    ReputationEventListResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["ReputationEventListData"];
     };
     /** ReputationEventPublic */
     ReputationEventPublic: {
@@ -3259,6 +3306,21 @@ export interface components {
       formula: string | null;
       /** Status */
       status: string;
+    };
+    /** ReputationSocialSignalCreateRequest */
+    ReputationSocialSignalCreateRequest: {
+      /** Agent Id */
+      agent_id: string;
+      /** Idempotency Key */
+      idempotency_key: string;
+      /** Platform */
+      platform: string;
+      /** Signal Url */
+      signal_url?: string | null;
+      /** Account Handle */
+      account_handle?: string | null;
+      /** Note */
+      note?: string | null;
     };
     /** RequiredCheck */
     RequiredCheck: {
@@ -5083,6 +5145,32 @@ export interface operations {
       };
     };
   };
+  /** List Agent Reputation Events */
+  list_agent_reputation_events_api_v1_reputation_agents__agent_id__events_get: {
+    parameters: {
+      query?: {
+        limit?: number;
+        offset?: number;
+      };
+      path: {
+        agent_id: string;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ReputationEventListResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   /** Get Reputation Leaderboard */
   get_reputation_leaderboard_api_v1_reputation_leaderboard_get: {
     parameters: {
@@ -5492,6 +5580,50 @@ export interface operations {
     requestBody: {
       content: {
         "application/json": components["schemas"]["ReputationEventCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ReputationEventDetailResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Create Social Signal Reputation Event */
+  create_social_signal_reputation_event_api_v1_oracle_reputation_social_signals_post: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ReputationSocialSignalCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ReputationEventDetailResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Create Customer Referral Reputation Event */
+  create_customer_referral_reputation_event_api_v1_oracle_reputation_customer_referrals_post: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ReputationCustomerReferralCreateRequest"];
       };
     };
     responses: {

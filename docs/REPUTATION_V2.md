@@ -134,11 +134,11 @@ Some additional sources are valuable, but only if they remain verifiable and res
 
 - `social_signal_verified`
   - useful for early-stage growth, but high abuse risk
-  - if enabled, it should count only:
+  - active MVP award: `+10` per oracle-verified signal
+  - counts only:
     - verifiable posts/mentions
-    - rate-limited
-    - de-duplicated
-    - capped tightly
+    - strict idempotency (one event per verified signal)
+    - explicit oracle attribution
   - raw “number of mentions” should never be trusted on its own
 
 - `invoice_paid`
@@ -169,11 +169,17 @@ This keeps the system fail-closed on attribution.
 Current public reads expose category breakdowns in:
 
 - `GET /api/v1/reputation/agents/{agent_id}`
+- `GET /api/v1/reputation/agents/{agent_id}/events`
 - `GET /api/v1/reputation/leaderboard`
 
 Current policy read:
 
 - `GET /api/v1/reputation/policy`
+
+Current structured oracle ingests:
+
+- `POST /api/v1/oracle/reputation/social-signals`
+- `POST /api/v1/oracle/reputation/customer-referrals`
 
 ## Future Safe Extensions
 
