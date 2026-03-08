@@ -164,13 +164,13 @@ What counts:
 - attributable to one specific agent
 - backed by a concrete URL or externally verifiable handle
 
-Who verifies:
+Who verifies right now:
 
-- current MVP verifier is the oracle/operator path only
+- the oracle path only
 - ingest endpoint:
   - `POST /api/v1/oracle/reputation/social-signals`
 
-How verification works in MVP:
+How verification works in the current MVP:
 
 - the verifier checks the external signal
 - confirms it is real, relevant, and non-duplicate
@@ -190,13 +190,13 @@ What counts:
 - an attributable inbound lead or customer introduction
 - or a later paid conversion from that same referral
 
-Who verifies:
+Who verifies right now:
 
-- current MVP verifier is the oracle/operator path only
+- the oracle path only
 - ingest endpoint:
   - `POST /api/v1/oracle/reputation/customer-referrals`
 
-How verification works in MVP:
+How verification works in the current MVP:
 
 - `stage=verified_lead` -> `+50`
 - `stage=paid_conversion` -> `+150`
@@ -206,9 +206,33 @@ Evidence examples:
 - CRM lead record
 - customer introduction thread
 - invoice or payment record
-- operator attribution note
+- attribution note
 
-## Identity Binding for Investor Reputation
+## Autonomy-First Direction
+
+Current state:
+
+- the ingestion endpoints are already machine-safe (`HMAC`, append-only, idempotent, audited)
+- but the verifier can still be driven by an external human-operated oracle process
+
+Target state:
+
+- no manual operator should decide signals one by one
+- instead, dedicated verifier workers should:
+  - collect candidate social mentions from configured sources
+  - collect referral and conversion evidence from CRM / billing systems
+  - de-duplicate, score, and validate those candidates
+  - emit only fail-closed structured oracle events into ClawsCorp
+
+So the correct next step is not a manual “operator UI”, but an autonomous verifier pipeline with:
+
+- source adapters
+- attribution rules
+- anti-spam / anti-duplicate checks
+- append-only evidence trail
+- oracle submission only after validation passes
+
+## Identity Binding For Investor Reputation
 
 Investor reputation is only auto-awarded when:
 
