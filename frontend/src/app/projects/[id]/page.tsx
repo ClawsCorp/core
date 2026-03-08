@@ -23,6 +23,7 @@ import type {
   ProjectDetail,
   ProjectDomainPublic,
   ProjectFundingSummary,
+  ProjectUpdatesSourceKindsSummary,
   ProjectUpdatesSummary,
   ProjectUpdate,
   StatsData,
@@ -48,6 +49,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
   const [funding, setFunding] = useState<ProjectFundingSummary | null>(null);
   const [deliveryReceipt, setDeliveryReceipt] = useState<ProjectDeliveryReceipt | null>(null);
   const [updatesSummary, setUpdatesSummary] = useState<ProjectUpdatesSummary | null>(null);
+  const [sourceKindsSummary, setSourceKindsSummary] = useState<ProjectUpdatesSourceKindsSummary | null>(null);
   const [projectUpdates, setProjectUpdates] = useState<ProjectUpdate[]>([]);
   const [bounties, setBounties] = useState<BountyPublic[]>([]);
   const [stats, setStats] = useState<StatsData | null>(null);
@@ -86,12 +88,13 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
     setError(null);
     try {
       const agentApiKey = getAgentApiKey();
-      const [projectResult, capitalResult, fundingResult, deliveryReceiptResult, updatesSummaryResult, commercialUpdatesResult, operationalUpdatesResult, bountiesResult, statsResult, accountingResult, domainsResult, invoicesResult, gitOutboxResult] = await Promise.all([
+      const [projectResult, capitalResult, fundingResult, deliveryReceiptResult, updatesSummaryResult, sourceKindsResult, commercialUpdatesResult, operationalUpdatesResult, bountiesResult, statsResult, accountingResult, domainsResult, invoicesResult, gitOutboxResult] = await Promise.all([
         api.getProject(params.id),
         api.getProjectCapitalSummary(params.id),
         api.getProjectFundingSummary(params.id).catch(() => null),
         api.getProjectDeliveryReceipt(params.id).catch(() => null),
         api.getProjectUpdatesSummary(params.id).catch(() => null),
+        api.getProjectUpdatesSourceKindsSummary(params.id).catch(() => null),
         api.getProjectUpdates(params.id, 5, 0, "commercial").catch(() => ({ items: [], limit: 5, offset: 0, total: 0 })),
         api.getProjectUpdates(params.id, 5, 0, "operational").catch(() => ({ items: [], limit: 5, offset: 0, total: 0 })),
         api.getBounties({ projectId: params.id }),
@@ -106,6 +109,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
       setFunding(fundingResult);
       setDeliveryReceipt(deliveryReceiptResult);
       setUpdatesSummary(updatesSummaryResult);
+      setSourceKindsSummary(sourceKindsResult);
       const timelineItems = [...(operationalUpdatesResult.items ?? []), ...(commercialUpdatesResult.items ?? [])].sort(
         (a, b) => Date.parse(b.created_at) - Date.parse(a.created_at),
       );
@@ -464,6 +468,12 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
 
   const latestProjectUpdateHref = latestProjectUpdate ? updatePrimaryHref(latestProjectUpdate) : null;
   const latestProjectUpdateTxHref = latestProjectUpdate ? extractTxHref(latestProjectUpdate) : null;
+  const sourceKindLabel = useCallback((sourceKind: string | null) => {
+    if (!sourceKind) {
+      return "Unspecified";
+    }
+    return sourceKind.replaceAll("_", " ");
+  }, []);
   const defaultChainId = stats?.default_chain_id ?? null;
   const defaultChainLabel =
     defaultChainId === 84532
@@ -673,6 +683,36 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
               </>
             )}
           </DataCard>
+
+          {sourceKindsSummary?.buckets?.length ? (
+            <DataCard title="Top activity kinds" accent="violet">
+              <p>Server-side grouped timeline buckets to show where this project is currently most active.</p>
+              <ul>
+                {sourceKindsSummary.buckets.slice(0, 5).map((bucket) => {
+                  const latest = bucket.latest;
+                  const latestHref = latest ? updatePrimaryHref(latest) : null;
+                  return (
+                    <li key={bucket.source_kind ?? "none"}>
+                      {sourceKindLabel(bucket.source_kind)} · {bucket.count}
+                      {latest ? (
+                        <>
+                          {" · latest: "}
+                          {latest.title} ({formatDateTimeShort(latest.created_at)})
+                          {latestHref ? (
+                            <>
+                              {" · "}
+                              <Link href={latestHref}>Open ref</Link>
+                            </>
+                          ) : null}
+                        </>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+              <p>computed_at: {formatDateTimeShort(sourceKindsSummary.computed_at)}</p>
+            </DataCard>
+          ) : null}
 
           {commercialUpdates.length > 0 ? (
             <DataCard title="Commercial activity" accent="amber">
