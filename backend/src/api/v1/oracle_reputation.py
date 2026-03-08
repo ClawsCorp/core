@@ -20,6 +20,8 @@ from src.schemas.reputation import (
     ObservedSocialSignalCreateRequest,
     ObservedSocialSignalDetailResponse,
     ObservedSocialSignalPublic,
+    ReputationObservedSyncData,
+    ReputationObservedSyncResponse,
     ReputationCustomerReferralCreateRequest,
     ReputationEventCreateRequest,
     ReputationEventDetailResponse,
@@ -257,6 +259,163 @@ async def create_observed_customer_referral(
     return ObservedCustomerReferralDetailResponse(success=True, data=_observed_customer_referral_public(db, row))
 
 
+@router.post("/reputation/social-signals/sync", response_model=ReputationObservedSyncResponse)
+async def sync_observed_social_signals(
+    request: Request,
+    _: str = Depends(require_oracle_hmac),
+    db: Session = Depends(get_db),
+) -> ReputationObservedSyncResponse:
+    request_id = request.headers.get("X-Request-Id") or str(uuid4())
+    body_hash = request.state.body_hash
+    signature_status = getattr(request.state, "signature_status", "invalid")
+
+    rows = (
+        db.query(ObservedSocialSignal)
+        .order_by(ObservedSocialSignal.observed_at.desc(), ObservedSocialSignal.id.desc())
+        .limit(500)
+        .all()
+    )
+    seen = len(rows)
+    eligible = 0
+    created = 0
+    skipped_unattributed = 0
+
+    for row in rows:
+        if row.agent_id is None:
+            skipped_unattributed += 1
+            continue
+        eligible += 1
+        agent = db.query(Agent).filter(Agent.id == int(row.agent_id)).first()
+        if agent is None:
+            skipped_unattributed += 1
+            continue
+        rep_payload = ReputationEventCreateRequest(
+            event_id=str(uuid4()),
+            idempotency_key=f"rep:social_signal_verified:observed:{row.signal_id}",
+            agent_id=agent.agent_id,
+            delta_points=SOCIAL_SIGNAL_VERIFIED_POINTS,
+            source="social_signal_verified",
+            ref_type="social_signal",
+            ref_id=_build_social_signal_observed_ref_id(row),
+            note=_build_structured_note(
+                [
+                    f"platform:{row.platform}",
+                    f"url:{row.signal_url}" if row.signal_url else "",
+                    f"handle:{row.account_handle}" if row.account_handle else "",
+                    f"observed_signal_id:{row.signal_id}",
+                    row.note or "",
+                ]
+            ),
+        )
+        _created = _try_ingest_reputation_event(db, rep_payload)
+        if _created:
+            created += 1
+
+    _record_oracle_audit(
+        request=request,
+        db=db,
+        body_hash=body_hash,
+        request_id=request_id,
+        idempotency_key=request.headers.get("Idempotency-Key") or f"rep:sync:social:{request_id}",
+        signature_status=signature_status,
+        commit=False,
+    )
+    db.commit()
+    return ReputationObservedSyncResponse(
+        success=True,
+        data=ReputationObservedSyncData(
+            candidates_seen=seen,
+            eligible_candidates=eligible,
+            reputation_events_created=created,
+            skipped_unattributed=skipped_unattributed,
+            skipped_ineligible_stage=0,
+        ),
+    )
+
+
+@router.post("/reputation/customer-referrals/sync", response_model=ReputationObservedSyncResponse)
+async def sync_observed_customer_referrals(
+    request: Request,
+    _: str = Depends(require_oracle_hmac),
+    db: Session = Depends(get_db),
+) -> ReputationObservedSyncResponse:
+    request_id = request.headers.get("X-Request-Id") or str(uuid4())
+    body_hash = request.state.body_hash
+    signature_status = getattr(request.state, "signature_status", "invalid")
+
+    rows = (
+        db.query(ObservedCustomerReferral)
+        .order_by(ObservedCustomerReferral.observed_at.desc(), ObservedCustomerReferral.id.desc())
+        .limit(500)
+        .all()
+    )
+    seen = len(rows)
+    eligible = 0
+    created = 0
+    skipped_unattributed = 0
+    skipped_ineligible_stage = 0
+
+    for row in rows:
+        if row.agent_id is None:
+            skipped_unattributed += 1
+            continue
+        if row.stage not in {"verified_lead", "paid_conversion"}:
+            skipped_ineligible_stage += 1
+            continue
+        eligible += 1
+        agent = db.query(Agent).filter(Agent.id == int(row.agent_id)).first()
+        if agent is None:
+            skipped_unattributed += 1
+            continue
+        delta_points = (
+            CUSTOMER_REFERRAL_PAID_POINTS
+            if row.stage == "paid_conversion"
+            else CUSTOMER_REFERRAL_VERIFIED_POINTS
+        )
+        rep_payload = ReputationEventCreateRequest(
+            event_id=str(uuid4()),
+            idempotency_key=f"rep:customer_referral_verified:observed:{row.referral_event_id}:{row.stage}",
+            agent_id=agent.agent_id,
+            delta_points=delta_points,
+            source="customer_referral_verified",
+            ref_type="customer_referral",
+            ref_id=row.external_ref,
+            note=_build_structured_note(
+                [
+                    f"stage:{row.stage}",
+                    f"source_system:{row.source_system}",
+                    f"evidence_url:{row.evidence_url}" if row.evidence_url else "",
+                    f"observed_referral_id:{row.referral_event_id}",
+                    row.note or "",
+                ]
+            ),
+        )
+        _created = _try_ingest_reputation_event(db, rep_payload)
+        if _created:
+            created += 1
+
+    _record_oracle_audit(
+        request=request,
+        db=db,
+        body_hash=body_hash,
+        request_id=request_id,
+        idempotency_key=request.headers.get("Idempotency-Key") or f"rep:sync:referrals:{request_id}",
+        signature_status=signature_status,
+        commit=False,
+    )
+    db.commit()
+    return ReputationObservedSyncResponse(
+        success=True,
+        data=ReputationObservedSyncData(
+            candidates_seen=seen,
+            eligible_candidates=eligible,
+            reputation_events_created=created,
+            skipped_unattributed=skipped_unattributed,
+            skipped_ineligible_stage=skipped_ineligible_stage,
+        ),
+    )
+
+
 def _record_oracle_audit(
     request: Request,
     db: Session,
@@ -296,6 +455,19 @@ def _build_structured_note(parts: list[str]) -> str | None:
         return joined
     digest = hashlib.sha256(joined.encode("utf-8")).hexdigest()[:16]
     return f"{joined[:230]};sha256:{digest}"
+
+
+def _build_social_signal_observed_ref_id(row: ObservedSocialSignal) -> str:
+    candidate = str(row.signal_url or row.account_handle or row.platform or "").strip()
+    if len(candidate) <= 128:
+        return candidate
+    digest = hashlib.sha256(candidate.encode("utf-8")).hexdigest()
+    return f"url_sha256:{digest}"
+
+
+def _try_ingest_reputation_event(db: Session, payload: ReputationEventCreateRequest) -> bool:
+    event, _public_agent_id = ingest_reputation_event(db, payload)
+    return event.idempotency_key == payload.idempotency_key and event.event_id == payload.event_id
 
 
 def _resolve_optional_agent_db_id(db: Session, agent_id: str | None) -> int | None:
