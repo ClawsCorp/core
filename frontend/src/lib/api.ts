@@ -605,10 +605,18 @@ export const api = {
   },
   getReputationLeaderboard: async (
     sort?: "total" | "investor" | "governance" | "delivery" | "commercial" | "safety",
+    limit = 50,
+    offset = 0,
   ) => {
-    const suffix = sort ? `?sort=${encodeURIComponent(sort)}` : "";
+    const params = new URLSearchParams({
+      limit: String(limit),
+      offset: String(offset),
+    });
+    if (sort) {
+      params.set("sort", sort);
+    }
     const payload = await fetchJSON<Envelope<ListData<ReputationLeaderboardRow>>>(
-      `/api/v1/reputation/leaderboard${suffix}`,
+      `/api/v1/reputation/leaderboard?${params.toString()}`,
     );
     return payload.data;
   },

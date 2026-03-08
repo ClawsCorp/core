@@ -126,6 +126,43 @@ def test_oracle_social_signal_creates_fixed_commercial_reputation(
         assert row.delta_points == 10
 
 
+def test_oracle_social_signal_hashes_long_signal_url_into_safe_ref_id(
+    _client: TestClient, _db: sessionmaker[Session]
+) -> None:
+    with _db() as db:
+        db.add(
+            Agent(
+                agent_id="ag_social_long",
+                name="Signal Agent Long",
+                capabilities_json="[]",
+                wallet_address=None,
+                api_key_hash="hash",
+                api_key_last4="3333",
+            )
+        )
+        db.commit()
+
+    path = "/api/v1/oracle/reputation/social-signals"
+    long_url = "https://signals.example/" + ("x" * 220)
+    body = json.dumps(
+        {
+            "agent_id": "ag_social_long",
+            "idempotency_key": "rep:social:long:1",
+            "platform": "x",
+            "signal_url": long_url,
+        }
+    ).encode("utf-8")
+    resp = _client.post(path, content=body, headers=_oracle_headers(path, body, "req-social-long", idem="rep:social:long:1"))
+    assert resp.status_code == 200
+    payload = resp.json()["data"]
+    assert payload["ref_id"].startswith("url_sha256:")
+    assert len(payload["ref_id"]) <= 128
+
+    with _db() as db:
+        row = db.query(ReputationEvent).filter(ReputationEvent.idempotency_key == "rep:social:long:1").one()
+        assert row.ref_id.startswith("url_sha256:")
+
+
 def test_oracle_customer_referral_supports_verified_and_paid_stages(
     _client: TestClient, _db: sessionmaker[Session]
 ) -> None:
