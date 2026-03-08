@@ -1,5 +1,7 @@
 "use client";
 
+import styles from "./Feedback.module.css";
+
 interface ErrorStateProps {
   message: string;
   onRetry: () => void;
@@ -7,9 +9,9 @@ interface ErrorStateProps {
 
 export function ErrorState({ message, onRetry }: ErrorStateProps) {
   return (
-    <div style={{ padding: "12px 0" }}>
+    <div className={`${styles.box} ${styles.error}`}>
       <p>{message}</p>
-      <button type="button" onClick={onRetry} style={{ marginTop: 8 }}>
+      <button type="button" onClick={onRetry}>
         Retry
       </button>
     </div>

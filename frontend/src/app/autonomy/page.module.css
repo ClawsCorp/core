@@ -1,0 +1,141 @@
+.metricGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.metricItem {
+  border: 1px solid rgba(152, 196, 229, 0.24);
+  border-radius: 10px;
+  background: rgba(12, 42, 61, 0.55);
+  padding: 10px;
+  display: grid;
+  gap: 5px;
+}
+
+.metricItem span {
+  color: #9fc2dd;
+  font-size: 0.77rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.metricItem strong {
+  font-size: 1.14rem;
+  text-transform: capitalize;
+}
+
+.linkCloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.linkCloud a {
+  border-radius: 999px;
+  border: 1px solid rgba(152, 196, 229, 0.36);
+  background: rgba(15, 58, 82, 0.66);
+  color: #e5f3ff;
+  text-decoration: none;
+  padding: 7px 11px;
+  font-weight: 700;
+  font-size: 0.82rem;
+}
+
+.linkCloud a:hover {
+  color: #30d0c2;
+}
+
+.kvList {
+  display: grid;
+  gap: 7px;
+}
+
+.kvRow {
+  border: 1px solid rgba(152, 196, 229, 0.2);
+  border-radius: 10px;
+  background: rgba(11, 39, 56, 0.5);
+  padding: 9px 11px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.kvRow span {
+  color: #9fc2dd;
+}
+
+.kvRow strong {
+  text-align: right;
+  max-width: 65%;
+  overflow-wrap: anywhere;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  font-size: 0.67rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+  padding: 4px 8px;
+}
+
+.pill_ok {
+  color: #093f2a;
+  background: #7ef2b7;
+  border: 1px solid #b1ffd6;
+}
+
+.pill_warning {
+  color: #4b2d00;
+  background: #ffc76f;
+  border: 1px solid #ffd999;
+}
+
+.pill_critical {
+  color: #5a0212;
+  background: #ff8fa7;
+  border: 1px solid #ffc2cf;
+}
+
+.pill_neutral {
+  color: #072a46;
+  background: #8fd3ff;
+  border: 1px solid #bee6ff;
+}
+
+.alertItem {
+  border-top: 1px solid rgba(152, 196, 229, 0.2);
+  padding-top: 8px;
+  margin-top: 8px;
+}
+
+.alertData {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@media (max-width: 960px) {
+  .metricGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .metricGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .kvRow {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .kvRow strong {
+    text-align: left;
+    max-width: 100%;
+  }
+}

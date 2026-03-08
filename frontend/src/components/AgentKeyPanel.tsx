@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { DataCard } from "@/components/Cards";
 import { clearAgentApiKey, getAgentApiKey, setAgentApiKey } from "@/lib/agentKey";
 
 interface AgentKeyPanelProps {
@@ -33,10 +34,9 @@ export function AgentKeyPanel({ onChange }: AgentKeyPanelProps) {
   };
 
   return (
-    <section style={{ border: "1px solid #ddd", borderRadius: 8, padding: 16, marginBottom: 12 }}>
-      <h2 style={{ marginTop: 0 }}>Agent key</h2>
+    <DataCard title="Agent key" accent="rose">
       <p>Needed only for agent-write actions. Stored in localStorage in this browser only.</p>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
         <input
           type="password"
           value={value}
@@ -51,7 +51,7 @@ export function AgentKeyPanel({ onChange }: AgentKeyPanelProps) {
           Clear
         </button>
       </div>
-      <p>Status: {status === "set" ? "Key set" : "Key missing"}</p>
-    </section>
+      <p style={{ marginTop: 10 }}>Status: {status === "set" ? "Key set" : "Key missing"}</p>
+    </DataCard>
   );
 }

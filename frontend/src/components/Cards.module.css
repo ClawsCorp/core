@@ -1,0 +1,282 @@
+.page {
+  min-height: 100vh;
+  color: #f4f4f2;
+  background:
+    radial-gradient(900px 460px at 50% 18%, rgba(255, 107, 44, 0.1), transparent 56%),
+    linear-gradient(180deg, #111214 0%, #14171c 100%);
+}
+
+.topbarShell {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  backdrop-filter: blur(10px) saturate(115%);
+  background: rgba(16, 18, 22, 0.68);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.topbarInner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.topbar {
+  display: grid;
+  gap: 8px;
+  padding: 10px 0 8px;
+}
+
+.topbarPrimary {
+  display: grid;
+  grid-template-columns: 220px 1fr 220px;
+  gap: 16px;
+  align-items: center;
+}
+
+.brand {
+  display: inline-flex;
+  font-family: Verdana, Geneva, sans-serif;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  text-transform: lowercase;
+}
+
+.brandHot {
+  color: #ff3b30;
+}
+
+.brandLight {
+  color: #f4f4f2;
+}
+
+.searchShell {
+  display: flex;
+  align-items: center;
+  height: 38px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(244, 244, 242, 0.84);
+  color: #232429;
+  font-size: 16px;
+  opacity: 0.95;
+}
+
+.rightNav {
+  justify-self: end;
+  display: flex;
+  gap: 16px;
+}
+
+.rightNav a {
+  color: #a8acb7;
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.rightNav a:hover {
+  color: #ffffff;
+}
+
+.siteNav {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 14px;
+  align-items: center;
+  overflow-x: auto;
+  padding: 8px 0 0;
+  scrollbar-width: none;
+}
+
+.siteNav::-webkit-scrollbar {
+  display: none;
+}
+
+.siteNav a {
+  color: #aeb4bf;
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  padding: 2px 0;
+  white-space: nowrap;
+  opacity: 0.88;
+  transition: color 120ms ease, opacity 120ms ease;
+}
+
+.siteNav a:hover {
+  color: #ffffff;
+  opacity: 1;
+}
+
+.pageInner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 22px 20px 32px;
+}
+
+.pageHeader {
+  margin-bottom: 14px;
+}
+
+.pageTitleWrap {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  background:
+    radial-gradient(440px 160px at 0% 0%, rgba(255, 107, 44, 0.14), transparent 72%),
+    rgba(25, 28, 33, 0.9);
+  padding: 18px 18px 16px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+}
+
+.pageHeader h1 {
+  margin: 0;
+  font-size: clamp(1.8rem, 3vw, 2.5rem);
+  line-height: 1.05;
+  letter-spacing: -0.05em;
+}
+
+.pageHeader p {
+  margin: 8px 0 0;
+  color: #a8acb7;
+  font-size: 0.96rem;
+  line-height: 1.45;
+}
+
+.card {
+  --accent: #31dfcf;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 14px;
+  background: rgba(25, 28, 33, 0.9);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+}
+
+.card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 100%;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 26%, #ffffff 74%));
+}
+
+.card h2 {
+  margin: 0 0 10px;
+  font-size: 1.03rem;
+  letter-spacing: -0.03em;
+}
+
+.card p,
+.card li,
+.card label {
+  color: #d9ecff;
+  line-height: 1.45;
+}
+
+.card a {
+  color: #80e8df;
+}
+
+.card code {
+  border: 1px solid rgba(147, 192, 228, 0.24);
+  border-radius: 6px;
+  background: rgba(10, 39, 57, 0.72);
+  padding: 1px 6px;
+}
+
+.card pre {
+  border: 1px solid rgba(147, 192, 228, 0.22);
+  border-radius: 10px;
+  background: rgba(10, 39, 57, 0.68);
+  padding: 10px;
+}
+
+.card :global(input),
+.card :global(select),
+.card :global(textarea) {
+  color: #eff7ff;
+  border: 1px solid rgba(147, 192, 228, 0.28);
+  background: rgba(9, 34, 50, 0.76);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.card :global(button) {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(16, 59, 84, 0.78);
+  color: #eff7ff;
+  padding: 9px 12px;
+  font-weight: 700;
+}
+
+.card :global(button:hover) {
+  background: rgba(26, 84, 118, 0.95);
+}
+
+.card_cyan {
+  --accent: #31dfcf;
+  background:
+    radial-gradient(360px 120px at 0% 0%, rgba(49, 223, 207, 0.14), transparent 70%),
+    rgba(25, 28, 33, 0.9);
+}
+
+.card_amber {
+  --accent: #ffb24e;
+  background:
+    radial-gradient(360px 120px at 100% 0%, rgba(255, 178, 78, 0.14), transparent 70%),
+    rgba(25, 28, 33, 0.9);
+}
+
+.card_lime {
+  --accent: #9df06d;
+  background:
+    radial-gradient(360px 120px at 0% 100%, rgba(157, 240, 109, 0.14), transparent 70%),
+    rgba(25, 28, 33, 0.9);
+}
+
+.card_rose {
+  --accent: #ff7ea5;
+  background:
+    radial-gradient(360px 120px at 100% 100%, rgba(255, 126, 165, 0.14), transparent 70%),
+    rgba(25, 28, 33, 0.9);
+}
+
+.card_violet {
+  --accent: #b48bff;
+  background:
+    radial-gradient(360px 120px at 50% 0%, rgba(180, 139, 255, 0.14), transparent 70%),
+    rgba(25, 28, 33, 0.9);
+}
+
+@media (max-width: 960px) {
+  .topbarPrimary {
+    grid-template-columns: 1fr;
+  }
+
+  .rightNav {
+    justify-self: start;
+  }
+}
+
+@media (max-width: 760px) {
+  .topbarInner,
+  .pageInner {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .siteNav {
+    gap: 12px;
+  }
+
+  .siteNav a {
+    font-size: 11px;
+  }
+}

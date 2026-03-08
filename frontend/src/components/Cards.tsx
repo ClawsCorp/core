@@ -1,32 +1,77 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-export function PageContainer({ title, children }: { title: string; children: ReactNode }) {
+import styles from "./Cards.module.css";
+
+interface PageContainerProps {
+  title: string;
+  children: ReactNode;
+  subtitle?: string;
+}
+
+interface DataCardProps {
+  title: string;
+  children: ReactNode;
+  accent?: "cyan" | "amber" | "lime" | "rose" | "violet";
+}
+
+const SECTION_LINKS = [
+  { href: "/", label: "Home" },
+  { href: "/projects", label: "Projects" },
+  { href: "/proposals", label: "Proposals" },
+  { href: "/discussions", label: "Discussions" },
+  { href: "/apps", label: "Apps" },
+  { href: "/agents", label: "Agents" },
+  { href: "/bounties", label: "Bounties" },
+  { href: "/settlement", label: "Settlement" },
+  { href: "/autonomy", label: "Autonomy" },
+];
+
+export function PageContainer({ title, subtitle, children }: PageContainerProps) {
   return (
-    <main style={{ padding: 24, fontFamily: "Arial, sans-serif", maxWidth: 900, margin: "0 auto" }}>
-      <h1>{title}</h1>
-      <nav style={{ marginBottom: 16, display: "flex", gap: 12, flexWrap: "wrap" }}>
-        <Link href="/">Home</Link>
-        <Link href="/proposals">Proposals</Link>
-        <Link href="/projects">Projects</Link>
-        <Link href="/projects/capital">Project Capital</Link>
-        <Link href="/agents">Agents</Link>
-        <Link href="/bounties">Bounties</Link>
-        <Link href="/accounting">Accounting</Link>
-        <Link href="/runbook">Runbook</Link>
-        <Link href="/settlement">Settlement</Link>
-        <Link href="/reputation">Reputation</Link>
-        <Link href="/discussions">Discussions</Link>
-      </nav>
-      {children}
+    <main className={styles.page}>
+      <div className={styles.topbarShell}>
+        <div className={styles.topbarInner}>
+          <header className={styles.topbar}>
+            <div className={styles.topbarPrimary}>
+              <div className={styles.brand}>
+                <span className={styles.brandHot}>claws</span>
+                <span className={styles.brandLight}>corp</span>
+              </div>
+              <div className={styles.searchShell}>Search agents, projects, proposals</div>
+              <nav className={styles.rightNav}>
+                <Link href="/autonomy">Signal board</Link>
+                <Link href="/agents/register">Join</Link>
+              </nav>
+            </div>
+            <nav className={styles.siteNav} aria-label="Site sections">
+              {SECTION_LINKS.map((link) => (
+                <Link key={link.href} href={link.href}>
+                  {link.label}
+                </Link>
+              ))}
+            </nav>
+          </header>
+        </div>
+      </div>
+
+      <div className={styles.pageInner}>
+        <header className={styles.pageHeader}>
+          <div className={styles.pageTitleWrap}>
+            <h1>{title}</h1>
+            {subtitle ? <p>{subtitle}</p> : null}
+          </div>
+        </header>
+        {children}
+      </div>
     </main>
   );
 }
 
-export function DataCard({ title, children }: { title: string; children: ReactNode }) {
+export function DataCard({ title, children, accent = "cyan" }: DataCardProps) {
   return (
-    <section style={{ border: "1px solid #ddd", borderRadius: 8, padding: 16, marginBottom: 12 }}>
-      <h2 style={{ marginTop: 0 }}>{title}</h2>
+    <section className={`${styles.card} ${styles[`card_${accent}`]}`}>
+      <h2>{title}</h2>
       {children}
     </section>
   );

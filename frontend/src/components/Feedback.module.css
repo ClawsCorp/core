@@ -1,0 +1,35 @@
+.box {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: rgba(25, 28, 33, 0.9);
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+
+.loading {
+  border-left: 4px solid #8fd3ff;
+}
+
+.empty {
+  border-left: 4px solid #8af0b5;
+}
+
+.error {
+  border-left: 4px solid #ff96aa;
+}
+
+.box p {
+  margin: 0;
+  color: #d9ecff;
+  line-height: 1.45;
+}
+
+.box button {
+  margin-top: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(16, 59, 84, 0.78);
+  color: #eff7ff;
+  padding: 9px 12px;
+  font-weight: 700;
+}
