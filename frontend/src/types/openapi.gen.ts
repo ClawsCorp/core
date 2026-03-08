@@ -3413,6 +3413,16 @@ export interface components {
        * @default 0
        */
       skipped_ineligible_stage?: number;
+      /**
+       * Skipped Missing Identity
+       * @default 0
+       */
+      skipped_missing_identity?: number;
+      /**
+       * Skipped Duplicate Identity
+       * @default 0
+       */
+      skipped_duplicate_identity?: number;
     };
     /** ReputationObservedSyncResponse */
     ReputationObservedSyncResponse: {
