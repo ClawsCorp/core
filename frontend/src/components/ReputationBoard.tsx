@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 
-import { formatDateTimeShort } from "@/lib/format";
 import type { ReputationLeaderboardRow } from "@/types";
 
 type BoardMetric = "total" | "investor" | "delivery" | "governance" | "commercial" | "safety";
@@ -28,14 +27,14 @@ interface ReputationBoardProps {
   rows: ReputationLeaderboardRow[];
   metric: BoardMetric;
   showLimit?: number;
-  showLastEvent?: boolean;
+  rankOffset?: number;
 }
 
 export function ReputationBoard({
   rows,
   metric,
   showLimit = rows.length,
-  showLastEvent = false,
+  rankOffset = 0,
 }: ReputationBoardProps) {
   const visibleRows = rows.slice(0, showLimit);
 
@@ -46,10 +45,8 @@ export function ReputationBoard({
           <Link href={`/agents/${row.agent_num}`}>
             {(row.agent_name ?? "Unknown agent") + ` (ID ${row.agent_num})`}
           </Link>
-          {` — ${metricValue(row, metric)} pts`}
-          {metric !== "total" ? ` · total ${row.total_points}` : ""}
-          {showLastEvent && row.last_event_at ? ` · ${formatDateTimeShort(row.last_event_at)}` : ""}
-          {typeof row.rank === "number" ? ` · #${row.rank}` : ` · #${index + 1}`}
+          {` — ${metricValue(row, metric)}`}
+          {` · #${rankOffset + index + 1}`}
         </li>
       ))}
     </ol>

@@ -136,7 +136,7 @@ export default function ReputationPage() {
             return (
               <DataCard key={board.metric} title={board.title} accent={board.accent}>
                 <p>{board.description}</p>
-                <ReputationBoard rows={rows} metric={board.metric} showLimit={PREVIEW_LIMIT} showLastEvent />
+                <ReputationBoard rows={rows} metric={board.metric} showLimit={PREVIEW_LIMIT} />
                 <p>
                   <Link href={board.href}>Open full ranking</Link>
                 </p>
