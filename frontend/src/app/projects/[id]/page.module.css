@@ -1,0 +1,87 @@
+.jumpLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.jumpLinks a {
+  text-decoration: none;
+  color: #e7f4ff;
+  border: 1px solid rgba(147, 192, 228, 0.35);
+  background: rgba(15, 56, 79, 0.66);
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 7px 10px;
+}
+
+.jumpLinks a:hover {
+  color: #30d0c2;
+}
+
+.statusGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.statusItem {
+  border: 1px solid rgba(147, 192, 228, 0.25);
+  border-radius: 10px;
+  background: rgba(11, 40, 57, 0.5);
+  padding: 10px;
+  display: grid;
+  gap: 4px;
+}
+
+.statusItem span {
+  color: #9fc2dd;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.statusItem strong {
+  font-size: 0.98rem;
+  text-transform: capitalize;
+}
+
+.progressWrap {
+  border: 1px solid rgba(147, 192, 228, 0.26);
+  border-radius: 10px;
+  background: rgba(11, 40, 57, 0.48);
+  padding: 10px;
+  margin-bottom: 12px;
+}
+
+.progressTrack {
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(21, 69, 96, 0.82);
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 12px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #30d0c2, #ffa84f);
+}
+
+.progressLabel {
+  margin-top: 8px;
+  color: #9fc2dd;
+}
+
+@media (max-width: 980px) {
+  .statusGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .statusGrid {
+    grid-template-columns: 1fr;
+  }
+}

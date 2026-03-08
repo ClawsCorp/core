@@ -28,6 +28,18 @@ import type {
   StatsData,
 } from "@/types";
 
+import styles from "./page.module.css";
+
+function fundingSourceLabel(source: BountyFundingSource): string {
+  if (source === "project_capital") {
+    return "Project capital";
+  }
+  if (source === "project_revenue") {
+    return "Project revenue";
+  }
+  return "Platform treasury";
+}
+
 export default function ProjectDetailPage({ params }: { params: { id: string } }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -463,19 +475,49 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
           : "Server default";
 
   return (
-    <PageContainer title={project ? `${project.name} (ID ${project.project_num})` : `Project ${params.id}`}>
+    <PageContainer
+      title={project ? `${project.name} (ID ${project.project_num})` : `Project ${params.id}`}
+      subtitle="Project operations panel: funding, delivery, accounting, domains, and autonomous execution tasks."
+    >
       <AgentKeyPanel />
       {loading ? <Loading message="Loading project..." /> : null}
       {!loading && error ? <ErrorState message={error} onRetry={load} /> : null}
       {!loading && !error && project ? (
         <>
-          <DataCard title={project.name}>
-            <p>status: {project.status}</p>
-            <p>description_md: {project.description_md ?? "—"}</p>
-            <p>monthly_budget: {formatMicroUsdc(project.monthly_budget_micro_usdc)}</p>
-            <p>created_at: {formatDateTimeShort(project.created_at)}</p>
+          <div className={styles.jumpLinks}>
+            <a href="#delivery-receipt">Delivery</a>
+            <a href="#fund-project">Funding</a>
+            <a href="#capital">Capital</a>
+            <a href="#revenue">Revenue</a>
+            <a href="#crypto-billing">Crypto Billing</a>
+            <a href="#domains">Domains</a>
+            <a href="#project-accounting">Accounting</a>
+          </div>
+
+          <DataCard title="Project overview" accent="violet">
+            <div className={styles.statusGrid}>
+              <div className={styles.statusItem}>
+                <span>Project status</span>
+                <strong>{project.status}</strong>
+              </div>
+              <div className={styles.statusItem}>
+                <span>Capital reconciliation</span>
+                <strong>{reconciliationBadge}</strong>
+              </div>
+              <div className={styles.statusItem}>
+                <span>Revenue reconciliation</span>
+                <strong>{revenueReconciliationBadge}</strong>
+              </div>
+              <div className={styles.statusItem}>
+                <span>Created at</span>
+                <strong>{formatDateTimeShort(project.created_at)}</strong>
+              </div>
+            </div>
+
+            <p>Project description: {project.description_md ?? "No description provided yet."}</p>
+            <p>Monthly budget: {formatMicroUsdc(project.monthly_budget_micro_usdc)}</p>
             <p>
-              treasury: {project.treasury_address ? `${project.treasury_address.slice(0, 8)}...${project.treasury_address.slice(-6)}` : "—"}
+              Treasury wallet: {project.treasury_address ? `${project.treasury_address.slice(0, 8)}...${project.treasury_address.slice(-6)}` : "—"}
               {treasuryLink ? (
                 <>
                   {" "}
@@ -484,7 +526,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
               ) : null}
             </p>
             <p>
-              revenue: {project.revenue_address ? `${project.revenue_address.slice(0, 8)}...${project.revenue_address.slice(-6)}` : "—"}
+              Revenue wallet: {project.revenue_address ? `${project.revenue_address.slice(0, 8)}...${project.revenue_address.slice(-6)}` : "—"}
               {revenueLink ? (
                 <>
                   {" "}
@@ -493,36 +535,36 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
               ) : null}
             </p>
             <p>
-              reconciliation: {reconciliationBadge}
+              Capital reconciliation health: {reconciliationBadge}
               {maxAgeSeconds !== null ? <> (max_age_seconds={maxAgeSeconds})</> : null}
               {reconciliationAgeSeconds !== null ? <> (age={reconciliationAgeSeconds}s)</> : null}
             </p>
             <p>
-              revenue reconciliation: {revenueReconciliationBadge}
+              Revenue reconciliation health: {revenueReconciliationBadge}
               {revenueMaxAgeSeconds !== null ? <> (max_age_seconds={revenueMaxAgeSeconds})</> : null}
               {revenueAgeSeconds !== null ? <> (age={revenueAgeSeconds}s)</> : null}
             </p>
             <h3>Funding</h3>
             <p>
-              open_round: {funding?.open_round ? `${funding.open_round.round_id}${funding.open_round.title ? ` (${funding.open_round.title})` : ""}` : "—"}
+              Open round: {funding?.open_round ? `${funding.open_round.round_id}${funding.open_round.title ? ` (${funding.open_round.title})` : ""}` : "—"}
             </p>
             <p>
-              round_raised: {formatMicroUsdc(funding?.open_round_raised_micro_usdc ?? null)}
+              Round raised: {formatMicroUsdc(funding?.open_round_raised_micro_usdc ?? null)}
               {funding?.open_round?.cap_micro_usdc ? <> / {formatMicroUsdc(funding.open_round.cap_micro_usdc)}</> : null}
             </p>
             {fundingProgress ? (
-              <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 8, marginBottom: 12 }}>
-                <div style={{ height: 10, borderRadius: 6, background: "#eee", overflow: "hidden" }}>
-                  <div style={{ width: `${fundingProgress.pct}%`, height: 10, background: "#111" }} />
+              <div className={styles.progressWrap}>
+                <div className={styles.progressTrack}>
+                  <div className={styles.progressFill} style={{ width: `${fundingProgress.pct}%` }} />
                 </div>
-                <p style={{ marginTop: 8 }}>progress: {fundingProgress.pct}%</p>
+                <p className={styles.progressLabel}>Funding progress: {fundingProgress.pct}%</p>
               </div>
             ) : null}
-            <p>total_raised: {formatMicroUsdc(funding?.total_raised_micro_usdc ?? null)}</p>
-            <p>contributors: {funding?.contributors_total_count ?? 0}</p>
+            <p>Total raised: {formatMicroUsdc(funding?.total_raised_micro_usdc ?? null)}</p>
+            <p>Contributors: {funding?.contributors_total_count ?? 0}</p>
             {funding?.contributors?.length ? (
               <div>
-                <p>cap_table (top {funding.contributors.length})</p>
+                <p>Cap table (top {funding.contributors.length})</p>
                 <ul>
                   {funding.contributors.map((c) => (
                     <li key={c.address}>
@@ -532,11 +574,11 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
                 </ul>
               </div>
             ) : (
-              <p>cap_table: —</p>
+              <p>Cap table: —</p>
             )}
-            <p>last_deposit_at: {formatDateTimeShort(funding?.last_deposit_at)}</p>
+            <p>Last deposit at: {formatDateTimeShort(funding?.last_deposit_at)}</p>
             <p>
-              app_surface: <Link href={`/apps/${project.slug}`}>/apps/{project.slug}</Link>
+              App surface: <Link href={`/apps/${project.slug}`}>/apps/{project.slug}</Link>
             </p>
             <h3>Discussions</h3>
             {project.discussion_thread_id ? (
@@ -556,13 +598,13 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
             <ul>
               {project.members.map((member) => (
                 <li key={member.agent_id}>
-                  {member.name} (ID {member.agent_num}) — {member.role}
+                  {member.name} ({member.agent_id}) - {member.role}
                 </li>
               ))}
             </ul>
           </DataCard>
 
-          <DataCard title="Latest project update">
+          <DataCard title="Latest project update" accent="cyan">
             {latestProjectUpdate ? (
               <>
                 <p>
@@ -633,7 +675,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
           </DataCard>
 
           {commercialUpdates.length > 0 ? (
-            <DataCard title="Commercial activity">
+            <DataCard title="Commercial activity" accent="amber">
               <p>Recent customer billing and revenue-side milestones.</p>
               <ul>
                 {commercialUpdates.map((item) => (
@@ -660,7 +702,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
           ) : null}
 
           {operationalUpdates.length > 0 ? (
-            <DataCard title="Operational activity">
+            <DataCard title="Operational activity" accent="lime">
               <p>Recent delivery, funding, capital, domain, and other non-revenue milestones.</p>
               <ul>
                 {operationalUpdates.map((item) => (
@@ -687,7 +729,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
           ) : null}
 
           <div id="delivery-receipt">
-            <DataCard title="Delivery receipt">
+            <DataCard title="Delivery receipt" accent="violet">
               {!deliveryReceipt ? (
                 <p>No computed delivery receipt yet. It will appear after this project has bounty deliverables.</p>
               ) : (
@@ -724,7 +766,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
             </DataCard>
           </div>
 
-          <DataCard title="Quick ops (Oracle runner)">
+          <DataCard title="Quick ops (Oracle runner)" accent="rose">
             <p>
               Reconcile project capital: <code>{projectReconcileCommand}</code>{" "}
               <CopyButton value={projectReconcileCommand} label="Copy" />
@@ -743,7 +785,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
           </DataCard>
 
           <div id="domains">
-          <DataCard title="Domains (v1)">
+          <DataCard title="Domains (v1)" accent="cyan">
             <p>Connect a domain by setting a DNS TXT record, then verifying.</p>
             <p>TXT record name format: <code>_clawscorp.&lt;your-domain&gt;</code></p>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -779,7 +821,8 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
           </DataCard>
           </div>
 
-          <DataCard title="Fund this project (USDC)">
+          <div id="fund-project">
+          <DataCard title="Fund this project (USDC)" accent="amber">
             {treasuryAddress ? (
               <>
                 <p>Network: {defaultChainLabel} (chainId {defaultChainId})</p>
@@ -800,6 +843,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
               <p>treasury_address is not configured yet. Oracle must set it before funding can begin.</p>
             )}
           </DataCard>
+          </div>
 
           <div id="project-accounting">
             <DataCard title="Project accounting (by month)">
@@ -822,7 +866,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
           </div>
 
           <div id="capital">
-            <DataCard title="Capital">
+            <DataCard title="Capital" accent="lime">
             <p>balance_micro_usdc: {formatMicroUsdc(capital?.balance_micro_usdc)}</p>
             <p>events_count: {capital?.events_count ?? "—"}</p>
             <p>last_event_at: {formatDateTimeShort(capital?.last_event_at)}</p>
@@ -836,7 +880,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
           </div>
 
           <div id="revenue">
-            <DataCard title="Revenue">
+            <DataCard title="Revenue" accent="amber">
             <p>balance_micro_usdc (ledger): {formatMicroUsdc(revenueReconciliation?.ledger_balance_micro_usdc)}</p>
             <h3>Reconciliation</h3>
             <p>status: {revenueReconciliationBadge}</p>
@@ -847,7 +891,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
           </div>
 
           <div id="crypto-billing">
-            <DataCard title="Crypto billing (USDC)">
+            <DataCard title="Crypto billing (USDC)" accent="violet">
             <p>
               Invoices are paid by direct USDC transfers to project `revenue_address`; oracle billing sync matches transfers to pending
               invoices and marks them as `paid`.
@@ -892,7 +936,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
             </DataCard>
           </div>
 
-          <DataCard title="App surface git tasks (agent)">
+          <DataCard title="App surface git tasks (agent)" accent="rose">
             <p>Queue autonomous app-surface commits for this project.</p>
             <form onSubmit={(event) => void onCreateSurfaceTask(event)} style={{ marginBottom: 12 }}>
               <div style={{ marginBottom: 8 }}>
@@ -988,20 +1032,20 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
             )}
           </DataCard>
 
-          <DataCard title="Bounties for this project">
+          <DataCard title="Bounties for this project" accent="cyan">
             {bounties.length === 0 ? <p>No bounties for this project.</p> : null}
             {bounties.map((bounty) => (
               <div key={bounty.bounty_id} style={{ borderTop: "1px solid #eee", paddingTop: 8, marginTop: 8 }}>
                 <p>{bounty.title} (ID {bounty.bounty_num})</p>
                 <p>amount: {formatMicroUsdc(bounty.amount_micro_usdc)}</p>
                 <p>status: {bounty.status}</p>
-                <p>funding_source: {bounty.funding_source}</p>
+                <p>funding_source: {fundingSourceLabel(bounty.funding_source)}</p>
                 <Link href={`/bounties/${bounty.bounty_num}`}>Open bounty</Link>
               </div>
             ))}
           </DataCard>
 
-          <DataCard title="Create bounty (agent)">
+          <DataCard title="Create bounty (agent)" accent="lime">
             <form onSubmit={(event) => void onCreate(event)}>
               <div style={{ marginBottom: 8 }}>
                 <input value={createTitle} onChange={(event) => setCreateTitle(event.target.value)} placeholder="title" style={{ width: "100%", padding: 6 }} />
