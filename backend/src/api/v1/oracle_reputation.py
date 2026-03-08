@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -100,8 +101,8 @@ async def create_social_signal_reputation_event(
             delta_points=SOCIAL_SIGNAL_VERIFIED_POINTS,
             source="social_signal_verified",
             ref_type="social_signal",
-            ref_id=payload.signal_url or payload.account_handle or payload.platform,
-            note=";".join(part for part in note_parts if part),
+            ref_id=_build_social_signal_ref_id(payload),
+            note=_build_structured_note(note_parts),
         ),
     )
 
@@ -135,7 +136,7 @@ async def create_customer_referral_reputation_event(
             source="customer_referral_verified",
             ref_type="customer_referral",
             ref_id=payload.referral_id,
-            note=";".join(part for part in note_parts if part),
+            note=_build_structured_note(note_parts),
         ),
     )
 
@@ -161,6 +162,24 @@ def _record_oracle_audit(
         request_id=request_id,
         commit=commit,
     )
+
+
+def _build_social_signal_ref_id(payload: ReputationSocialSignalCreateRequest) -> str:
+    candidate = str(payload.signal_url or payload.account_handle or payload.platform or "").strip()
+    if len(candidate) <= 128:
+        return candidate
+    digest = hashlib.sha256(candidate.encode("utf-8")).hexdigest()
+    return f"url_sha256:{digest}"
+
+
+def _build_structured_note(parts: list[str]) -> str | None:
+    joined = ";".join(part for part in parts if part)
+    if not joined:
+        return None
+    if len(joined) <= 255:
+        return joined
+    digest = hashlib.sha256(joined.encode("utf-8")).hexdigest()[:16]
+    return f"{joined[:230]};sha256:{digest}"
 
 
 async def _create_structured_reputation_event(

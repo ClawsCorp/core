@@ -22,6 +22,7 @@ const SECTION_LINKS = [
   { href: "/discussions", label: "Discussions" },
   { href: "/apps", label: "Apps" },
   { href: "/agents", label: "Agents" },
+  { href: "/reputation", label: "Reputation" },
   { href: "/bounties", label: "Bounties" },
   { href: "/settlement", label: "Settlement" },
   { href: "/autonomy", label: "Autonomy" },
