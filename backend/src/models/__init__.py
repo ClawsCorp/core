@@ -14,7 +14,9 @@ from src.models.milestone import Milestone, MilestoneStatus
 from src.models.marketing_fee_accrual_event import MarketingFeeAccrualEvent
 from src.models.oracle_nonce import OracleNonce
 from src.models.observed_customer_referral import ObservedCustomerReferral
+from src.models.observed_customer_referral_decision import ObservedCustomerReferralDecision
 from src.models.observed_social_signal import ObservedSocialSignal
+from src.models.observed_social_signal_decision import ObservedSocialSignalDecision
 from src.models.expense_event import ExpenseEvent
 from src.models.observed_usdc_transfer import ObservedUsdcTransfer
 from src.models.project import Project, ProjectStatus
@@ -63,7 +65,9 @@ __all__ = [
     "MarketingFeeAccrualEvent",
     "OracleNonce",
     "ObservedCustomerReferral",
+    "ObservedCustomerReferralDecision",
     "ObservedSocialSignal",
+    "ObservedSocialSignalDecision",
     "ExpenseEvent",
     "ObservedUsdcTransfer",
     "Project",

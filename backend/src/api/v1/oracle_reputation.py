@@ -12,7 +12,9 @@ from src.core.db_utils import insert_or_get_by_unique
 from src.models.agent import Agent
 from src.models.indexer_cursor import IndexerCursor
 from src.models.observed_customer_referral import ObservedCustomerReferral
+from src.models.observed_customer_referral_decision import ObservedCustomerReferralDecision
 from src.models.observed_social_signal import ObservedSocialSignal
+from src.models.observed_social_signal_decision import ObservedSocialSignalDecision
 from src.models.reputation_event import ReputationEvent
 from src.schemas.reputation import (
     ObservedCustomerReferralCreateRequest,
@@ -281,16 +283,57 @@ async def sync_observed_social_signals(
     eligible = 0
     created = 0
     skipped_unattributed = 0
+    skipped_missing_identity = 0
+    skipped_duplicate_identity = 0
 
     for row in rows:
+        identity_key = _social_signal_identity_key(row)
         if row.agent_id is None:
             skipped_unattributed += 1
+            _record_social_signal_decision(
+                db,
+                row=row,
+                decision_status="skipped",
+                reason_code="unattributed",
+                identity_key=identity_key,
+                note="agent_id missing",
+            )
             continue
-        eligible += 1
+        if not identity_key:
+            skipped_missing_identity += 1
+            _record_social_signal_decision(
+                db,
+                row=row,
+                decision_status="skipped",
+                reason_code="missing_identity",
+                identity_key=None,
+                note="signal has no usable identity",
+            )
+            continue
+        if _social_signal_identity_already_promoted(db, identity_key):
+            skipped_duplicate_identity += 1
+            _record_social_signal_decision(
+                db,
+                row=row,
+                decision_status="skipped",
+                reason_code="duplicate_identity",
+                identity_key=identity_key,
+                note="identity already promoted",
+            )
+            continue
         agent = db.query(Agent).filter(Agent.id == int(row.agent_id)).first()
         if agent is None:
             skipped_unattributed += 1
+            _record_social_signal_decision(
+                db,
+                row=row,
+                decision_status="skipped",
+                reason_code="unattributed",
+                identity_key=identity_key,
+                note="agent lookup failed",
+            )
             continue
+        eligible += 1
         rep_payload = ReputationEventCreateRequest(
             event_id=str(uuid4()),
             idempotency_key=f"rep:social_signal_verified:observed:{row.signal_id}",
@@ -309,9 +352,29 @@ async def sync_observed_social_signals(
                 ]
             ),
         )
-        _created = _try_ingest_reputation_event(db, rep_payload)
-        if _created:
+        created_now, event = _try_ingest_reputation_event(db, rep_payload)
+        if created_now:
             created += 1
+            _record_social_signal_decision(
+                db,
+                row=row,
+                decision_status="promoted",
+                reason_code=None,
+                identity_key=identity_key,
+                reputation_event_id=int(event.id),
+                note=f"promoted:{event.event_id}",
+            )
+        else:
+            skipped_duplicate_identity += 1
+            _record_social_signal_decision(
+                db,
+                row=row,
+                decision_status="skipped",
+                reason_code="duplicate_identity",
+                identity_key=identity_key,
+                reputation_event_id=int(event.id),
+                note="reputation event already existed",
+            )
 
     _advance_reputation_sync_cursor(
         db,
@@ -337,6 +400,8 @@ async def sync_observed_social_signals(
             reputation_events_created=created,
             skipped_unattributed=skipped_unattributed,
             skipped_ineligible_stage=0,
+            skipped_missing_identity=skipped_missing_identity,
+            skipped_duplicate_identity=skipped_duplicate_identity,
         ),
     )
 
@@ -363,19 +428,56 @@ async def sync_observed_customer_referrals(
     created = 0
     skipped_unattributed = 0
     skipped_ineligible_stage = 0
+    skipped_duplicate_identity = 0
 
     for row in rows:
+        identity_key = _customer_referral_identity_key(row)
         if row.agent_id is None:
             skipped_unattributed += 1
+            _record_customer_referral_decision(
+                db,
+                row=row,
+                decision_status="skipped",
+                reason_code="unattributed",
+                identity_key=identity_key,
+                note="agent_id missing",
+            )
             continue
         if row.stage not in {"verified_lead", "paid_conversion"}:
             skipped_ineligible_stage += 1
+            _record_customer_referral_decision(
+                db,
+                row=row,
+                decision_status="skipped",
+                reason_code="ineligible_stage",
+                identity_key=identity_key,
+                note=f"stage:{row.stage}",
+            )
             continue
-        eligible += 1
+        if _customer_referral_identity_already_promoted(db, identity_key):
+            skipped_duplicate_identity += 1
+            _record_customer_referral_decision(
+                db,
+                row=row,
+                decision_status="skipped",
+                reason_code="duplicate_identity",
+                identity_key=identity_key,
+                note="identity already promoted",
+            )
+            continue
         agent = db.query(Agent).filter(Agent.id == int(row.agent_id)).first()
         if agent is None:
             skipped_unattributed += 1
+            _record_customer_referral_decision(
+                db,
+                row=row,
+                decision_status="skipped",
+                reason_code="unattributed",
+                identity_key=identity_key,
+                note="agent lookup failed",
+            )
             continue
+        eligible += 1
         delta_points = (
             CUSTOMER_REFERRAL_PAID_POINTS
             if row.stage == "paid_conversion"
@@ -399,9 +501,29 @@ async def sync_observed_customer_referrals(
                 ]
             ),
         )
-        _created = _try_ingest_reputation_event(db, rep_payload)
-        if _created:
+        created_now, event = _try_ingest_reputation_event(db, rep_payload)
+        if created_now:
             created += 1
+            _record_customer_referral_decision(
+                db,
+                row=row,
+                decision_status="promoted",
+                reason_code=None,
+                identity_key=identity_key,
+                reputation_event_id=int(event.id),
+                note=f"promoted:{event.event_id}",
+            )
+        else:
+            skipped_duplicate_identity += 1
+            _record_customer_referral_decision(
+                db,
+                row=row,
+                decision_status="skipped",
+                reason_code="duplicate_identity",
+                identity_key=identity_key,
+                reputation_event_id=int(event.id),
+                note="reputation event already existed",
+            )
 
     _advance_reputation_sync_cursor(
         db,
@@ -427,6 +549,8 @@ async def sync_observed_customer_referrals(
             reputation_events_created=created,
             skipped_unattributed=skipped_unattributed,
             skipped_ineligible_stage=skipped_ineligible_stage,
+            skipped_missing_identity=0,
+            skipped_duplicate_identity=skipped_duplicate_identity,
         ),
     )
 
@@ -480,9 +604,10 @@ def _build_social_signal_observed_ref_id(row: ObservedSocialSignal) -> str:
     return f"url_sha256:{digest}"
 
 
-def _try_ingest_reputation_event(db: Session, payload: ReputationEventCreateRequest) -> bool:
+def _try_ingest_reputation_event(db: Session, payload: ReputationEventCreateRequest) -> tuple[bool, ReputationEvent]:
     event, _public_agent_id = ingest_reputation_event(db, payload)
-    return event.idempotency_key == payload.idempotency_key and event.event_id == payload.event_id
+    created = event.idempotency_key == payload.idempotency_key and event.event_id == payload.event_id
+    return created, event
 
 
 def _get_reputation_sync_cursor(db: Session, cursor_key: str) -> int:
@@ -513,6 +638,111 @@ def _advance_reputation_sync_cursor(db: Session, cursor_key: str, last_processed
     else:
         row.last_block_number = int(last_processed_id)
     db.flush()
+
+
+def _social_signal_identity_key(row: ObservedSocialSignal) -> str | None:
+    if row.content_hash:
+        return f"content_hash:{row.platform}:{row.content_hash}"
+    if row.signal_url:
+        return _bounded_identity_key("signal_url", row.platform, row.signal_url)
+    if row.account_handle:
+        return _bounded_identity_key("account_handle", row.platform, row.account_handle)
+    return None
+
+
+def _customer_referral_identity_key(row: ObservedCustomerReferral) -> str:
+    return _bounded_identity_key("customer_referral", row.source_system, row.external_ref, row.stage)
+
+
+def _bounded_identity_key(prefix: str, *parts: str) -> str:
+    joined = ":".join(str(part or "").strip() for part in parts)
+    candidate = f"{prefix}:{joined}"
+    if len(candidate) <= 128:
+        return candidate
+    digest = hashlib.sha256(candidate.encode("utf-8")).hexdigest()
+    return f"{prefix}:sha256:{digest}"
+
+
+def _social_signal_identity_already_promoted(db: Session, identity_key: str) -> bool:
+    return (
+        db.query(ObservedSocialSignalDecision.id)
+        .filter(
+            ObservedSocialSignalDecision.identity_key == identity_key,
+            ObservedSocialSignalDecision.decision_status == "promoted",
+        )
+        .first()
+        is not None
+    )
+
+
+def _customer_referral_identity_already_promoted(db: Session, identity_key: str) -> bool:
+    return (
+        db.query(ObservedCustomerReferralDecision.id)
+        .filter(
+            ObservedCustomerReferralDecision.identity_key == identity_key,
+            ObservedCustomerReferralDecision.decision_status == "promoted",
+        )
+        .first()
+        is not None
+    )
+
+
+def _record_social_signal_decision(
+    db: Session,
+    *,
+    row: ObservedSocialSignal,
+    decision_status: str,
+    reason_code: str | None,
+    identity_key: str | None,
+    reputation_event_id: int | None = None,
+    note: str | None = None,
+) -> None:
+    decision_key = f"obs_social_decision:{row.signal_id}:{decision_status}:{reason_code or 'ok'}"
+    decision = ObservedSocialSignalDecision(
+        decision_id=str(uuid4()),
+        decision_key=decision_key,
+        observed_social_signal_id=int(row.id),
+        decision_status=decision_status,
+        reason_code=reason_code,
+        identity_key=identity_key,
+        reputation_event_id=reputation_event_id,
+        note=_build_structured_note([note or ""]),
+    )
+    insert_or_get_by_unique(
+        db,
+        instance=decision,
+        model=ObservedSocialSignalDecision,
+        unique_filter={"decision_key": decision_key},
+    )
+
+
+def _record_customer_referral_decision(
+    db: Session,
+    *,
+    row: ObservedCustomerReferral,
+    decision_status: str,
+    reason_code: str | None,
+    identity_key: str | None,
+    reputation_event_id: int | None = None,
+    note: str | None = None,
+) -> None:
+    decision_key = f"obs_customer_referral_decision:{row.referral_event_id}:{decision_status}:{reason_code or 'ok'}"
+    decision = ObservedCustomerReferralDecision(
+        decision_id=str(uuid4()),
+        decision_key=decision_key,
+        observed_customer_referral_id=int(row.id),
+        decision_status=decision_status,
+        reason_code=reason_code,
+        identity_key=identity_key,
+        reputation_event_id=reputation_event_id,
+        note=_build_structured_note([note or ""]),
+    )
+    insert_or_get_by_unique(
+        db,
+        instance=decision,
+        model=ObservedCustomerReferralDecision,
+        unique_filter={"decision_key": decision_key},
+    )
 
 
 def _resolve_optional_agent_db_id(db: Session, agent_id: str | None) -> int | None:

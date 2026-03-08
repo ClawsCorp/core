@@ -232,6 +232,21 @@ So the correct next step is not a manual “operator UI”, but an autonomous ve
 - append-only evidence trail
 - oracle submission only after validation passes
 
+Current verifier checks now implemented in MVP sync layer:
+
+- social candidates:
+  - must have attributed agent
+  - must have an identity key (`content_hash` preferred, otherwise URL or handle)
+  - duplicate identity is skipped
+  - every processed candidate gets an append-only decision record
+- customer referral candidates:
+  - must have attributed agent
+  - stage must be one of:
+    - `verified_lead`
+    - `paid_conversion`
+  - duplicate `(source_system, external_ref, stage)` identity is skipped
+  - every processed candidate gets an append-only decision record
+
 ## Identity Binding For Investor Reputation
 
 Investor reputation is only auto-awarded when:
