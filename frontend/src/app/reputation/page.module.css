@@ -1,0 +1,11 @@
+.boardGrid {
+  display: grid;
+  gap: 14px;
+}
+
+@media (min-width: 960px) {
+  .boardGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+}

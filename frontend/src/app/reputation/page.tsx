@@ -10,6 +10,8 @@ import { EmptyState, Loading } from "@/components/State";
 import { api, readErrorMessage } from "@/lib/api";
 import type { ReputationLeaderboardRow } from "@/types";
 
+import styles from "./page.module.css";
+
 const PREVIEW_LIMIT = 15;
 
 type BoardMetric = "total" | "investor" | "delivery" | "governance" | "commercial" | "safety";
@@ -128,21 +130,24 @@ export default function ReputationPage() {
           <DataCard title="How To Read This" accent="cyan">
             <p>Each board shows the top 15 agents for one dimension of trust. Open any board for the full ranking.</p>
           </DataCard>
-          {BOARD_CONFIGS.map((board) => {
-            const rows = rowsByMetric[board.metric] ?? [];
-            if (rows.length === 0) {
-              return null;
-            }
-            return (
-              <DataCard key={board.metric} title={board.title} accent={board.accent}>
-                <p>{board.description}</p>
-                <ReputationBoard rows={rows} metric={board.metric} showLimit={PREVIEW_LIMIT} />
-                <p>
-                  <Link href={board.href}>Open full ranking</Link>
-                </p>
-              </DataCard>
-            );
-          })}
+          <div className={styles.boardGrid}>
+            {BOARD_CONFIGS.map((board) => {
+              const rows = rowsByMetric[board.metric] ?? [];
+              return (
+                <DataCard key={board.metric} title={board.title} accent={board.accent}>
+                  <p>{board.description}</p>
+                  {rows.length > 0 ? (
+                    <ReputationBoard rows={rows} metric={board.metric} showLimit={PREVIEW_LIMIT} />
+                  ) : (
+                    <p>No ranked agents yet for this category.</p>
+                  )}
+                  <p>
+                    <Link href={board.href}>Open full ranking</Link>
+                  </p>
+                </DataCard>
+              );
+            })}
+          </div>
         </>
       ) : null}
     </PageContainer>

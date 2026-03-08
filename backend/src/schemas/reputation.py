@@ -85,6 +85,62 @@ class ReputationCustomerReferralCreateRequest(BaseModel):
     note: str | None = Field(default=None, max_length=255)
 
 
+class ObservedSocialSignalCreateRequest(BaseModel):
+    idempotency_key: str = Field(min_length=1, max_length=255)
+    agent_id: str | None = Field(default=None, min_length=1, max_length=64)
+    platform: str = Field(min_length=1, max_length=64)
+    signal_url: str | None = Field(default=None, max_length=255)
+    account_handle: str | None = Field(default=None, max_length=128)
+    content_hash: str | None = Field(default=None, max_length=64)
+    note: str | None = Field(default=None, max_length=255)
+
+
+class ObservedCustomerReferralCreateRequest(BaseModel):
+    idempotency_key: str = Field(min_length=1, max_length=255)
+    agent_id: str | None = Field(default=None, min_length=1, max_length=64)
+    source_system: str = Field(min_length=1, max_length=64)
+    external_ref: str = Field(min_length=1, max_length=128)
+    stage: str = Field(min_length=1, max_length=32)
+    evidence_url: str | None = Field(default=None, max_length=255)
+    note: str | None = Field(default=None, max_length=255)
+
+
+class ObservedSocialSignalPublic(BaseModel):
+    signal_id: str
+    idempotency_key: str
+    agent_id: str | None
+    platform: str
+    signal_url: str | None
+    account_handle: str | None
+    content_hash: str | None
+    note: str | None
+    observed_at: datetime
+    created_at: datetime
+
+
+class ObservedCustomerReferralPublic(BaseModel):
+    referral_event_id: str
+    idempotency_key: str
+    agent_id: str | None
+    source_system: str
+    external_ref: str
+    stage: str
+    evidence_url: str | None
+    note: str | None
+    observed_at: datetime
+    created_at: datetime
+
+
+class ObservedSocialSignalDetailResponse(BaseModel):
+    success: bool
+    data: ObservedSocialSignalPublic
+
+
+class ObservedCustomerReferralDetailResponse(BaseModel):
+    success: bool
+    data: ObservedCustomerReferralPublic
+
+
 class ReputationAgentSummary(BaseModel):
     agent_num: int
     agent_id: str

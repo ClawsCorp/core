@@ -8,8 +8,18 @@ from sqlalchemy.orm import Session
 
 from src.core.audit import record_audit
 from src.core.database import get_db
+from src.core.db_utils import insert_or_get_by_unique
+from src.models.agent import Agent
+from src.models.observed_customer_referral import ObservedCustomerReferral
+from src.models.observed_social_signal import ObservedSocialSignal
 from src.models.reputation_event import ReputationEvent
 from src.schemas.reputation import (
+    ObservedCustomerReferralCreateRequest,
+    ObservedCustomerReferralDetailResponse,
+    ObservedCustomerReferralPublic,
+    ObservedSocialSignalCreateRequest,
+    ObservedSocialSignalDetailResponse,
+    ObservedSocialSignalPublic,
     ReputationCustomerReferralCreateRequest,
     ReputationEventCreateRequest,
     ReputationEventDetailResponse,
@@ -141,6 +151,90 @@ async def create_customer_referral_reputation_event(
     )
 
 
+@router.post("/reputation/observed-social-signals", response_model=ObservedSocialSignalDetailResponse)
+async def create_observed_social_signal(
+    payload: ObservedSocialSignalCreateRequest,
+    request: Request,
+    _: str = Depends(require_oracle_hmac),
+    db: Session = Depends(get_db),
+) -> ObservedSocialSignalDetailResponse:
+    request_id = request.headers.get("X-Request-Id") or str(uuid4())
+    body_hash = request.state.body_hash
+    signature_status = getattr(request.state, "signature_status", "invalid")
+
+    agent_db_id = _resolve_optional_agent_db_id(db, payload.agent_id)
+    row = ObservedSocialSignal(
+        signal_id=str(uuid4()),
+        idempotency_key=payload.idempotency_key,
+        agent_id=agent_db_id,
+        platform=payload.platform,
+        signal_url=payload.signal_url,
+        account_handle=payload.account_handle,
+        content_hash=payload.content_hash,
+        note=payload.note,
+    )
+    row, _created = insert_or_get_by_unique(
+        db,
+        instance=row,
+        model=ObservedSocialSignal,
+        unique_filter={"idempotency_key": payload.idempotency_key},
+    )
+    _record_oracle_audit(
+        request=request,
+        db=db,
+        body_hash=body_hash,
+        request_id=request_id,
+        idempotency_key=payload.idempotency_key,
+        signature_status=signature_status,
+        commit=False,
+    )
+    db.commit()
+    db.refresh(row)
+    return ObservedSocialSignalDetailResponse(success=True, data=_observed_social_signal_public(db, row))
+
+
+@router.post("/reputation/observed-customer-referrals", response_model=ObservedCustomerReferralDetailResponse)
+async def create_observed_customer_referral(
+    payload: ObservedCustomerReferralCreateRequest,
+    request: Request,
+    _: str = Depends(require_oracle_hmac),
+    db: Session = Depends(get_db),
+) -> ObservedCustomerReferralDetailResponse:
+    request_id = request.headers.get("X-Request-Id") or str(uuid4())
+    body_hash = request.state.body_hash
+    signature_status = getattr(request.state, "signature_status", "invalid")
+
+    agent_db_id = _resolve_optional_agent_db_id(db, payload.agent_id)
+    row = ObservedCustomerReferral(
+        referral_event_id=str(uuid4()),
+        idempotency_key=payload.idempotency_key,
+        agent_id=agent_db_id,
+        source_system=payload.source_system,
+        external_ref=payload.external_ref,
+        stage=payload.stage,
+        evidence_url=payload.evidence_url,
+        note=payload.note,
+    )
+    row, _created = insert_or_get_by_unique(
+        db,
+        instance=row,
+        model=ObservedCustomerReferral,
+        unique_filter={"idempotency_key": payload.idempotency_key},
+    )
+    _record_oracle_audit(
+        request=request,
+        db=db,
+        body_hash=body_hash,
+        request_id=request_id,
+        idempotency_key=payload.idempotency_key,
+        signature_status=signature_status,
+        commit=False,
+    )
+    db.commit()
+    db.refresh(row)
+    return ObservedCustomerReferralDetailResponse(success=True, data=_observed_customer_referral_public(db, row))
+
+
 def _record_oracle_audit(
     request: Request,
     db: Session,
@@ -180,6 +274,53 @@ def _build_structured_note(parts: list[str]) -> str | None:
         return joined
     digest = hashlib.sha256(joined.encode("utf-8")).hexdigest()[:16]
     return f"{joined[:230]};sha256:{digest}"
+
+
+def _resolve_optional_agent_db_id(db: Session, agent_id: str | None) -> int | None:
+    if not agent_id:
+        return None
+    agent = db.query(Agent).filter(Agent.agent_id == agent_id).first()
+    if agent is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return int(agent.id)
+
+
+def _observed_social_signal_public(db: Session, row: ObservedSocialSignal) -> ObservedSocialSignalPublic:
+    agent_public_id: str | None = None
+    if row.agent_id is not None:
+        agent = db.query(Agent).filter(Agent.id == int(row.agent_id)).first()
+        agent_public_id = agent.agent_id if agent is not None else None
+    return ObservedSocialSignalPublic(
+        signal_id=row.signal_id,
+        idempotency_key=row.idempotency_key,
+        agent_id=agent_public_id,
+        platform=row.platform,
+        signal_url=row.signal_url,
+        account_handle=row.account_handle,
+        content_hash=row.content_hash,
+        note=row.note,
+        observed_at=row.observed_at,
+        created_at=row.created_at,
+    )
+
+
+def _observed_customer_referral_public(db: Session, row: ObservedCustomerReferral) -> ObservedCustomerReferralPublic:
+    agent_public_id: str | None = None
+    if row.agent_id is not None:
+        agent = db.query(Agent).filter(Agent.id == int(row.agent_id)).first()
+        agent_public_id = agent.agent_id if agent is not None else None
+    return ObservedCustomerReferralPublic(
+        referral_event_id=row.referral_event_id,
+        idempotency_key=row.idempotency_key,
+        agent_id=agent_public_id,
+        source_system=row.source_system,
+        external_ref=row.external_ref,
+        stage=row.stage,
+        evidence_url=row.evidence_url,
+        note=row.note,
+        observed_at=row.observed_at,
+        created_at=row.created_at,
+    )
 
 
 async def _create_structured_reputation_event(
