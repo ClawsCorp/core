@@ -617,9 +617,12 @@ def _get_reputation_sync_cursor(db: Session, cursor_key: str) -> int:
         .first()
     )
     if row is None:
-        row = IndexerCursor(cursor_key=cursor_key, chain_id=0, last_block_number=0)
-        db.add(row)
-        db.flush()
+        row, _created = insert_or_get_by_unique(
+            db,
+            instance=IndexerCursor(cursor_key=cursor_key, chain_id=0, last_block_number=0),
+            model=IndexerCursor,
+            unique_filter={"cursor_key": cursor_key, "chain_id": 0},
+        )
         return 0
     return int(row.last_block_number or 0)
 
@@ -642,7 +645,7 @@ def _advance_reputation_sync_cursor(db: Session, cursor_key: str, last_processed
 
 def _social_signal_identity_key(row: ObservedSocialSignal) -> str | None:
     if row.content_hash:
-        return f"content_hash:{row.platform}:{row.content_hash}"
+        return _bounded_identity_key("content_hash", row.platform, row.content_hash)
     if row.signal_url:
         return _bounded_identity_key("signal_url", row.platform, row.signal_url)
     if row.account_handle:
