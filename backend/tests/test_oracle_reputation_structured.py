@@ -21,6 +21,7 @@ from src.core.config import get_settings
 from src.core.database import Base, get_db
 from src.core.security import build_oracle_hmac_v2_payload
 from src.main import app
+from src.api.v1 import oracle_reputation
 
 import src.models  # noqa: F401
 from src.models.agent import Agent
@@ -525,3 +526,34 @@ def test_sync_social_signals_skips_duplicate_identity_with_decision_trail(
         assert len(decisions) == 2
         assert decisions[0].decision_status == "promoted"
         assert decisions[1].reason_code == "duplicate_identity"
+
+
+def test_social_signal_identity_key_bounds_long_content_hash() -> None:
+    row = ObservedSocialSignal(
+        signal_id="oss_bound_1",
+        idempotency_key="obs:social:bound:1",
+        agent_id=None,
+        platform="p" * 64,
+        signal_url=None,
+        account_handle=None,
+        content_hash="h" * 64,
+        note=None,
+    )
+    identity_key = oracle_reputation._social_signal_identity_key(row)
+    assert identity_key is not None
+    assert len(identity_key) <= 128
+    assert identity_key.startswith("content_hash:")
+
+
+def test_reputation_sync_cursor_bootstrap_is_idempotent(_db: sessionmaker[Session]) -> None:
+    with _db() as db:
+        first = oracle_reputation._get_reputation_sync_cursor(db, "observed_social_signals")
+        second = oracle_reputation._get_reputation_sync_cursor(db, "observed_social_signals")
+        assert first == 0
+        assert second == 0
+        rows = (
+            db.query(IndexerCursor)
+            .filter(IndexerCursor.cursor_key == "observed_social_signals", IndexerCursor.chain_id == 0)
+            .all()
+        )
+        assert len(rows) == 1
