@@ -98,6 +98,12 @@ class Settings:
     audit_insert_failure_window_seconds: int
     audit_insert_failure_spike_threshold: int
     require_blockchain_rpc_url: bool
+    telegram_api_id: int | None
+    telegram_api_hash: str | None
+    telegram_session_string: str | None
+    telegram_monitored_channels: list[str]
+    telegram_collector_batch_size: int
+    telegram_collector_sleep_seconds: int
 
 
 @lru_cache
@@ -194,6 +200,14 @@ def get_settings() -> Settings:
     oracle_nonce_replay_spike_threshold = int(os.getenv("ORACLE_NONCE_REPLAY_SPIKE_THRESHOLD", "5"))
     audit_insert_failure_window_seconds = int(os.getenv("AUDIT_INSERT_FAILURE_WINDOW_SECONDS", "900"))
     audit_insert_failure_spike_threshold = int(os.getenv("AUDIT_INSERT_FAILURE_SPIKE_THRESHOLD", "1"))
+    telegram_api_id = _optional_int_env("TELEGRAM_API_ID")
+    telegram_api_hash_value = os.getenv("TELEGRAM_API_HASH", "").strip()
+    telegram_api_hash = telegram_api_hash_value if telegram_api_hash_value else None
+    telegram_session_string_value = os.getenv("TELEGRAM_SESSION_STRING", "").strip()
+    telegram_session_string = telegram_session_string_value if telegram_session_string_value else None
+    telegram_monitored_channels = _split_origins(os.getenv("TELEGRAM_MONITORED_CHANNELS", ""))
+    telegram_collector_batch_size = int(os.getenv("TELEGRAM_COLLECTOR_BATCH_SIZE", "50"))
+    telegram_collector_sleep_seconds = int(os.getenv("TELEGRAM_COLLECTOR_SLEEP_SECONDS", "60"))
 
     return Settings(
         app_version=app_version,
@@ -247,4 +261,10 @@ def get_settings() -> Settings:
         audit_insert_failure_window_seconds=audit_insert_failure_window_seconds,
         audit_insert_failure_spike_threshold=audit_insert_failure_spike_threshold,
         require_blockchain_rpc_url=require_blockchain_rpc_url,
+        telegram_api_id=telegram_api_id,
+        telegram_api_hash=telegram_api_hash,
+        telegram_session_string=telegram_session_string,
+        telegram_monitored_channels=telegram_monitored_channels,
+        telegram_collector_batch_size=telegram_collector_batch_size,
+        telegram_collector_sleep_seconds=telegram_collector_sleep_seconds,
     )
