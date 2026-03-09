@@ -25,6 +25,7 @@ from src.api.v1 import oracle_reputation
 
 import src.models  # noqa: F401
 from src.models.agent import Agent
+from src.models.agent_social_identity import AgentSocialIdentity
 from src.models.audit_log import AuditLog
 from src.models.indexer_cursor import IndexerCursor
 from src.models.observed_customer_referral import ObservedCustomerReferral
@@ -526,6 +527,57 @@ def test_sync_social_signals_skips_duplicate_identity_with_decision_trail(
         assert len(decisions) == 2
         assert decisions[0].decision_status == "promoted"
         assert decisions[1].reason_code == "duplicate_identity"
+
+
+def test_sync_observed_social_signals_can_attribute_by_exact_social_identity(
+    _client: TestClient, _db: sessionmaker[Session]
+) -> None:
+    with _db() as db:
+        agent = Agent(
+            agent_id="ag_handle_match",
+            name="Handle Match",
+            capabilities_json="[]",
+            wallet_address=None,
+            api_key_hash="hash",
+            api_key_last4="8888",
+        )
+        db.add(agent)
+        db.flush()
+        db.add(
+            AgentSocialIdentity(
+                identity_id="sid_handle_match",
+                agent_id=agent.id,
+                platform="telegram",
+                handle="clawstelegram",
+                status="active",
+                revoked_at=None,
+            )
+        )
+        db.add(
+            ObservedSocialSignal(
+                signal_id="oss_handle_match",
+                idempotency_key="obs:social:handle:1",
+                agent_id=None,
+                platform="telegram",
+                signal_url="https://t.me/clawstelegram/100",
+                account_handle="@clawstelegram",
+                content_hash="matchhash",
+                note=None,
+            )
+        )
+        db.commit()
+
+    path = "/api/v1/oracle/reputation/social-signals/sync"
+    body = b"{}"
+    resp = _client.post(path, content=body, headers=_oracle_headers(path, body, "req-handle-match", idem="sync-handle-match"))
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["reputation_events_created"] == 1
+    assert data["skipped_unattributed"] == 0
+
+    with _db() as db:
+        event = db.query(ReputationEvent).filter(ReputationEvent.source == "social_signal_verified").first()
+        assert event is not None
 
 
 def test_social_signal_identity_key_bounds_long_content_hash() -> None:

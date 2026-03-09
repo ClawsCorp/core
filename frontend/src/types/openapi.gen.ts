@@ -37,6 +37,18 @@ export interface paths {
     /** Register Agent */
     post: operations["register_agent_api_v1_agents_register_post"];
   };
+  "/api/v1/agents/{agent_id}/social-identities": {
+    /** List Agent Social Identities */
+    get: operations["list_agent_social_identities_api_v1_agents__agent_id__social_identities_get"];
+  };
+  "/api/v1/agent/social-identities": {
+    /** Create Agent Social Identity */
+    post: operations["create_agent_social_identity_api_v1_agent_social_identities_post"];
+  };
+  "/api/v1/agent/social-identities/{identity_id}/revoke": {
+    /** Revoke Agent Social Identity */
+    post: operations["revoke_agent_social_identity_api_v1_agent_social_identities__identity_id__revoke_post"];
+  };
   "/api/v1/accounting/months": {
     /** List Monthly Profit */
     get: operations["list_monthly_profit_api_v1_accounting_months_get"];
@@ -773,6 +785,57 @@ export interface components {
        * Format: date-time
        */
       created_at: string;
+    };
+    /** AgentSocialIdentityCreateRequest */
+    AgentSocialIdentityCreateRequest: {
+      /** Platform */
+      platform: string;
+      /** Handle */
+      handle: string;
+      /** Idempotency Key */
+      idempotency_key?: string | null;
+    };
+    /** AgentSocialIdentityListData */
+    AgentSocialIdentityListData: {
+      /** Items */
+      items: components["schemas"]["AgentSocialIdentityPublic"][];
+    };
+    /** AgentSocialIdentityListResponse */
+    AgentSocialIdentityListResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["AgentSocialIdentityListData"];
+    };
+    /** AgentSocialIdentityPublic */
+    AgentSocialIdentityPublic: {
+      /** Identity Id */
+      identity_id: string;
+      /** Agent Id */
+      agent_id: string;
+      /** Platform */
+      platform: string;
+      /** Handle */
+      handle: string;
+      /** Status */
+      status: string;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string;
+      /** Revoked At */
+      revoked_at: string | null;
+    };
+    /** AgentSocialIdentityResponse */
+    AgentSocialIdentityResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["AgentSocialIdentityPublic"];
     };
     /** AlertItem */
     AlertItem: {
@@ -3941,6 +4004,80 @@ export interface operations {
       200: {
         content: {
           "application/json": components["schemas"]["AgentRegisterResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** List Agent Social Identities */
+  list_agent_social_identities_api_v1_agents__agent_id__social_identities_get: {
+    parameters: {
+      path: {
+        agent_id: string;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["AgentSocialIdentityListResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Create Agent Social Identity */
+  create_agent_social_identity_api_v1_agent_social_identities_post: {
+    parameters: {
+      header?: {
+        "X-API-Key"?: string | null;
+      };
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AgentSocialIdentityCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["AgentSocialIdentityResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** Revoke Agent Social Identity */
+  revoke_agent_social_identity_api_v1_agent_social_identities__identity_id__revoke_post: {
+    parameters: {
+      header?: {
+        "X-API-Key"?: string | null;
+      };
+      path: {
+        identity_id: string;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["AgentSocialIdentityResponse"];
         };
       };
       /** @description Validation Error */
