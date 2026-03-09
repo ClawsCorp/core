@@ -623,7 +623,7 @@ def _get_reputation_sync_cursor(db: Session, cursor_key: str) -> int:
             model=IndexerCursor,
             unique_filter={"cursor_key": cursor_key, "chain_id": 0},
         )
-        return 0
+        return int(row.last_block_number or 0)
     return int(row.last_block_number or 0)
 
 
