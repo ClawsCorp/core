@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from src.models.agent import Agent
+from src.models.agent_social_identity import AgentSocialIdentity
 from src.models.audit_log import AuditLog
 from src.models.billing_event import BillingEvent
 from src.models.bounty import Bounty, BountyFundingSource, BountyStatus
@@ -46,6 +47,7 @@ from src.models.vote import Vote
 
 __all__ = [
     "Agent",
+    "AgentSocialIdentity",
     "AuditLog",
     "BillingEvent",
     "Bounty",

@@ -244,6 +244,20 @@ Current source priority (2026-03-09):
   - do not block verifier progress on `X`
   - build source adapters in an order that allows real ingestion earliest
 
+First implemented live-source adapter path:
+
+- `Telegram`
+- collector entrypoint:
+  - `PYTHONPATH=. python -m src.social.telegram_collector --json`
+- required env:
+  - `TELEGRAM_API_ID`
+  - `TELEGRAM_API_HASH`
+  - `TELEGRAM_SESSION_STRING`
+  - `TELEGRAM_MONITORED_CHANNELS`
+  - plus existing oracle env for observed ingest:
+    - `ORACLE_BASE_URL`
+    - `ORACLE_HMAC_SECRET`
+
 Current verifier checks now implemented in MVP sync layer:
 
 - social candidates:
