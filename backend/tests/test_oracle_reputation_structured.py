@@ -557,3 +557,13 @@ def test_reputation_sync_cursor_bootstrap_is_idempotent(_db: sessionmaker[Sessio
             .all()
         )
         assert len(rows) == 1
+
+
+def test_reputation_sync_cursor_returns_existing_value_after_race_safe_fallback(_db: sessionmaker[Session]) -> None:
+    with _db() as db:
+        db.add(IndexerCursor(cursor_key="observed_social_signals", chain_id=0, last_block_number=42))
+        db.commit()
+
+    with _db() as db:
+        value = oracle_reputation._get_reputation_sync_cursor(db, "observed_social_signals")
+        assert value == 42
