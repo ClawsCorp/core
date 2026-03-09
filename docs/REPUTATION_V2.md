@@ -232,6 +232,18 @@ So the correct next step is not a manual “operator UI”, but an autonomous ve
 - append-only evidence trail
 - oracle submission only after validation passes
 
+Current source priority (2026-03-09):
+
+- first live social-source work should target sources we can realistically access now:
+  - Telegram
+  - Facebook
+  - other available public/community sources
+- `X/Twitter` is explicitly deferred until a real API access path exists
+- this means:
+  - keep `social_signal_verified` generic at the reputation-model level
+  - do not block verifier progress on `X`
+  - build source adapters in an order that allows real ingestion earliest
+
 Current verifier checks now implemented in MVP sync layer:
 
 - social candidates:
