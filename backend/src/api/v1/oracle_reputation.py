@@ -10,6 +10,7 @@ from src.core.audit import record_audit
 from src.core.database import get_db
 from src.core.db_utils import insert_or_get_by_unique
 from src.models.agent import Agent
+from src.models.agent_social_identity import AgentSocialIdentity
 from src.models.indexer_cursor import IndexerCursor
 from src.models.observed_customer_referral import ObservedCustomerReferral
 from src.models.observed_customer_referral_decision import ObservedCustomerReferralDecision
@@ -288,17 +289,6 @@ async def sync_observed_social_signals(
 
     for row in rows:
         identity_key = _social_signal_identity_key(row)
-        if row.agent_id is None:
-            skipped_unattributed += 1
-            _record_social_signal_decision(
-                db,
-                row=row,
-                decision_status="skipped",
-                reason_code="unattributed",
-                identity_key=identity_key,
-                note="agent_id missing",
-            )
-            continue
         if not identity_key:
             skipped_missing_identity += 1
             _record_social_signal_decision(
@@ -321,7 +311,7 @@ async def sync_observed_social_signals(
                 note="identity already promoted",
             )
             continue
-        agent = db.query(Agent).filter(Agent.id == int(row.agent_id)).first()
+        agent = _resolve_social_signal_agent(db, row)
         if agent is None:
             skipped_unattributed += 1
             _record_social_signal_decision(
@@ -649,7 +639,7 @@ def _social_signal_identity_key(row: ObservedSocialSignal) -> str | None:
     if row.signal_url:
         return _bounded_identity_key("signal_url", row.platform, row.signal_url)
     if row.account_handle:
-        return _bounded_identity_key("account_handle", row.platform, row.account_handle)
+        return _bounded_identity_key("account_handle", row.platform, _normalize_social_handle(row.account_handle))
     return None
 
 
@@ -746,6 +736,33 @@ def _record_customer_referral_decision(
         model=ObservedCustomerReferralDecision,
         unique_filter={"decision_key": decision_key},
     )
+
+
+def _resolve_social_signal_agent(db: Session, row: ObservedSocialSignal) -> Agent | None:
+    if row.agent_id is not None:
+        return db.query(Agent).filter(Agent.id == int(row.agent_id)).first()
+    normalized_handle = _normalize_social_handle(row.account_handle)
+    if not normalized_handle:
+        return None
+    identity = (
+        db.query(AgentSocialIdentity)
+        .filter(
+            AgentSocialIdentity.platform == str(row.platform).strip().lower(),
+            AgentSocialIdentity.handle == normalized_handle,
+            AgentSocialIdentity.status == "active",
+        )
+        .first()
+    )
+    if identity is None:
+        return None
+    return db.query(Agent).filter(Agent.id == int(identity.agent_id)).first()
+
+
+def _normalize_social_handle(value: str | None) -> str | None:
+    text = str(value or "").strip().lower()
+    if text.startswith("@"):
+        text = text[1:]
+    return text or None
 
 
 def _resolve_optional_agent_db_id(db: Session, agent_id: str | None) -> int | None:
