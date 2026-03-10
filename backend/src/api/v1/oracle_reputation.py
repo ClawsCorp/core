@@ -738,6 +738,33 @@ def _record_customer_referral_decision(
     )
 
 
+def _resolve_social_signal_agent(db: Session, row: ObservedSocialSignal) -> Agent | None:
+    if row.agent_id is not None:
+        return db.query(Agent).filter(Agent.id == int(row.agent_id)).first()
+    normalized_handle = _normalize_social_handle(row.account_handle)
+    if not normalized_handle:
+        return None
+    identity = (
+        db.query(AgentSocialIdentity)
+        .filter(
+            AgentSocialIdentity.platform == str(row.platform).strip().lower(),
+            AgentSocialIdentity.handle == normalized_handle,
+            AgentSocialIdentity.status == "active",
+        )
+        .first()
+    )
+    if identity is None:
+        return None
+    return db.query(Agent).filter(Agent.id == int(identity.agent_id)).first()
+
+
+def _normalize_social_handle(value: str | None) -> str | None:
+    text = str(value or "").strip().lower()
+    if text.startswith("@"):
+        text = text[1:]
+    return text or None
+
+
 def _resolve_optional_agent_db_id(db: Session, agent_id: str | None) -> int | None:
     if not agent_id:
         return None
