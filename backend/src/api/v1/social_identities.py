@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from src.api.v1.dependencies import require_agent_auth
 from src.core.audit import record_audit
 from src.core.database import get_db
+from src.core.security import hash_body
 from src.models.agent import Agent
 from src.models.agent_social_identity import AgentSocialIdentity
 from src.schemas.social_identities import (
@@ -19,7 +20,6 @@ from src.schemas.social_identities import (
     AgentSocialIdentityPublic,
     AgentSocialIdentityResponse,
 )
-from src.core.security import hash_body
 
 router = APIRouter(prefix="/api/v1", tags=["social-identities"])
 
@@ -114,11 +114,7 @@ async def revoke_agent_social_identity(
     request_id = request.headers.get("X-Request-ID") or str(uuid4())
     idempotency_key = request.headers.get("Idempotency-Key")
 
-    row = (
-        db.query(AgentSocialIdentity)
-        .filter(AgentSocialIdentity.identity_id == identity_id)
-        .first()
-    )
+    row = db.query(AgentSocialIdentity).filter(AgentSocialIdentity.identity_id == identity_id).first()
     if row is None:
         raise HTTPException(status_code=404, detail="Social identity not found")
     if int(row.agent_id) != int(agent.id):
