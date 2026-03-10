@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 from src.api.v1.dependencies import require_agent_auth
 from src.core.database import get_db
 from src.models.agent import Agent
+from src.models.observed_social_signal import ObservedSocialSignal
+from src.models.observed_social_signal_decision import ObservedSocialSignalDecision
 from src.models.reputation_event import ReputationEvent
 from src.schemas.reputation import (
     ReputationEventListData,
@@ -23,6 +25,9 @@ from src.schemas.reputation import (
     ReputationPolicyData,
     ReputationPolicyResponse,
     ReputationPolicySourcePublic,
+    SocialVerifierDecisionListData,
+    SocialVerifierDecisionListResponse,
+    SocialVerifierDecisionPublic,
 )
 from src.services.reputation_policy import (
     PLATFORM_INVESTOR_POINTS_FORMULA,
@@ -214,6 +219,43 @@ def get_reputation_leaderboard(
     )
 
 
+@router.get("/verifier/social-decisions", response_model=SocialVerifierDecisionListResponse)
+def list_social_verifier_decisions(
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    decision_status: str | None = Query(None),
+    reason_code: str | None = Query(None),
+    agent_id: str | None = Query(None),
+    db: Session = Depends(get_db),
+) -> SocialVerifierDecisionListResponse:
+    query = db.query(ObservedSocialSignalDecision, ObservedSocialSignal).join(
+        ObservedSocialSignal,
+        ObservedSocialSignal.id == ObservedSocialSignalDecision.observed_social_signal_id,
+    )
+    if decision_status:
+        query = query.filter(ObservedSocialSignalDecision.decision_status == decision_status)
+    if reason_code:
+        query = query.filter(ObservedSocialSignalDecision.reason_code == reason_code)
+    if agent_id:
+        agent = _resolve_agent(db, agent_id)
+        if agent is None:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        query = query.filter(ObservedSocialSignal.agent_id == agent.id)
+
+    total = query.count()
+    rows = (
+        query.order_by(ObservedSocialSignalDecision.decided_at.desc(), ObservedSocialSignalDecision.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    items = [_social_verifier_decision_public(db, decision, observed) for decision, observed in rows]
+    return SocialVerifierDecisionListResponse(
+        success=True,
+        data=SocialVerifierDecisionListData(items=items, limit=limit, offset=offset, total=total),
+    )
+
+
 def _load_category_points_for_agent_ids(db: Session, agent_db_ids: list[int]) -> dict[int, dict[str, int]]:
     if not agent_db_ids:
         return {}
@@ -272,4 +314,31 @@ def _event_public(agent_id: str, entry: ReputationEvent):
         ref_id=entry.ref_id,
         note=entry.note,
         created_at=entry.created_at,
+    )
+
+
+def _social_verifier_decision_public(
+    db: Session,
+    decision: ObservedSocialSignalDecision,
+    observed: ObservedSocialSignal,
+) -> SocialVerifierDecisionPublic:
+    agent_public_id: str | None = None
+    if observed.agent_id is not None:
+        agent = db.query(Agent).filter(Agent.id == int(observed.agent_id)).first()
+        agent_public_id = agent.agent_id if agent is not None else None
+    reputation_event_id: str | None = None
+    if decision.reputation_event_id is not None:
+        event = db.query(ReputationEvent).filter(ReputationEvent.id == int(decision.reputation_event_id)).first()
+        reputation_event_id = event.event_id if event is not None else None
+    return SocialVerifierDecisionPublic(
+        decision_id=decision.decision_id,
+        decision_status=decision.decision_status,
+        reason_code=decision.reason_code,
+        agent_id=agent_public_id,
+        platform=observed.platform,
+        account_handle=observed.account_handle,
+        signal_url=observed.signal_url,
+        identity_key=decision.identity_key,
+        reputation_event_id=reputation_event_id,
+        decided_at=decision.decided_at,
     )

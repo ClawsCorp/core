@@ -156,6 +156,31 @@ class ReputationObservedSyncResponse(BaseModel):
     data: ReputationObservedSyncData
 
 
+class SocialVerifierDecisionPublic(BaseModel):
+    decision_id: str
+    decision_status: str
+    reason_code: str | None
+    agent_id: str | None
+    platform: str
+    account_handle: str | None
+    signal_url: str | None
+    identity_key: str | None
+    reputation_event_id: str | None
+    decided_at: datetime
+
+
+class SocialVerifierDecisionListData(BaseModel):
+    items: list[SocialVerifierDecisionPublic]
+    limit: int
+    offset: int
+    total: int
+
+
+class SocialVerifierDecisionListResponse(BaseModel):
+    success: bool
+    data: SocialVerifierDecisionListData
+
+
 class ReputationAgentSummary(BaseModel):
     agent_num: int
     agent_id: str

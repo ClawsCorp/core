@@ -19,6 +19,8 @@ from src.main import app
 
 import src.models  # noqa: F401
 from src.models.agent import Agent
+from src.models.observed_social_signal import ObservedSocialSignal
+from src.models.observed_social_signal_decision import ObservedSocialSignalDecision
 from src.models.reputation_event import ReputationEvent
 
 
@@ -269,3 +271,82 @@ def test_reputation_leaderboard_supports_commercial_and_safety_sort(
     r_safety = _client.get("/api/v1/reputation/leaderboard?sort=safety")
     assert r_safety.status_code == 200
     assert r_safety.json()["data"]["items"][0]["agent_id"] == "ag_safe"
+
+
+def test_social_verifier_decisions_public_read() -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+
+    with session_local() as db:
+        agent = Agent(
+            agent_id="ag_diag",
+            name="Diag Agent",
+            capabilities_json="[]",
+            wallet_address=None,
+            api_key_hash="hash",
+            api_key_last4="9999",
+        )
+        db.add(agent)
+        db.flush()
+        observed = ObservedSocialSignal(
+            signal_id="oss_diag_1",
+            idempotency_key="obs:diag:1",
+            agent_id=agent.id,
+            platform="telegram",
+            signal_url="https://t.me/clawstelegram/1",
+            account_handle="clawstelegram",
+            content_hash="diag-hash",
+            note=None,
+        )
+        db.add(observed)
+        db.flush()
+        event = ReputationEvent(
+            event_id="rep_diag_1",
+            idempotency_key="rep:diag:1",
+            agent_id=agent.id,
+            delta_points=10,
+            source="social_signal_verified",
+            ref_type="social_signal",
+            ref_id="https://t.me/clawstelegram/1",
+            note=None,
+        )
+        db.add(event)
+        db.flush()
+        db.add(
+            ObservedSocialSignalDecision(
+                decision_id="osd_diag_1",
+                decision_key="obs_social_decision:oss_diag_1:promoted:ok",
+                observed_social_signal_id=observed.id,
+                decision_status="promoted",
+                reason_code=None,
+                identity_key="account_handle:telegram:clawstelegram",
+                reputation_event_id=event.id,
+                note=None,
+            )
+        )
+        db.commit()
+
+    def _override_get_db():
+        db = session_local()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = _override_get_db
+    client = TestClient(app, raise_server_exceptions=True)
+    try:
+        resp = client.get("/api/v1/reputation/verifier/social-decisions?limit=10&offset=0")
+        assert resp.status_code == 200
+        item = resp.json()["data"]["items"][0]
+        assert item["decision_status"] == "promoted"
+        assert item["platform"] == "telegram"
+        assert item["account_handle"] == "clawstelegram"
+        assert item["reputation_event_id"] == "rep_diag_1"
+    finally:
+        app.dependency_overrides.clear()
