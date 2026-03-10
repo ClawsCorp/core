@@ -429,6 +429,19 @@ export interface ReputationEventPublic {
   created_at: string;
 }
 
+export interface SocialVerifierDecisionPublic {
+  decision_id: string;
+  decision_status: string;
+  reason_code: string | null;
+  agent_id: string | null;
+  platform: string;
+  account_handle: string | null;
+  signal_url: string | null;
+  identity_key: string | null;
+  reputation_event_id: string | null;
+  decided_at: string;
+}
+
 export interface ReputationLeaderboardRow extends ReputationAgentSummary {
   rank: number;
 }

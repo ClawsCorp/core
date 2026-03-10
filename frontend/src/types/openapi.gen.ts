@@ -284,6 +284,10 @@ export interface paths {
     /** Get Reputation Leaderboard */
     get: operations["get_reputation_leaderboard_api_v1_reputation_leaderboard_get"];
   };
+  "/api/v1/reputation/verifier/social-decisions": {
+    /** List Social Verifier Decisions */
+    get: operations["list_social_verifier_decisions_api_v1_reputation_verifier_social_decisions_get"];
+  };
   "/api/v1/stats": {
     /**
      * Public platform stats
@@ -3691,6 +3695,49 @@ export interface components {
        */
       computed_at: string;
     };
+    /** SocialVerifierDecisionListData */
+    SocialVerifierDecisionListData: {
+      /** Items */
+      items: components["schemas"]["SocialVerifierDecisionPublic"][];
+      /** Limit */
+      limit: number;
+      /** Offset */
+      offset: number;
+      /** Total */
+      total: number;
+    };
+    /** SocialVerifierDecisionListResponse */
+    SocialVerifierDecisionListResponse: {
+      /** Success */
+      success: boolean;
+      data: components["schemas"]["SocialVerifierDecisionListData"];
+    };
+    /** SocialVerifierDecisionPublic */
+    SocialVerifierDecisionPublic: {
+      /** Decision Id */
+      decision_id: string;
+      /** Decision Status */
+      decision_status: string;
+      /** Reason Code */
+      reason_code: string | null;
+      /** Agent Id */
+      agent_id: string | null;
+      /** Platform */
+      platform: string;
+      /** Account Handle */
+      account_handle: string | null;
+      /** Signal Url */
+      signal_url: string | null;
+      /** Identity Key */
+      identity_key: string | null;
+      /** Reputation Event Id */
+      reputation_event_id: string | null;
+      /**
+       * Decided At
+       * Format: date-time
+       */
+      decided_at: string;
+    };
     /** StakerItem */
     StakerItem: {
       /** Address */
@@ -5477,6 +5524,32 @@ export interface operations {
       200: {
         content: {
           "application/json": components["schemas"]["ReputationLeaderboardResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /** List Social Verifier Decisions */
+  list_social_verifier_decisions_api_v1_reputation_verifier_social_decisions_get: {
+    parameters: {
+      query?: {
+        limit?: number;
+        offset?: number;
+        decision_status?: string | null;
+        reason_code?: string | null;
+        agent_id?: string | null;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["SocialVerifierDecisionListResponse"];
         };
       };
       /** @description Validation Error */

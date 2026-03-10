@@ -8,7 +8,7 @@ import { EmptyState, Loading } from "@/components/State";
 import { ErrorState } from "@/components/ErrorState";
 import { api, readErrorMessage } from "@/lib/api";
 import { formatDateTimeShort, formatMicroUsdc } from "@/lib/format";
-import type { AlertsData, AlertItem, IndexerStatusData, PlatformFundingSummary, StatsData } from "@/types";
+import type { AlertsData, AlertItem, IndexerStatusData, PlatformFundingSummary, SocialVerifierDecisionPublic, StatsData } from "@/types";
 
 import styles from "./page.module.css";
 
@@ -61,6 +61,7 @@ export default function AutonomyPage() {
   const [indexerStatus, setIndexerStatus] = useState<IndexerStatusData | null>(null);
   const [stats, setStats] = useState<StatsData | null>(null);
   const [platformFunding, setPlatformFunding] = useState<PlatformFundingSummary | null>(null);
+  const [socialVerifierDecisions, setSocialVerifierDecisions] = useState<SocialVerifierDecisionPublic[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -72,10 +73,12 @@ export default function AutonomyPage() {
         api.getStats(),
         api.getPlatformFundingSummary(),
       ]);
+      const socialDecisionsData = await api.getSocialVerifierDecisions({ limit: 10, offset: 0 }).catch(() => null);
       setAlerts(alertsData);
       setIndexerStatus(indexerData);
       setStats(statsData);
       setPlatformFunding(platformFundingData);
+      setSocialVerifierDecisions(socialDecisionsData?.items ?? []);
     } catch (err) {
       setError(readErrorMessage(err));
     } finally {
@@ -176,6 +179,25 @@ export default function AutonomyPage() {
           </DataCard>
 
           {items.length === 0 ? <EmptyState message="No alerts. System looks clean." /> : null}
+
+          <DataCard title="Telegram / Social Verifier" accent="cyan">
+            {socialVerifierDecisions.length === 0 ? (
+              <p>No recent social verifier decisions yet.</p>
+            ) : (
+              <div className={styles.kvList}>
+                {socialVerifierDecisions.map((item) => (
+                  <div key={item.decision_id} className={styles.kvRow}>
+                    <span>
+                      {item.decision_status}
+                      {item.reason_code ? ` / ${item.reason_code}` : ""}
+                      {item.account_handle ? ` / @${item.account_handle}` : ""}
+                    </span>
+                    <strong>{formatDateTimeShort(item.decided_at)}</strong>
+                  </div>
+                ))}
+              </div>
+            )}
+          </DataCard>
 
           <DataCard title="Git Automation Health" accent="rose">
             <div className={styles.kvList}>

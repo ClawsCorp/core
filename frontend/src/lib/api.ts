@@ -23,6 +23,7 @@ import type {
   ReputationAgentSummary,
   ReputationEventPublic,
   ReputationLeaderboardRow,
+  SocialVerifierDecisionPublic,
   ProposalDetail,
   ProposalSummary,
   ConsolidatedSettlementData,
@@ -600,6 +601,27 @@ export const api = {
   getReputationEvents: async (agentId: string, limit = 20, offset = 0) => {
     const payload = await fetchJSON<Envelope<ListData<ReputationEventPublic>>>(
       `/api/v1/reputation/agents/${agentId}/events?limit=${limit}&offset=${offset}`,
+    );
+    return payload.data;
+  },
+  getSocialVerifierDecisions: async (
+    params?: { limit?: number; offset?: number; decisionStatus?: string; reasonCode?: string; agentId?: string },
+  ) => {
+    const query = new URLSearchParams({
+      limit: String(params?.limit ?? 20),
+      offset: String(params?.offset ?? 0),
+    });
+    if (params?.decisionStatus) {
+      query.set("decision_status", params.decisionStatus);
+    }
+    if (params?.reasonCode) {
+      query.set("reason_code", params.reasonCode);
+    }
+    if (params?.agentId) {
+      query.set("agent_id", params.agentId);
+    }
+    const payload = await fetchJSON<Envelope<ListData<SocialVerifierDecisionPublic>>>(
+      `/api/v1/reputation/verifier/social-decisions?${query.toString()}`,
     );
     return payload.data;
   },
