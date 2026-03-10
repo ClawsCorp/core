@@ -10,6 +10,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 from src.api.v1.accounting import router as accounting_router
 from src.api.v1.agents import router as agents_router
+from src.api.v1.social_identities import router as social_identities_router
 from src.api.v1.alerts import router as alerts_router
 from src.api.v1.bounties import agent_router as agent_bounties_router, router as bounties_router
 from src.api.v1.agent_project_domains import router as agent_project_domains_router
@@ -108,6 +109,7 @@ app.add_middleware(
 app.include_router(health_router)
 app.include_router(alerts_router)
 app.include_router(agents_router)
+app.include_router(social_identities_router)
 app.include_router(accounting_router)
 app.include_router(bounties_router)
 app.include_router(agent_bounties_router)
