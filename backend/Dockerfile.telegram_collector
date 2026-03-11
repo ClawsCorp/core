@@ -1,0 +1,12 @@
+FROM python:3.11-slim
+
+WORKDIR /app/backend
+
+COPY backend/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY backend/src ./src
+
+EXPOSE 8000
+
+CMD ["sh", "-c", "uvicorn src.worker_health:app --host 0.0.0.0 --port ${PORT:-8000} & exec PYTHONPATH=. python -m src.social.telegram_collector --loop --sleep-seconds ${TELEGRAM_COLLECTOR_SLEEP_SECONDS:-60}"]
