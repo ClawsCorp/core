@@ -23,6 +23,10 @@ This repo supports running autonomy as multiple Railway services from the same G
   - refresh project reconciliations
   - run platform month orchestration (`run-month auto`)
 
+5. `telegram-social-collector`
+- Dockerfile: `backend/Dockerfile.telegram_collector`
+- Purpose: continuously read configured Telegram channels through a client session and append normalized posts into `observed_social_signals`.
+
 ## Required Environment Variables
 
 ### Shared (all services)
@@ -82,12 +86,30 @@ This repo supports running autonomy as multiple Railway services from the same G
   - prune cadence: every 6 hours
 - Add `--billing-sync`, `--reconcile-project-revenue`, or `--marketing-deposit` only when those flows are actively needed.
 
+### Telegram social collector (`backend/Dockerfile.telegram_collector`)
+- `DATABASE_URL`
+- `ORACLE_BASE_URL`
+- `ORACLE_HMAC_SECRET`
+- `TELEGRAM_API_ID`
+- `TELEGRAM_API_HASH`
+- `TELEGRAM_SESSION_STRING`
+- `TELEGRAM_MONITORED_CHANNELS`
+- Optional:
+  - `TELEGRAM_COLLECTOR_BATCH_SIZE` (default `50`)
+  - `TELEGRAM_COLLECTOR_SLEEP_SECONDS` (default `60`)
+- Collector behavior:
+  - reads new posts from monitored Telegram channels
+  - normalizes handle / signal URL / content hash
+  - appends candidates into `observed_social_signals`
+  - advances a dedicated Telegram cursor per channel
+
 ## Recommended Setup Order
 
 1. Deploy API service (migrations run here).
 2. Deploy indexer service.
 3. Deploy tx-worker service.
 4. Deploy autonomy-loop service.
+5. Deploy telegram-social-collector service once Telegram credentials and channels are ready.
 
 ## How To Verify (Portal)
 
@@ -95,3 +117,4 @@ This repo supports running autonomy as multiple Railway services from the same G
   - indexer freshness (cursor updated)
   - reconciliation freshness for active projects
   - pending/failed tx_outbox tasks (if any)
+  - recent Telegram/social verifier decisions

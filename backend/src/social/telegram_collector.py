@@ -194,26 +194,39 @@ async def _run_once() -> dict[str, Any]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="telegram-social-collector")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--loop", action="store_true")
+    parser.add_argument("--sleep-seconds", type=int, default=0)
     args = parser.parse_args(argv)
-    try:
-        result = asyncio.run(_run_once())
-    except OracleRunnerError as exc:
-        if args.json:
-            print(json.dumps({"success": False, "error": str(exc)}, ensure_ascii=True))
-        else:
-            print(f"error={exc}")
-        return 1
+    sleep_seconds = int(args.sleep_seconds or get_settings().telegram_collector_sleep_seconds)
 
-    if args.json:
-        print(json.dumps(result, ensure_ascii=True, sort_keys=True))
-    else:
-        for item in result.get("channels", []):
-            print(
-                "channel={channel} processed={processed} inserted={inserted} last_message_id={last_message_id}".format(
-                    **item
-                )
-            )
-    return 0
+    while True:
+        try:
+            result = asyncio.run(_run_once())
+        except OracleRunnerError as exc:
+            if args.json and not args.loop:
+                print(json.dumps({"success": False, "error": str(exc)}, ensure_ascii=True))
+            else:
+                print(f"error={exc}")
+            if not args.loop:
+                return 1
+        else:
+            if args.json and not args.loop:
+                print(json.dumps(result, ensure_ascii=True, sort_keys=True))
+            else:
+                for item in result.get("channels", []):
+                    print(
+                        "channel={channel} processed={processed} inserted={inserted} last_message_id={last_message_id}".format(
+                            **item
+                        )
+                    )
+            if not args.loop:
+                return 0
+
+        if sleep_seconds <= 0:
+            sleep_seconds = 60
+        import time
+
+        time.sleep(sleep_seconds)
 
 
 if __name__ == "__main__":
